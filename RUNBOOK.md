@@ -9,9 +9,11 @@ after the commit is automatic.
 
 ### 1. Export from Oracle JDE
 Export the **Equipment Master** from JD Edwards the same way you do today. The file
-downloads with an auto-incrementing name, e.g. `Equipment Master V1.315.xlsx`
-(next day `V1.316`, etc.). **Keep that name** — the build looks for
-`Equipment Master V1.<number>.xlsx` and always uses the highest number.
+downloads with a name like `Equipment Master V1.315.xlsx`. Keep a name that starts
+with **`Equipment Master`** and ends in **`.xlsx`**. The build uses the **single**
+`Equipment Master*.xlsx` file in `source/`, so **the version number does not need to
+increase** (and a future `V2.x` is fine). If you ever leave several files, it picks the
+highest `V<major>.<minor>`.
 
 ### 2. Trim to your site(s)
 Open the file in Excel and keep only the rows for your project:
@@ -28,8 +30,9 @@ whatever you commit — including any employee names in the file — is publicly
 **GitHub web (simplest):**
 1. Open the repo → the **`source/`** folder.
 2. **Add file → Upload files** → drag in `Equipment Master V1.<n>.xlsx`.
-3. *(Optional, keeps the repo lean)* delete the previous day's `…V1.<n-1>.xlsx` in the
-   same commit — the build only uses the newest, so old ones are just clutter.
+3. **Delete the previous file** in the same commit so only the new one remains in
+   `source/` — the build expects a single file, and this avoids piling up daily
+   snapshots (with any PII) in the public repo.
 4. **Commit changes.**
 
 **Or via git** (if you have a local clone):
