@@ -121,12 +121,21 @@
 
   /* New-tracker order preview */
   .ordsum{font-size:12px;color:var(--medium-gray);font-weight:bold;text-transform:uppercase;letter-spacing:0.05em;margin:4px 0 10px;}
-  .ordrow{border:1px solid var(--light-gray);border-left:4px solid var(--light-gray);border-radius:var(--r-sm);padding:11px 14px;margin-bottom:10px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;}
-  .ordrow .req{font-family:'Arial Black', Arial, sans-serif;color:var(--dark-blue);font-size:14px;}
-  .ordrow .meta{font-size:12px;color:var(--medium-gray);}
-  .ordrow select{margin-left:auto;min-width:160px;width:auto;flex:0 1 auto;}
+  .ordrow{border:1px solid var(--light-gray);border-left:4px solid var(--light-gray);border-radius:var(--r-sm);margin-bottom:10px;}
+  .ord-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:11px 14px;}
+  .ord-head .req{font-family:'Arial Black', Arial, sans-serif;color:var(--dark-blue);font-size:14px;}
+  .ord-head .meta{font-size:12px;color:var(--medium-gray);}
+  .ord-view{margin-left:auto;background:none;border:1px solid var(--light-gray);border-radius:999px;font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;font-size:10px;letter-spacing:0.04em;color:var(--medium-gray);padding:6px 12px;cursor:pointer;}
+  .ord-view:hover{border-color:var(--energy-blue);color:var(--dark-blue);}
+  .ord-head select{min-width:150px;width:auto;flex:0 1 auto;}
   .ordrow.ready{border-left-color:var(--energy-blue);}
   .ordrow.dupe{opacity:0.6;border-left-color:var(--medium-gray);}
+  .ord-lines{display:none;padding:0 14px 12px;overflow-x:auto;}
+  .ordrow.open .ord-lines{display:block;}
+  .ord-lines table{width:100%;border-collapse:collapse;font-size:12px;}
+  .ord-lines th{text-align:left;color:var(--medium-gray);text-transform:uppercase;font-size:9px;letter-spacing:0.05em;padding:5px 8px;border-bottom:1px solid var(--light-gray);white-space:nowrap;}
+  .ord-lines td{padding:5px 8px;border-bottom:1px solid var(--bright-gray);vertical-align:top;}
+  .ordsum .ord-view{margin-left:8px;}
 
   /* Per-line delivery/pickup logging */
   .logcell .ev{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-bottom:5px;}
@@ -406,16 +415,22 @@ function renderPreview(){
   const dupes=orders.filter(orderExists).length;
   const rows=orders.map((o,i)=>{
     const dup=orderExists(o);
+    const linesTbl='<div class="ord-lines"><table><thead><tr><th>Line</th><th>Part #</th><th>Description</th><th>UoM</th><th>Required</th></tr></thead><tbody>'+
+      o.lines.map(l=>'<tr><td>'+esc(l.line)+'</td><td>'+esc(l.part||"")+'</td><td>'+esc(l.desc)+'</td><td>'+esc(l.uom||"")+'</td><td>'+esc(l.requiredDate||"")+'</td></tr>').join("")+
+      '</tbody></table></div>';
     return '<div class="ordrow'+(dup?' dupe':(o.trade?' ready':''))+'" data-row="'+i+'">'+
-      '<span class="req">Req '+esc(o.reqNumber)+'</span>'+
-      '<span class="meta">'+o.lines.length+' line'+(o.lines.length===1?'':'s')+'</span>'+
-      (dup ? '<span class="badge" style="margin-left:auto;">Already tracked · skipped</span>'
-           : ordTradeSelect(i, o.trade))+
+      '<div class="ord-head">'+
+        '<span class="req">Req '+esc(o.reqNumber)+'</span>'+
+        '<span class="meta">'+o.lines.length+' line'+(o.lines.length===1?'':'s')+'</span>'+
+        '<button type="button" class="ord-view" data-view="'+i+'">View lines</button>'+
+        (dup ? '<span class="badge">Already tracked · skipped</span>' : ordTradeSelect(i, o.trade))+
+      '</div>'+linesTbl+
     '</div>';
   }).join("");
   const newCount=orders.length-dupes;
   el.innerHTML='<div class="ordsum">'+orders.length+' order'+(orders.length===1?'':'s')+' &middot; '+totalLines+' lines &middot; '+
-    newCount+' new'+(dupes?(' &middot; '+dupes+' already tracked (skipped)'):'')+' &middot; assign a trade to each new order</div>'+rows;
+    newCount+' new'+(dupes?(' &middot; '+dupes+' already tracked (skipped)'):'')+' &middot; assign a trade to each new order'+
+    '<button type="button" class="ord-view" id="expandAll">Expand all</button></div>'+rows;
   updateCreateEnabled();
 }
 function newOrders(){ return (STATE.pendingOrders||[]).filter(o=>!orderExists(o)); }
@@ -546,6 +561,18 @@ function bind(){
     const i=Number(sel.getAttribute("data-idx")); STATE.pendingOrders[i].trade=sel.value;
     const row=sel.closest(".ordrow"); if(row) row.classList.toggle("ready", TRADES.includes(sel.value));
     updateCreateEnabled();
+  });
+  $("#preview").addEventListener("click", e=>{
+    if(e.target.closest("#expandAll")){
+      const btn=e.target.closest("#expandAll");
+      const anyClosed=!!$("#preview .ordrow:not(.open)");
+      $("#preview").querySelectorAll(".ordrow").forEach(r=>r.classList.toggle("open", anyClosed));
+      $("#preview").querySelectorAll(".ord-view[data-view]").forEach(v=>v.textContent=anyClosed?"Hide lines":"View lines");
+      btn.textContent=anyClosed?"Collapse all":"Expand all";
+      return;
+    }
+    const v=e.target.closest(".ord-view[data-view]"); if(!v) return;
+    const row=v.closest(".ordrow"); if(row){ const open=row.classList.toggle("open"); v.textContent=open?"Hide lines":"View lines"; }
   });
   $("#createBtn").addEventListener("click", async ()=>{
     const orders=newOrders();
