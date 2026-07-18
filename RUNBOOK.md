@@ -97,6 +97,17 @@ GitHub notifies you of new issues (watch the repo / check the **Issues** tab).
 
 ---
 
+## Browsing assets (Assets tab)
+- **Sort** any column by clicking its header (click again to reverse); an arrow
+  shows the active sort.
+- **Export CSV** downloads the *currently filtered* asset list (site + search +
+  trade + status), parsed on your device — no costs, no upload.
+- **Shareable links:** the site, search, trade, status, and sort are kept in the
+  page URL, so you can copy the address bar and send someone the exact same view
+  (e.g. "all Unassigned at this site").
+
+---
+
 ## Occasional maintenance
 - **Rotate the GitHub token before it expires.** When the fine-grained token lapses,
   submits fail with `github 404`. Regenerate it (Issues: Read and write on this repo)
