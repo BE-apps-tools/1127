@@ -24,8 +24,15 @@ Live at the **Deliveries** card on the portal hub → `deliveries.html`.
    Part #**, UM, Request Date. All other columns (Ship To, Account Number,
    Quantity, Unit Cost, etc.) are ignored — **no costs, no quantities**.
 3. The preview lists every order with its line count and a **Trade** selector.
-   **Assign a trade to each order** (or use **Set trade for all orders**), then
-   **Create N trackers**. Each order becomes its own tracker in **Active**.
+   **Assign a trade to each order** (or use **Set trade for all orders**).
+   - **Exclude** any order you don't want tracked (old/completed ones) with its
+     **Exclude** button — excluded orders are dropped from the count and not
+     created (click **Include** to bring one back).
+   - Orders whose Req # is **already tracked** (open or closed) are auto-detected
+     and badged **"Already tracked · skipped"** so the same order is never added
+     twice. (Rows sharing one Order Number are also merged into a single tracker.)
+   Then **Create N trackers** — each remaining order becomes its own tracker in
+   **Active**.
 
 ## Log deliveries & pickups (updater)
 Each line captures two events, which happen at different times:
