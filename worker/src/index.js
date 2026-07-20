@@ -16,13 +16,24 @@
  * Equipment Master inventory:
  *   POST /inventory  -> ADMIN: commit browser-parsed inventory JSON to main
  *                       (data/meta.json, data/sites.json, data/sites/<code>.json).
+ * Admin team access (repo-based user list — no Cloudflare needed to manage it):
+ *   POST /admin/verify -> check a key, return {ok, name} (used by the sign-in UI).
+ *   GET  /admins       -> ADMIN: list admins ({name, added}; never hashes).
+ *   POST /admins       -> ADMIN: add/remove an admin; commits data/admins.json.
  *
  * Secrets/vars:
  *   GH_TOKEN, GH_REPO, SUBMIT_KEY, ALLOWED_ORIGIN,
- *   ADMIN_KEY  (private; gates the /req* and /inventory write routes — NOT in any page)
+ *   ADMIN_KEY  (private "master" key; gates the /req*, /inventory and /admins
+ *              write routes — NOT in any page. Set once at deploy; always works.)
  *
- * NOTE: /inventory needs GH_TOKEN to have Contents: Read+write (the /req* and
- * /requests routes only need Issues). Add that scope before enabling imports.
+ * Admin auth model: the master ADMIN_KEY secret always works (checked first, no
+ * GitHub call). ADDITIONAL admins live in data/admins.json in the repo as
+ * {name, salt, hash} (hash = SHA-256(salt:key)); their keys are never stored in
+ * plaintext and never leave the repo. Add/revoke them from the Admin tab (or by
+ * committing the file) — no Cloudflare visit after the one-time deploy.
+ *
+ * NOTE: /inventory and /admins need GH_TOKEN to have Contents: Read+write (the
+ * /req* and /requests routes only need Issues). Add that scope before enabling.
  */
 
 const CANON = ["Civil","Electrical","Foundation","Collection","Install","Mechanical",
@@ -32,7 +43,7 @@ function cors(env){
   return {
     "Access-Control-Allow-Origin": env.ALLOWED_ORIGIN || "*",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "content-type,x-submit-key,x-admin-key",
+    "Access-Control-Allow-Headers": "content-type,x-submit-key,x-admin-key,x-admin-name",
   };
 }
 function json(obj, status, headers){
@@ -41,7 +52,52 @@ function json(obj, status, headers){
 function ghHeaders(env){
   return { "Authorization": `Bearer ${env.GH_TOKEN}`, "Accept": "application/vnd.github+json", "User-Agent": "asset-portal" };
 }
-function requireAdmin(req, env){ return req.headers.get("x-admin-key") === env.ADMIN_KEY; }
+/* ---------- admin auth (master secret + repo-based user list) ---------- */
+function hex(buf){ return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join(""); }
+async function sha256hex(str){
+  const data = new TextEncoder().encode(str);
+  return hex(await crypto.subtle.digest("SHA-256", data));
+}
+function randomHex(bytes){ const a = new Uint8Array(bytes); crypto.getRandomValues(a); return hex(a); }
+function b64encode(str){
+  const bytes = new TextEncoder().encode(str); let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
+function b64decode(b64){   // base64 -> UTF-8 (atob alone mangles multibyte names)
+  const bin = atob(String(b64).replace(/\s/g, ""));
+  const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+// Short-lived per-isolate cache so the master-key hot path (and bulk imports)
+// never triggers a GitHub read; only non-master keys ever fetch admins.json.
+let _adminsCache = { at: 0, admins: null };
+async function getAdmins(env){
+  const now = Date.now();
+  if (_adminsCache.admins && (now - _adminsCache.at) < 60000) return _adminsCache.admins;
+  let admins = [];
+  try {
+    const r = await fetch(`https://api.github.com/repos/${env.GH_REPO}/contents/data/admins.json`,
+      { headers: { ...ghHeaders(env), "Accept": "application/vnd.github.raw+json" } });
+    if (r.ok){ const j = JSON.parse(await r.text()); if (Array.isArray(j.admins)) admins = j.admins; }
+  } catch { /* missing/unparseable -> treat as empty (master key still works) */ }
+  _adminsCache = { at: now, admins };
+  return admins;
+}
+// Returns { ok, name, master } — never throws.
+async function checkAdmin(req, env){
+  const key = req.headers.get("x-admin-key") || "";
+  if (!key) return { ok: false };
+  if (env.ADMIN_KEY && key === env.ADMIN_KEY){
+    return { ok: true, name: (req.headers.get("x-admin-name") || "admin").slice(0, 60), master: true };
+  }
+  const admins = await getAdmins(env);
+  for (const a of admins){
+    if (!a || !a.salt || !a.hash) continue;
+    if (await sha256hex(a.salt + ":" + key) === a.hash) return { ok: true, name: a.name || "admin", master: false };
+  }
+  return { ok: false };
+}
 
 export default {
   async fetch(req, env, ctx){
@@ -66,6 +122,12 @@ export default {
       return postSetTrade(req, env, h);
     } else if (path === "/inventory" && req.method === "POST"){
       return postInventory(req, env, h);
+    } else if (path === "/admin/verify" && req.method === "POST"){
+      return postAdminVerify(req, env, h);
+    } else if (path === "/admins" && req.method === "GET"){
+      return listAdmins(req, env, h);
+    } else if (path === "/admins" && req.method === "POST"){
+      return postAdmins(req, env, h);
     } else if (path === "/health" && req.method === "GET"){
       return health(env, h);
     }
@@ -186,7 +248,7 @@ function computeTracker(it){
 }
 
 async function postReq(req, env, h){
-  if (!requireAdmin(req, env)) return json({ error: "admin only" }, 401, h);
+  if (!(await checkAdmin(req, env)).ok) return json({ error: "admin only" }, 401, h);
   let b; try { b = await req.json(); } catch { return json({ error: "bad json" }, 400, h); }
   if (!String(b.reqNumber || "").trim()) return json({ error: "missing reqNumber" }, 400, h);
   if (!CANON.includes(b.trade)) return json({ error: "bad trade" }, 400, h);
@@ -222,7 +284,7 @@ async function getReqs(url, env, h, ctx){
 }
 
 async function postDeliver(req, env, h){
-  if (!requireAdmin(req, env)) return json({ error: "admin only" }, 401, h);
+  if (!(await checkAdmin(req, env)).ok) return json({ error: "admin only" }, 401, h);
   let b; try { b = await req.json(); } catch { return json({ error: "bad json" }, 400, h); }
   const issue = parseInt(b.issue, 10);
   const qty = Number(b.qty);
@@ -269,7 +331,7 @@ async function postDeliver(req, env, h){
 /* ADMIN: delete a tracker — close the issue and drop the req-tracker label so it
  * leaves the app (the closed issue remains on GitHub as a record). */
 async function postDeleteReq(req, env, h){
-  if (!requireAdmin(req, env)) return json({ error: "admin only" }, 401, h);
+  if (!(await checkAdmin(req, env)).ok) return json({ error: "admin only" }, 401, h);
   let b; try { b = await req.json(); } catch { return json({ error: "bad json" }, 400, h); }
   const issue = parseInt(b.issue, 10);
   if (!issue) return json({ error: "missing issue" }, 400, h);
@@ -290,7 +352,7 @@ async function postDeleteReq(req, env, h){
  * req-tracker label so it shows under Completed) even if not every line has
  * been picked up. Used when the Req export omits some already-handled lines. */
 async function postCompleteReq(req, env, h){
-  if (!requireAdmin(req, env)) return json({ error: "admin only" }, 401, h);
+  if (!(await checkAdmin(req, env)).ok) return json({ error: "admin only" }, 401, h);
   let b; try { b = await req.json(); } catch { return json({ error: "bad json" }, 400, h); }
   const issue = parseInt(b.issue, 10);
   if (!issue) return json({ error: "missing issue" }, 400, h);
@@ -306,7 +368,7 @@ async function postCompleteReq(req, env, h){
 /* ADMIN: change a tracker's trade after creation — rewrites the marker/title/body
  * and swaps the trade:* label. */
 async function postSetTrade(req, env, h){
-  if (!requireAdmin(req, env)) return json({ error: "admin only" }, 401, h);
+  if (!(await checkAdmin(req, env)).ok) return json({ error: "admin only" }, 401, h);
   let b; try { b = await req.json(); } catch { return json({ error: "bad json" }, 400, h); }
   const issue = parseInt(b.issue, 10);
   if (!issue) return json({ error: "missing issue" }, 400, h);
@@ -340,7 +402,7 @@ async function postSetTrade(req, env, h){
  */
 const CODE_RE = /^[A-Za-z0-9_-]+$/;
 async function postInventory(req, env, h){
-  if (!requireAdmin(req, env)) return json({ error: "admin only" }, 401, h);
+  if (!(await checkAdmin(req, env)).ok) return json({ error: "admin only" }, 401, h);
   let b; try { b = await req.json(); } catch { return json({ error: "bad json" }, 400, h); }
   if (!b || typeof b !== "object" || !b.meta || typeof b.meta !== "object"
       || !Array.isArray(b.index) || !b.siteData || typeof b.siteData !== "object"){
@@ -396,6 +458,69 @@ async function postInventory(req, env, h){
   }
 }
 
+/* ============================ admin team access (repo-based user list) ============================ */
+/* POST /admin/verify — used by the sign-in UI to validate a key and get the
+ * display name. No GitHub write. Body/headers carry the key (x-admin-key). */
+async function postAdminVerify(req, env, h){
+  const who = await checkAdmin(req, env);
+  return json({ ok: who.ok, name: who.ok ? who.name : "", master: !!who.master }, 200, h);
+}
+
+/* GET /admins — ADMIN: list admins as {name, added} (never hashes/salts). The
+ * always-on master key isn't in this list; it's shown separately by the UI. */
+async function listAdmins(req, env, h){
+  if (!(await checkAdmin(req, env)).ok) return json({ error: "admin only" }, 401, h);
+  const admins = await getAdmins(env);
+  return json({ admins: admins.map(a => ({ name: a.name || "", added: a.added || "" })) }, 200, h);
+}
+
+/* POST /admins — ADMIN: add or remove a repo admin, committing data/admins.json.
+ * Body: { action:"add", name, key }  |  { action:"remove", name }
+ * Keys are hashed (SHA-256 of salt:key) before storage — the plaintext key is
+ * generated in the browser, shown to the user once, and never sent back. */
+async function postAdmins(req, env, h){
+  if (!(await checkAdmin(req, env)).ok) return json({ error: "admin only" }, 401, h);
+  let b; try { b = await req.json(); } catch { return json({ error: "bad json" }, 400, h); }
+  const action = b.action === "remove" ? "remove" : "add";
+  const name = String(b.name || "").trim().slice(0, 60);
+  if (!name) return json({ error: "missing name" }, 400, h);
+
+  // Read current file (with its blob sha, needed to update it).
+  let admins = [], sha = null;
+  const gr = await fetch(`https://api.github.com/repos/${env.GH_REPO}/contents/data/admins.json`, { headers: ghHeaders(env) });
+  if (gr.ok){
+    const meta = await gr.json(); sha = meta.sha;
+    try { const j = JSON.parse(b64decode(meta.content || "")); if (Array.isArray(j.admins)) admins = j.admins; } catch { /* start fresh */ }
+  } else if (gr.status !== 404){
+    return json({ error: "github " + gr.status }, 502, h);
+  }
+
+  if (action === "add"){
+    const key = String(b.key || "");
+    if (key.length < 12) return json({ error: "key too short" }, 400, h);
+    if (admins.some(a => (a.name || "").toLowerCase() === name.toLowerCase())) return json({ error: "name exists" }, 409, h);
+    const salt = randomHex(16);
+    admins.push({ name, salt, hash: await sha256hex(salt + ":" + key), added: new Date().toISOString().slice(0, 10) });
+  } else {
+    const before = admins.length;
+    admins = admins.filter(a => (a.name || "").toLowerCase() !== name.toLowerCase());
+    if (admins.length === before) return json({ error: "not found" }, 404, h);
+  }
+
+  const body = JSON.stringify({ admins }, null, 2) + "\n";
+  const put = {
+    message: `Admin access: ${action === "add" ? "add" : "remove"} ${name} [portal]`,
+    content: b64encode(body),
+  };
+  if (sha) put.sha = sha;
+  const pr = await fetch(`https://api.github.com/repos/${env.GH_REPO}/contents/data/admins.json`, {
+    method: "PUT", headers: { ...ghHeaders(env), "Content-Type": "application/json" }, body: JSON.stringify(put),
+  });
+  if (!pr.ok) { const t = await pr.text(); return json({ error: "github " + pr.status, detail: t.slice(0, 300) }, 502, h); }
+  _adminsCache = { at: 0, admins: null };   // invalidate so the change is live immediately
+  return json({ ok: true, admins: admins.map(a => ({ name: a.name, added: a.added || "" })) }, 200, h);
+}
+
 /* ============================ health (config diagnostics; no secrets exposed) ============================ */
 async function health(env, h){
   const out = {
@@ -408,9 +533,10 @@ async function health(env, h){
       const r = await fetch(`https://api.github.com/repos/${env.GH_REPO}`, { headers: ghHeaders(env) });
       out.github = { status: r.status, ok: r.ok };
     } catch (e) { out.github = { error: String(e) }; }
+    try { out.adminCount = (await getAdmins(env)).length; } catch { out.adminCount = null; }
   }
   return json(out, 200, h);
 }
 
 // Exported for the contract test (Python port mirrors these).
-export const _internals = { buildTitle, buildMarker, buildBody, parseMarker, reqTitle, reqMarker, reqBody, lineStatus, lineDelivered, linePickedUp, lineHandled, CANON };
+export const _internals = { buildTitle, buildMarker, buildBody, parseMarker, reqTitle, reqMarker, reqBody, lineStatus, lineDelivered, linePickedUp, lineHandled, sha256hex, CANON };

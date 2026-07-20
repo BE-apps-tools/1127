@@ -109,6 +109,10 @@
   .reqrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:13px 20px;border-bottom:1px solid var(--bright-gray);font-size:13px;}
   .reqrow:last-child{border-bottom:none;}
   .reqrow .rq-main{flex:1;min-width:0;}
+  .rq-remove{background:none;border:1px solid var(--light-gray);color:var(--medium-gray);
+    font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;font-size:10px;letter-spacing:0.04em;
+    border-radius:999px;padding:6px 12px;cursor:pointer;transition:background .18s ease,color .18s ease,border-color .18s ease;}
+  .rq-remove:hover{background:var(--dark-blue);border-color:var(--dark-blue);color:var(--white);}
   .reqrow .rq-main strong{color:var(--dark-blue);}
   .badge{display:inline-block;background:var(--bright-gray);border:1px solid var(--light-gray);color:var(--dark-blue);
     border-radius:999px;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.04em;padding:3px 10px;white-space:nowrap;}
@@ -180,6 +184,7 @@
         <p>Sign in once to manage Equipment Master imports and delivery trackers. Your sign-in is shared across the portal on this device.</p>
       </div>
       <div class="grid" id="adminZone"></div>
+      <div id="teamWrap"></div>
       <div id="openReqsWrap"></div>
     </main>
 
@@ -192,17 +197,92 @@
 const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
 const $ = s => document.querySelector(s);
 
+/* The Cloudflare Worker that gates admin writes (team-access management lives here). */
+const WORKER_URL = "https://asset-portal.site-asset-manager.workers.dev";
+const wbase = () => WORKER_URL.replace(/\/$/,"");
+
 /* Admin sign-in shares localStorage with inventory.html + deliveries.html (same origin). */
 function adminKey(){ return localStorage.getItem("bac_admin_key")||""; }
 function adminName(){ return localStorage.getItem("bac_admin_name")||""; }
-function adminSignIn(){
+function adminHeaders(){ return {"Content-Type":"application/json","x-admin-key":adminKey(),"x-admin-name":adminName()}; }
+async function adminSignIn(){
   const n=prompt("Your name (shown on updates):"); if(n===null) return;
   const k=prompt("Admin key:"); if(k===null) return;
-  localStorage.setItem("bac_admin_name", n.trim()||"admin");
-  localStorage.setItem("bac_admin_key", k.trim());
+  const name=n.trim()||"admin", key=k.trim();
+  if(!key){ alert("Enter your admin key."); return; }
+  // Validate against the Worker (master key or a repo-listed admin) before storing.
+  try{
+    const r=await fetch(wbase()+"/admin/verify",{method:"POST",
+      headers:{"Content-Type":"application/json","x-admin-key":key,"x-admin-name":name}});
+    const d=await r.json().catch(()=>({}));
+    if(!d.ok){ alert("That admin key wasn't recognized. Check the key (or ask an admin to add you under Team access)."); return; }
+    localStorage.setItem("bac_admin_name", d.name||name);   // canonical name from the list
+    localStorage.setItem("bac_admin_key", key);
+  }catch(e){
+    alert("Couldn't reach the sign-in service. Check your connection and try again."); return;
+  }
   renderAdmin();
 }
 function adminSignOut(){ localStorage.removeItem("bac_admin_key"); renderAdmin(); }
+
+/* ---------- Team access (repo-based admin list; no Cloudflare needed) ---------- */
+function newAdminKey(){   // 32 hex chars of CSPRNG entropy — copy/paste friendly, no ambiguous chars
+  const a=new Uint8Array(16); crypto.getRandomValues(a);
+  return [...a].map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+async function loadTeam(){
+  const w=$("#teamWrap"); if(!w) return;
+  w.innerHTML='<div class="reqcard"><div class="card-head"><h3>Team access</h3></div><div class="rq-empty">Loading…</div></div>';
+  let admins=[];
+  try{
+    const r=await fetch(wbase()+"/admins",{headers:adminHeaders()});
+    if(!r.ok) throw new Error(r.status===401?"not authorized":("HTTP "+r.status));
+    admins=(await r.json()).admins||[];
+  }catch(e){
+    w.innerHTML='<div class="reqcard"><div class="card-head"><h3>Team access</h3><button class="rq-refresh" id="teamRetry">Retry</button></div>'+
+      '<div class="rq-empty">Couldn\'t load the admin list ('+esc(e.message)+').</div></div>';
+    return;
+  }
+  renderTeam(admins);
+}
+function renderTeam(admins){
+  const rows = admins.length ? admins.map(a=>
+    '<div class="reqrow"><span class="rq-main"><strong>'+esc(a.name)+'</strong>'+
+      (a.added?' <span class="muted">added '+esc(a.added)+'</span>':'')+'</span>'+
+      '<button class="rq-remove" data-remove="'+esc(a.name)+'">Remove</button></div>'
+  ).join("") : '<div class="rq-empty">No additional admins yet — the master key is the only access. Add teammates so they can sign in with their own key.</div>';
+  $("#teamWrap").innerHTML =
+    '<div class="reqcard"><div class="card-head"><h3>Team access'+(admins.length?(' ('+admins.length+')'):'')+'</h3>'+
+      '<button class="rq-refresh" id="addAdminBtn">+ Add admin</button></div>'+
+      '<div class="reqrow"><span class="rq-main"><strong>Master key</strong> <span class="muted">always works · set in Cloudflare</span></span></div>'+
+      rows+
+      '<div class="rq-empty" style="border-top:1px solid var(--bright-gray)">Adding a teammate generates a key you give them once — they enter it on the Admin tab. Remove anyone here to revoke their access instantly.</div>'+
+    '</div>';
+}
+async function addAdmin(){
+  const n=prompt("New admin's name:"); if(n===null) return;
+  const name=n.trim(); if(!name){ alert("Enter a name."); return; }
+  const key=newAdminKey();
+  try{
+    const r=await fetch(wbase()+"/admins",{method:"POST",headers:adminHeaders(),
+      body:JSON.stringify({action:"add",name,key})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||!d.ok){ alert("Couldn't add admin: "+esc((d&&d.error)||("HTTP "+r.status))); return; }
+    // Show the generated key ONCE — it's only stored hashed, so it can't be recovered.
+    window.prompt("Give this key to "+name+" — it won't be shown again.\nThey enter it on the Admin tab to sign in.\n\nCopy it now:", key);
+    loadTeam();
+  }catch(e){ alert("Couldn't reach the service. Try again."); }
+}
+async function removeAdmin(name){
+  if(!window.confirm("Remove "+name+"? Their key stops working immediately.")) return;
+  try{
+    const r=await fetch(wbase()+"/admins",{method:"POST",headers:adminHeaders(),
+      body:JSON.stringify({action:"remove",name})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||!d.ok){ alert("Couldn't remove admin: "+esc((d&&d.error)||("HTTP "+r.status))); return; }
+    loadTeam();
+  }catch(e){ alert("Couldn't reach the service. Try again."); }
+}
 
 /* ---------- Open change requests (read-only, from the public GitHub Issues API) ---------- */
 const GH_ISSUES = "https://api.github.com/repos/be-apps-tools/1127/issues?state=open&per_page=100";
@@ -270,9 +350,11 @@ function renderAdmin(){
           '<div class="eyebrow">Session</div><h3>Signed in</h3>' +
           '<p>' + esc(adminName()||"admin") + ' — signed in on this device. Sign out to require the admin key again.</p></div>' +
         '<div class="foot"><button class="linkbtn" id="adminSignOut">Sign out</button></div></div>';
+    loadTeam();
     loadOpenRequests();
   } else {
     who.classList.remove("show"); who.textContent="";
+    $("#teamWrap").innerHTML="";
     z.innerHTML =
       '<div class="card lock"><div class="accent-top"></div>' +
         '<div class="body"><div class="chip" aria-hidden="true"></div>' +
@@ -287,6 +369,11 @@ $("#adminZone").addEventListener("click", e=>{
   else if(e.target.closest("#adminSignOut")) adminSignOut();
 });
 $("#openReqsWrap").addEventListener("click", e=>{ if(e.target.closest("#rqRefresh")) loadOpenRequests(); });
+$("#teamWrap").addEventListener("click", e=>{
+  if(e.target.closest("#addAdminBtn")) addAdmin();
+  else if(e.target.closest("#teamRetry")) loadTeam();
+  else { const rm=e.target.closest("[data-remove]"); if(rm) removeAdmin(rm.getAttribute("data-remove")); }
+});
 renderAdmin();
 </script>
 </body>

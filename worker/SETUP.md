@@ -79,3 +79,22 @@ present — the same result as the `build-data` Action.
 The endpoint is public (protected by origin + submit-key). For more, add
 **Cloudflare Turnstile** or a **Rate Limiting rule** on the Worker route in the
 Cloudflare dashboard — no code change required.
+
+## Admin team access (repo-based user list)
+
+Beyond the master `ADMIN_KEY` secret, additional admins live in
+**`data/admins.json`** in the repo and are managed from **Admin → Team access** —
+no Cloudflare visit needed after this one-time setup.
+
+- **Master key** (`ADMIN_KEY` secret): always works, checked first (no GitHub
+  call). Rotate it by editing the secret in Cloudflare.
+- **Team admins**: `Admin → Team access → Add admin` generates a one-time key,
+  shows it once, and commits `{name, salt, hash}` (hash = `SHA-256(salt:key)`;
+  **never the plaintext key**) to `data/admins.json`. **Remove** revokes
+  instantly. Requires `GH_TOKEN` to have **Contents: Read+write** (same scope as
+  `/inventory`).
+
+Routes: `POST /admin/verify` (sign-in check → `{ok,name}`), `GET /admins`
+(admin: list `{name,added}`), `POST /admins` (admin: `{action:"add"|"remove"}`).
+`GET /health` reports `adminCount`. To clone the portal for a separate project,
+see [`../CLONING.md`](../CLONING.md).

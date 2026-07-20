@@ -4,15 +4,23 @@ Track material deliveries from a Requisition (Req), by line, with team visibilit
 Live at the **Deliveries** card on the portal hub → `deliveries.html`.
 
 ## Who does what
-- **You + one collaborator (updaters):** create trackers and log deliveries. Gated
-  by the private **`ADMIN_KEY`** (set on the Cloudflare Worker; not in any page).
-- **Everyone else (team):** read-only. They open the page and see trackers and
-  delivery status — no key, no login, nothing to install.
+- **Admins (updaters):** create trackers and log deliveries. Gated by an **admin
+  key** — either the always-on **master key** (`ADMIN_KEY`, set on the Cloudflare
+  Worker) or a **team key** you hand out from **Admin → Team access** (no
+  Cloudflare needed).
+- **Everyone else (team):** read-only + can submit change requests. They open the
+  page and see trackers and delivery status — no key, no login, nothing to install.
 
 ## One-time setup (already done)
-- Worker secret **`ADMIN_KEY`** is set in Cloudflare (`asset-portal` → Settings →
-  Variables and Secrets). **Share this value only with your one collaborator.**
-  To revoke access, edit the secret to a new value; both of you then re-unlock.
+- Worker secret **`ADMIN_KEY`** (the *master* key) is set in Cloudflare
+  (`asset-portal` → Settings → Variables and Secrets). It always works; rotate it
+  there to reset everything.
+- **Add teammates without Cloudflare:** sign in on the **Admin** tab, open
+  **Team access → Add admin**, enter their name, and copy the one-time key it
+  generates (shown once; stored only as a salted hash in `data/admins.json`).
+  Give them that key to sign in. **Remove** anyone there to revoke instantly.
+  (To stand up a whole separate environment for another project, see
+  [`CLONING.md`](CLONING.md).)
 
 ## Create trackers (updater)
 1. Sign in once on the **Admin** tab (name + **`ADMIN_KEY`**, stored per device),
