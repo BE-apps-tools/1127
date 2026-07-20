@@ -61,6 +61,9 @@ Each line captures two events, which happen at different times:
 - **Print sheet:** expand a tracker and click **Print sheet** for a clean,
   branded one-order pickup sheet (with a "Picked up by / date" column and a
   sign-off line) to carry into the field.
+- **Paging:** the list shows **100 trackers per page**; use the page picker /
+  ‹ › arrows above the list ("Records 1–100 of N"). Switching Active/Completed
+  is instant after the first load (each tab is cached until you make a change).
 
 ## Corrections
 - Logged too much/little? Log an **adjusting** delivery or pickup on that line (a

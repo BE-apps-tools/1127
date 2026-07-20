@@ -79,6 +79,13 @@
   .btn.secondary:hover{background:var(--bright-gray);border-color:var(--dark-blue);}
   .btn:disabled{opacity:0.5;cursor:not-allowed;transform:none;}
 
+  .pager{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+  .pg-btn{background:var(--white);border:1px solid var(--light-gray);border-radius:var(--r-sm);color:var(--dark-blue);font-family:'Arial Black', Arial, sans-serif;font-size:15px;line-height:1;padding:7px 13px;cursor:pointer;min-height:34px;}
+  .pg-btn:hover:not(:disabled){border-color:var(--energy-blue);}
+  .pg-btn:disabled{opacity:0.4;cursor:not-allowed;}
+  .pager select{width:auto;min-width:120px;flex:0 0 auto;}
+  .pg-info{font-size:11px;color:var(--medium-gray);font-weight:bold;text-transform:uppercase;letter-spacing:0.05em;}
+
   .card{background:var(--white);border:1px solid var(--light-gray);border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow);}
   .card-head{background:var(--dark-blue);padding:14px 18px;}
   .card-head h2{color:var(--white);font-size:15px;}
@@ -247,6 +254,13 @@
         <button class="btn small secondary" id="purgeLegacy" style="display:none;"></button>
       </div>
 
+      <div class="pager" id="pager" style="display:none;">
+        <button class="pg-btn" id="pgPrev" aria-label="Previous page">&lsaquo;</button>
+        <select id="pgSel" aria-label="Page"></select>
+        <button class="pg-btn" id="pgNext" aria-label="Next page">&rsaquo;</button>
+        <span class="pg-info" id="pgInfo"></span>
+      </div>
+
       <div id="list"></div>
       <div class="empty" id="empty" style="display:none;"></div>
     </main>
@@ -260,7 +274,8 @@
 const WORKER_URL = "https://asset-portal.site-asset-manager.workers.dev";
 const TRADES = ["Civil","Electrical","Foundation","Collection","Install","Mechanical",
   "Commissioning","Substation","BESS","Safety","SM/PCC","Survey","Quality","TLine","Inventory","Decom","Other"];
-const STATE = { trackers:[], state:"open", admin:false, adminName:"", pendingOrders:null, existingReqs:null };
+const STATE = { trackers:[], state:"open", admin:false, adminName:"", pendingOrders:null, existingReqs:null, page:1, cache:{open:null,closed:null} };
+const PAGE_SIZE = 100;
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
@@ -469,11 +484,15 @@ async function createTracker(payload){
     return await r.json();
   }catch(err){ return {ok:false,error:err.message}; }
 }
-async function loadTrackers(){
+/* Cache each tab's list so toggling Active/Completed is instant; a mutation
+   invalidates it so the next visit refetches. */
+function invalidateCache(){ STATE.cache.open=null; STATE.cache.closed=null; }
+async function loadTrackers(force){
+  if(!force && STATE.cache[STATE.state]){ STATE.trackers=STATE.cache[STATE.state]; banner(""); return; }
   try{
     const r=await fetch(wbase()+"/reqs?state="+STATE.state);
     if(!r.ok){ STATE.trackers=[]; banner("Could not load trackers (HTTP "+r.status+")"); return; }
-    const d=await r.json(); STATE.trackers=d.trackers||[]; banner("");
+    const d=await r.json(); STATE.trackers=d.trackers||[]; STATE.cache[STATE.state]=STATE.trackers; banner("");
   }catch(err){ STATE.trackers=[]; banner("Offline — could not load trackers."); }
 }
 async function logEvent(issue, line, kind, qty, by){
@@ -592,15 +611,30 @@ function render(){
   updatePurgeBtn();
   const list=$("#list"), empty=$("#empty"), v=viewTrackers();
   if(!STATE.trackers.length){
-    list.innerHTML=""; empty.style.display="block";
+    list.innerHTML=""; empty.style.display="block"; renderPager(0,1,0,0);
     empty.innerHTML='<div class="big">No '+(STATE.state==="open"?"active":"completed")+' trackers</div><div>'+(STATE.admin?"Use “New tracker” to add one.":"Nothing here yet.")+'</div>';
     return;
   }
-  if(!v.length){ list.innerHTML=""; empty.style.display="block"; empty.innerHTML='<div class="big">No matches</div><div>Adjust search or trade filter.</div>'; return; }
+  if(!v.length){ list.innerHTML=""; empty.style.display="block"; renderPager(0,1,0,0); empty.innerHTML='<div class="big">No matches</div><div>Adjust search or trade filter.</div>'; return; }
   empty.style.display="none";
-  list.innerHTML=v.map(renderTracker).join("");
+  const total=v.length, pages=Math.max(1,Math.ceil(total/PAGE_SIZE));
+  if(STATE.page>pages) STATE.page=pages; if(STATE.page<1) STATE.page=1;
+  const start=(STATE.page-1)*PAGE_SIZE, pageItems=v.slice(start, start+PAGE_SIZE);
+  list.innerHTML=pageItems.map(renderTracker).join("");
   animateProgress(list);
+  renderPager(total, pages, start, pageItems.length);
 }
+function renderPager(total, pages, start, shown){
+  const pager=$("#pager"); if(!pager) return;
+  if(!total){ pager.style.display="none"; return; }
+  pager.style.display="flex";
+  const sel=$("#pgSel"); let opts="";
+  for(let i=1;i<=pages;i++){ const s=(i-1)*PAGE_SIZE+1, e=Math.min(i*PAGE_SIZE,total); opts+='<option value="'+i+'"'+(i===STATE.page?' selected':'')+'>'+s+'–'+e+'</option>'; }
+  sel.innerHTML=opts; sel.disabled=pages<=1;
+  $("#pgPrev").disabled=STATE.page<=1; $("#pgNext").disabled=STATE.page>=pages;
+  $("#pgInfo").textContent="Records "+(start+1)+"–"+(start+shown)+" of "+total;
+}
+function gotoPage(n){ STATE.page=n; render(); const l=$("#list"); if(l) l.scrollIntoView({block:"start"}); }
 function renderTracker(t){
   const pct=t.linesTotal?Math.round(100*t.linesComplete/t.linesTotal):0;
   const rows=((t.marker&&t.marker.lines)||[]).map(l=>{
@@ -688,15 +722,19 @@ function bind(){
       const res=await createTracker({ reqNumber:o.reqNumber, trade:o.trade, lines:o.lines });
       if(res.ok){ ok++; if(res.tracker) created.push(res.tracker); if(STATE.existingReqs) STATE.existingReqs.add(String(o.reqNumber)); } else fail++;
     }
-    STATE.state="open"; $("#segActive").setAttribute("aria-selected","true"); $("#segDone").setAttribute("aria-selected","false");
+    STATE.state="open"; STATE.page=1; $("#segActive").setAttribute("aria-selected","true"); $("#segDone").setAttribute("aria-selected","false");
     created.reverse().forEach(tr=>STATE.trackers.unshift(tr));
+    invalidateCache(); STATE.cache.open=STATE.trackers;
     $("#newPanel").classList.remove("show"); resetNewPanel(); render();
     toast("Created "+ok+" tracker"+(ok===1?"":"s")+(fail?(" · "+fail+" failed"):""));
   });
-  $("#q").addEventListener("input", render);
-  $("#fTrade").addEventListener("change", render);
-  $("#segActive").addEventListener("click", async ()=>{ STATE.state="open"; $("#segActive").setAttribute("aria-selected","true"); $("#segDone").setAttribute("aria-selected","false"); await loadTrackers(); render(); });
-  $("#segDone").addEventListener("click", async ()=>{ STATE.state="closed"; $("#segDone").setAttribute("aria-selected","true"); $("#segActive").setAttribute("aria-selected","false"); await loadTrackers(); render(); });
+  $("#q").addEventListener("input", ()=>{ STATE.page=1; render(); });
+  $("#fTrade").addEventListener("change", ()=>{ STATE.page=1; render(); });
+  $("#segActive").addEventListener("click", async ()=>{ STATE.state="open"; STATE.page=1; $("#segActive").setAttribute("aria-selected","true"); $("#segDone").setAttribute("aria-selected","false"); await loadTrackers(); render(); });
+  $("#segDone").addEventListener("click", async ()=>{ STATE.state="closed"; STATE.page=1; $("#segDone").setAttribute("aria-selected","true"); $("#segActive").setAttribute("aria-selected","false"); await loadTrackers(); render(); });
+  $("#pgPrev").addEventListener("click", ()=>{ if(STATE.page>1) gotoPage(STATE.page-1); });
+  $("#pgNext").addEventListener("click", ()=>{ gotoPage(STATE.page+1); });
+  $("#pgSel").addEventListener("change", e=>{ gotoPage(Number(e.target.value)||1); });
   $("#purgeLegacy").addEventListener("click", async ()=>{
     const legacy=STATE.trackers.filter(isLegacy); if(!legacy.length) return;
     if(!window.confirm("Delete "+legacy.length+" legacy (old-format) tracker"+(legacy.length===1?"":"s")+"? Each GitHub issue is closed as a record.")) return;
@@ -706,7 +744,7 @@ function bind(){
       try{ await deleteReq(t.issue); const idx=STATE.trackers.findIndex(x=>x.issue===t.issue); if(idx>=0) STATE.trackers.splice(idx,1); ok++; }
       catch(err){ fail++; }
     }
-    $("#purgeLegacy").disabled=false; render();
+    $("#purgeLegacy").disabled=false; invalidateCache(); render();
     toast("Purged "+ok+(fail?(" · "+fail+" failed"):""));
   });
   $("#list").addEventListener("click", async e=>{
@@ -716,7 +754,7 @@ function bind(){
       if(!window.confirm("Mark this order complete? It moves to the Completed tab.")) return;
       try{ toast("Completing…"); await completeReq(issue);
         const idx=STATE.trackers.findIndex(t=>t.issue===issue); if(idx>=0) STATE.trackers.splice(idx,1);
-        toast("Order marked complete"); render();
+        invalidateCache(); toast("Order marked complete"); render();
       }catch(err){ toast("Failed: "+err.message); }
       return;
     }
@@ -726,7 +764,7 @@ function bind(){
       if(!window.confirm("Delete this tracker? It's removed from the app (the GitHub issue is closed as a record).")) return;
       try{ toast("Deleting…"); await deleteReq(issue);
         const idx=STATE.trackers.findIndex(t=>t.issue===issue); if(idx>=0) STATE.trackers.splice(idx,1);
-        toast("Tracker deleted"); render();
+        invalidateCache(); toast("Tracker deleted"); render();
       }catch(err){ toast("Delete failed: "+err.message); }
       return;
     }
@@ -752,6 +790,7 @@ function bind(){
         toast("Logging…");
         const res=await logEvent(parseInt(issue,10), line, kind, qty, by);
         const idx=STATE.trackers.findIndex(t=>t.issue===parseInt(issue,10));
+        invalidateCache();
         if(res.complete){ if(idx>=0) STATE.trackers.splice(idx,1); toast("Logged — tracker complete"); render(); }
         else { if(idx>=0 && res.tracker) STATE.trackers[idx]=res.tracker; toast(kind==="pickup"?"Pickup logged":"Delivery logged"); render();
           const card=document.querySelector('.trk[data-issue="'+issue+'"]'); if(card) card.classList.add("open"); }

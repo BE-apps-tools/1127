@@ -201,7 +201,7 @@ async function getReqs(url, env, h, ctx){
   const cache = caches.default; const cacheKey = new Request(url.toString(), { method: "GET" });
   const hit = await cache.match(cacheKey); if (hit) return hit;
   const out = [];
-  for (let page = 1; page <= 5; page++){
+  for (let page = 1; page <= 20; page++){   // up to 2000 trackers (100/page)
     const gr = await fetch(`https://api.github.com/repos/${env.GH_REPO}/issues?state=${state}&labels=req-tracker&per_page=100&page=${page}`, { headers: ghHeaders(env) });
     if (!gr.ok) break;
     const arr = await gr.json(); if (!arr.length) break;
