@@ -12,7 +12,8 @@ Usage: py scripts/brandcheck.py index.html /path/to/Blattner_B_Burst_B_-_White.s
 import re, sys, hashlib
 
 ALLOWED = {"#000000","#02568A","#2DA2DB","#B9E5FB","#F2F2F2","#BCBCBC",
-           "#76777B","#333333","#FFFFFF","#EC9522","#C9DB30"}
+           "#76777B","#333333","#FFFFFF","#EC9522","#C9DB30",
+           "#007200"}   # completion-status green (Deliveries "Completed" accent)
 FONT_OK = re.compile(r"^(?:'Arial Black', Arial, sans-serif|Arial, Helvetica, sans-serif)$")
 
 def fail(msg):
