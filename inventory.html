@@ -121,6 +121,9 @@
   thead th{background:var(--dark-blue);color:var(--white);font-family:'Arial Black', Arial, sans-serif;
     text-transform:uppercase;font-size:10px;letter-spacing:0.06em;text-align:left;padding:12px 12px;white-space:nowrap;}
   thead th:first-child{border-top-left-radius:var(--r);} thead th:last-child{border-top-right-radius:var(--r);}
+  thead th[data-sort]{cursor:pointer;user-select:none;} thead th[data-sort]:hover{background:var(--energy-blue);}
+  thead th.sorted::after{content:"\25B2";font-size:8px;margin-left:5px;vertical-align:middle;}
+  thead th.sorted.desc::after{content:"\25BC";}
   tbody td{padding:10px 12px;border-bottom:1px solid var(--bright-gray);vertical-align:top;}
   .selcol{width:36px;text-align:center;}
   .selcol input{width:16px;height:16px;cursor:pointer;}
@@ -177,6 +180,8 @@
   .pending-badge{display:inline-block;background:var(--dark-blue);color:var(--white);font-size:10px;font-weight:bold;
     text-transform:uppercase;letter-spacing:0.04em;padding:4px 8px;border-radius:999px;text-decoration:none;white-space:nowrap;}
   .pending-badge:hover{background:var(--energy-blue);}
+  .row-actions{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;white-space:nowrap;}
+  .row-actions .btn{flex:0 0 auto;}
   .dup-block{display:none;background:var(--light-blue);border:1px solid var(--energy-blue);border-radius:var(--r-sm);color:var(--dark-blue);
     font-size:12px;font-weight:bold;padding:10px 12px;margin-bottom:14px;}
   .dup-block.show{display:block;}
@@ -277,6 +282,7 @@
           <div class="search"><input type="text" id="q" aria-label="Search assets by unit or serial number, or description" placeholder="Search Unit # or Serial # or description…" autocomplete="off"></div>
           <select id="fTrade"><option value="">All trades</option></select>
           <select id="fStatus"><option value="">All statuses</option></select>
+          <button class="btn small secondary" id="exportCsv">Export CSV</button>
         </div>
         <div class="batchbar" id="batchBar">
           <span class="bcount" id="batchCount">0 selected</span>
@@ -289,8 +295,8 @@
           <table>
             <thead><tr>
               <th class="selcol"><input type="checkbox" id="selAll" aria-label="Select shown assets"></th>
-              <th>Unit #</th><th>Serial #</th><th>Description</th><th>Mfg / Yr</th>
-              <th>Status</th><th>Trade</th><th>Assigned</th><th></th>
+              <th data-sort="unit">Unit #</th><th data-sort="serial">Serial #</th><th data-sort="description">Description</th><th data-sort="mfg">Mfg / Yr</th>
+              <th data-sort="status">Status</th><th data-sort="trade">Trade</th><th data-sort="assignedEmployee">Assigned</th><th></th>
             </tr></thead>
             <tbody id="invBody"></tbody>
           </table>
@@ -375,7 +381,7 @@ const TRADES = ["Civil","Electrical","Foundation","Collection","Install","Mechan
 let WORKER_URL = "https://asset-portal.site-asset-manager.workers.dev";
 let SUBMIT_KEY = "access123!";   // spam deterrent; matches the Worker's SUBMIT_KEY var
 
-const STATE = { site:"", assets:[], meta:null, siteIndex:[], admin:false, adminName:"", pendingInventory:null, selected:new Set() };
+const STATE = { site:"", assets:[], meta:null, siteIndex:[], admin:false, adminName:"", pendingInventory:null, selected:new Set(), sort:null, ready:false };
 let REQ_TARGET = null;
 let OPEN_REQ = {};                    // "unit|serial" -> [ {issue,url,type,requestedTrade} ]
 const rkey = (u,s) => u + "|" + s;
@@ -470,7 +476,13 @@ function viewAssets(){
   else if(tf) v=v.filter(a=>a.trade===tf);
   if(sf) v=v.filter(a=>a.status===sf);
   if(q) v=v.filter(a=>[a.unit,a.serial,a.description,a.description2].some(x=>String(x||"").toLowerCase().includes(q)));
-  v.sort((a,b)=>String(a.unit).localeCompare(String(b.unit)));
+  const s=STATE.sort;
+  if(s && s.key){
+    const dir = s.dir==="desc" ? -1 : 1;
+    v.sort((a,b)=>dir*String(a[s.key]==null?"":a[s.key]).localeCompare(String(b[s.key]==null?"":b[s.key]), undefined, {numeric:true, sensitivity:"base"}));
+  } else {
+    v.sort((a,b)=>String(a.unit).localeCompare(String(b.unit), undefined, {numeric:true}));
+  }
   return v;
 }
 function statusDot(status){
@@ -480,7 +492,14 @@ function statusDot(status){
   if(!s) return '<span class="status-dot"></span>';
   return '<span class="status-dot warn"></span>';
 }
+function updateSortHeaders(){
+  document.querySelectorAll("thead th[data-sort]").forEach(th=>{
+    th.classList.remove("sorted","desc");
+    if(STATE.sort && th.dataset.sort===STATE.sort.key){ th.classList.add("sorted"); if(STATE.sort.dir==="desc") th.classList.add("desc"); }
+  });
+}
 function renderInventory(){
+  updateSortHeaders();
   const body=$("#invBody"); body.innerHTML="";
   const v=viewAssets();
   $("#invEmpty").style.display = STATE.assets.length? "none":"block";
@@ -862,6 +881,52 @@ function fillTradeControls(){
     const o2=document.createElement("option"); o2.value=t; o2.textContent=t; r.appendChild(o2);
     const o3=document.createElement("option"); o3.value=t; o3.textContent=t; bt.appendChild(o3); });
 }
+/* Load a site's assets + open requests and render (shared by the picker and deep-links). */
+async function selectSite(code){
+  STATE.site=code; STATE.selected.clear();
+  if(!code){ STATE.assets=[]; OPEN_REQ={}; renderStats(); renderInventory(); $("#count").textContent=""; return; }
+  $("#count").textContent="Loading…";
+  $("#invEmpty").style.display="block";
+  $("#invEmpty").innerHTML='<div class="big">Loading…</div><div>Fetching inventory for this site.</div>';
+  STATE.assets=await loadSite(code);
+  await loadOpenRequests(code);
+  fillStatusFilter(); renderStats(); renderInventory();
+  $("#count").textContent=STATE.assets.length+" assets";
+}
+/* Reflect the current site + filters + sort into the URL so the view is shareable. */
+function syncUrl(){
+  if(!STATE.ready) return;
+  const p=new URLSearchParams();
+  if(STATE.site) p.set("site",STATE.site);
+  const q=$("#q").value.trim(); if(q) p.set("q",q);
+  const tf=$("#fTrade").value; if(tf===TRADE_NONE) p.set("trade","unassigned"); else if(tf) p.set("trade",tf);
+  const sf=$("#fStatus").value; if(sf) p.set("status",sf);
+  if(STATE.sort && STATE.sort.key){ p.set("sort",STATE.sort.key); if(STATE.sort.dir==="desc") p.set("dir","desc"); }
+  const cur=new URLSearchParams(location.search); if(cur.get("admin")) p.set("admin",cur.get("admin"));
+  const qs=p.toString();
+  history.replaceState(null,"",location.pathname+(qs?("?"+qs):"")+location.hash);
+}
+/* CSV export of the currently filtered assets (no cost fields; parsed/downloaded on-device). */
+function csvCell(v){ const s=String(v==null?"":v); return /[",\n\r]/.test(s) ? ('"'+s.replace(/"/g,'""')+'"') : s; }
+function exportCsv(){
+  const v=viewAssets();
+  if(!v.length){ toast("Nothing to export"); return; }
+  const cols=[["Unit","unit"],["Serial","serial"],["Description","description"],["Description 2","description2"],
+    ["Mfg","mfg"],["Model Year","modelYear"],["Status","status"],["Trade","trade"],["Assigned","assignedEmployee"],
+    ["Company","company"],["Location","location"],["Location Code","locationCode"],["Transfer #","transferNumber"],
+    ["Finance","financeMethod"],["Asset #","assetNumber"],["From Date","fromDate"],["Acquired","acquiredDate"],
+    ["Additional Info","additionalInfo"],["Remarks","remarks"]];
+  const val=(a,k)=> k==="assignedEmployee" ? (a.assignedEmployee==="0"?"":a.assignedEmployee) : a[k];
+  const lines=[cols.map(c=>csvCell(c[0])).join(",")];
+  v.forEach(a=>lines.push(cols.map(c=>csvCell(val(a,c[1]))).join(",")));
+  const blob=new Blob(["﻿"+lines.join("\r\n")],{type:"text/csv;charset=utf-8;"});
+  const today=new Date().toISOString().slice(0,10);
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download="assets_"+(STATE.site||"all")+"_"+today+".csv";
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },0);
+  toast("Exported "+v.length+" asset"+(v.length===1?"":"s"));
+}
 function bind(){
   document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>switchTab(b.dataset.panel)));
   $("#emCancel").addEventListener("click", ()=>{ $("#importPanel").style.display="none"; STATE.pendingInventory=null; $("#emFile").value=""; renderEmPreview(); });
@@ -871,21 +936,20 @@ function bind(){
     catch(err){ STATE.pendingInventory=null; renderEmPreview(); banner("err","Could not read file: "+err.message); }
   });
   $("#emPublish").addEventListener("click", publishInventory);
-  $("#siteSelect").addEventListener("change", async e=>{
-    const code=e.target.value; STATE.site=code; STATE.selected.clear();
-    if(!code){ STATE.assets=[]; OPEN_REQ={}; renderStats(); renderInventory(); $("#count").textContent=""; return; }
-    $("#count").textContent = "Loading…";
-    $("#invEmpty").style.display = "block";
-    $("#invEmpty").innerHTML = '<div class="big">Loading…</div><div>Fetching inventory for this site.</div>';
-    STATE.assets = await loadSite(code);
-    await loadOpenRequests(code);
-    fillStatusFilter(); renderStats(); renderInventory();
-    $("#count").textContent = STATE.assets.length+" assets";
-  });
+  $("#siteSelect").addEventListener("change", async e=>{ await selectSite(e.target.value); syncUrl(); });
   let qTimer=null;
-  $("#q").addEventListener("input", ()=>{ clearTimeout(qTimer); qTimer=setTimeout(renderInventory, 180); });
-  $("#fTrade").addEventListener("change", renderInventory);
-  $("#fStatus").addEventListener("change", renderInventory);
+  $("#q").addEventListener("input", ()=>{ clearTimeout(qTimer); qTimer=setTimeout(()=>{ renderInventory(); syncUrl(); }, 180); });
+  $("#fTrade").addEventListener("change", ()=>{ renderInventory(); syncUrl(); });
+  $("#fStatus").addEventListener("change", ()=>{ renderInventory(); syncUrl(); });
+  $("#exportCsv").addEventListener("click", exportCsv);
+  document.querySelectorAll("thead th[data-sort]").forEach(th=>{
+    th.addEventListener("click", ()=>{
+      const k=th.dataset.sort;
+      if(STATE.sort && STATE.sort.key===k){ STATE.sort.dir = STATE.sort.dir==="desc"?"asc":"desc"; }
+      else { STATE.sort={key:k, dir:"asc"}; }
+      renderInventory(); syncUrl();
+    });
+  });
   $("#invBody").addEventListener("click", e=>{
     const b=e.target.closest("[data-req-unit]"); if(b) openRequestFor(b.dataset.reqUnit, b.dataset.reqSerial);
   });
@@ -930,7 +994,21 @@ async function init(){
   STATE.siteIndex = await loadSiteIndex();
   const sel=$("#siteSelect");
   STATE.siteIndex.forEach(s=>{ const o=document.createElement("option"); o.value=s.code; o.textContent=s.name+" ("+s.count+")"; sel.appendChild(o); });
-  renderInventory();
+
+  // Deep-link: apply site + filters + sort from the URL so shared links restore the view.
+  const params=new URLSearchParams(location.search);
+  const pSort=params.get("sort"); if(pSort){ STATE.sort={key:pSort, dir: params.get("dir")==="desc"?"desc":"asc"}; }
+  if(params.get("q")) $("#q").value=params.get("q");
+  const pTrade=params.get("trade"); if(pTrade){ $("#fTrade").value = pTrade==="unassigned"?TRADE_NONE:pTrade; }
+  const pSite=params.get("site");
+  if(pSite && STATE.siteIndex.some(s=>String(s.code)===pSite)){
+    sel.value=pSite;
+    await selectSite(pSite);
+    const pStatus=params.get("status"); if(pStatus){ $("#fStatus").value=pStatus; renderInventory(); }
+  } else {
+    renderInventory();
+  }
+  STATE.ready=true;
   flushQueue();
   window.addEventListener("online", async ()=>{
     await flushQueue();
