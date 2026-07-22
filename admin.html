@@ -122,9 +122,24 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
     font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;font-size:10px;letter-spacing:0.04em;
     border-radius:999px;padding:6px 12px;cursor:pointer;}
   .reqcard .card-head .rq-refresh:hover{background:var(--energy-blue);color:var(--white);}
-  .reqrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:13px 20px;border-bottom:1px solid var(--bright-gray);font-size:13px;}
-  .reqrow:last-child{border-bottom:none;}
+  .reqitem{border-bottom:1px solid var(--bright-gray);}
+  .reqitem:last-child{border-bottom:none;}
+  .reqrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:13px 20px;font-size:13px;cursor:pointer;transition:background .15s ease;}
+  .reqrow:hover{background:var(--bright-gray);}
+  .reqrow:focus-visible{outline:2px solid var(--energy-blue);outline-offset:-2px;}
+  .reqrow[aria-expanded="true"]{background:var(--bright-gray);}
   .reqrow .rq-main{flex:1;min-width:0;}
+  .rq-chev{width:8px;height:8px;border-right:2px solid var(--medium-gray);border-bottom:2px solid var(--medium-gray);
+    transform:rotate(45deg);transition:transform .18s ease;flex:0 0 auto;margin-left:2px;}
+  .reqrow[aria-expanded="true"] .rq-chev{transform:rotate(-135deg);}
+  .reqdetail{padding:2px 20px 16px 20px;animation:fadeUp .3s ease both;}
+  .rq-note{border-left:4px solid var(--energy-blue);background:var(--bright-gray);border-radius:0 var(--r-sm) var(--r-sm) 0;
+    padding:10px 14px;margin-bottom:12px;}
+  .rq-note .k{color:var(--medium-gray);text-transform:uppercase;font-size:10px;letter-spacing:0.05em;font-weight:bold;margin-bottom:3px;}
+  .rq-note-body{font-size:13px;color:var(--dark-gray,#333);white-space:normal;word-break:break-word;}
+  .reqdetail .detail-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px 22px;}
+  .reqdetail .detail-grid>div{font-size:12px;}
+  .reqdetail .detail-grid .k{color:var(--medium-gray);text-transform:uppercase;font-size:10px;letter-spacing:0.05em;font-weight:bold;}
   .rq-remove{background:none;border:1px solid var(--light-gray);color:var(--medium-gray);
     font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;font-size:10px;letter-spacing:0.04em;
     border-radius:999px;padding:6px 12px;cursor:pointer;transition:background .18s ease,color .18s ease,border-color .18s ease;}
@@ -510,6 +525,12 @@ const GH_ISSUES = "https://api.github.com/repos/be-apps-tools/1127/issues?state=
 function labelsOf(it){ return (it.labels||[]).map(l => typeof l==="string" ? l : (l&&l.name)||""); }
 function parseMarker(body){ const m=/```json\s*({[\s\S]*?})\s*```/.exec(body||""); if(!m) return null; try{ return JSON.parse(m[1]); }catch(e){ return null; } }
 function field(body,label){ const m=new RegExp("\\*\\*"+label+":\\*\\*\\s*(.*)").exec(body||""); return m?m[1].trim():""; }
+/* The submitted note (Detail / reason) can span multiple lines, so capture
+   everything between **Detail:** and the next bold field / json marker / end. */
+function detailField(body){
+  const m=/\*\*Detail:\*\*[ \t]*([\s\S]*?)[ \t]*(?=\n\*\*[^*\n]+:\*\*|\n```|$)/.exec(body||"");
+  return m ? m[1].trim() : "";
+}
 async function fetchOpenIssues(){
   const r=await fetch(GH_ISSUES,{headers:{"Accept":"application/vnd.github+json"}});
   if(!r.ok) throw new Error("GitHub "+r.status);
@@ -528,7 +549,8 @@ async function loadOpenRequests(){
         return { number:it.number, type,
           unit:m.unit||field(it.body,"Unit"), serial:m.serial||field(it.body,"Serial"),
           site:m.site||field(it.body,"Site"), requestedTrade:m.requestedTrade||field(it.body,"Requested trade"),
-          current:field(it.body,"Current trade"), requester:field(it.body,"Requester") };
+          current:field(it.body,"Current trade"), requester:field(it.body,"Requester"),
+          description:field(it.body,"Description"), detail:detailField(it.body), at:it.created_at||"" };
       });
   }catch(e){
     w.innerHTML='<div class="reqcard"><div class="card-head"><h3>Trade assignment requests</h3><button class="rq-refresh" id="rqRefresh">Retry</button></div><div class="rq-empty">Could not load requests ('+esc(e.message)+'). GitHub may be rate-limiting — try again shortly.</div></div>';
@@ -537,14 +559,31 @@ async function loadOpenRequests(){
   renderOpenReqs(reqs);
 }
 function renderOpenReqs(reqs){
-  const rows = reqs.length ? reqs.map(r=>{
+  const rows = reqs.length ? reqs.map((r,i)=>{
     const badge = r.type==="reassign" ? '<span class="badge">Reassign</span>' : '<span class="badge issue">Issue</span>';
     const change = r.type==="reassign" ? (esc(r.current||"(none)")+' &rarr; '+esc(r.requestedTrade||"?")) : 'Reported issue';
     const meta = [r.site, r.requester].filter(Boolean).map(esc).join(' &middot; ');
-    return '<div class="reqrow">'+badge+
-      '<span class="rq-main"><strong>Unit '+esc(r.unit||"?")+'</strong> <span class="muted">SN '+esc(r.serial||"—")+'</span> &middot; '+change+'</span>'+
-      (meta?'<span class="muted">'+meta+'</span>':'')+
-      '</div>';
+    const when = r.at ? esc(String(r.at).slice(0,10)) : "";
+    // Detail = the free-text note the requester typed on the Assets page.
+    const note = r.detail
+      ? '<div class="rq-note-body">'+esc(r.detail).replace(/\n/g,"<br>")+'</div>'
+      : '<div class="rq-note-body muted">No note was submitted.</div>';
+    const dl=(k,v)=> v ? '<div><div class="k">'+k+'</div><div>'+esc(v)+'</div></div>' : '';
+    return '<div class="reqitem">'+
+      '<div class="reqrow" role="button" tabindex="0" aria-expanded="false" data-req="'+i+'">'+badge+
+        '<span class="rq-main"><strong>Unit '+esc(r.unit||"?")+'</strong> <span class="muted">SN '+esc(r.serial||"—")+'</span> &middot; '+change+'</span>'+
+        (meta?'<span class="muted">'+meta+'</span>':'')+
+        '<span class="rq-chev" aria-hidden="true"></span>'+
+      '</div>'+
+      '<div class="reqdetail" hidden>'+
+        '<div class="rq-note"><div class="k">Submitted note</div>'+note+'</div>'+
+        '<div class="detail-grid">'+
+          dl("Requester", r.requester)+dl("Site", r.site)+dl("Description", r.description)+
+          (r.type==="reassign"?dl("Current trade", r.current||"(none)")+dl("Requested trade", r.requestedTrade):"")+
+          dl("Submitted", when)+
+        '</div>'+
+      '</div>'+
+    '</div>';
   }).join("") : '<div class="rq-empty">No open change requests. Nothing to action right now.</div>';
   $("#openReqsWrap").innerHTML =
     '<div class="reqcard"><div class="card-head"><h3>Trade assignment requests'+(reqs.length?(' ('+reqs.length+')'):'')+'</h3>'+
@@ -616,7 +655,21 @@ $("#adminZone").addEventListener("click", e=>{
   else if(e.target.closest("#openGuideBtn")) toggleGuide(e.target.closest("#openGuideBtn"));
   else if(e.target.closest("#openReqsBtn")) toggleReqs(e.target.closest("#openReqsBtn"));
 });
-$("#openReqsWrap").addEventListener("click", e=>{ if(e.target.closest("#rqRefresh")) loadOpenRequests(); });
+function toggleReqRow(row){
+  const item=row.closest(".reqitem"); if(!item) return;
+  const panel=item.querySelector(".reqdetail"); if(!panel) return;
+  const open=panel.hasAttribute("hidden");
+  if(open){ panel.removeAttribute("hidden"); row.setAttribute("aria-expanded","true"); }
+  else { panel.setAttribute("hidden",""); row.setAttribute("aria-expanded","false"); }
+}
+$("#openReqsWrap").addEventListener("click", e=>{
+  if(e.target.closest("#rqRefresh")){ loadOpenRequests(); return; }
+  const row=e.target.closest(".reqrow"); if(row) toggleReqRow(row);
+});
+$("#openReqsWrap").addEventListener("keydown", e=>{
+  if(e.key!=="Enter" && e.key!==" ") return;
+  const row=e.target.closest(".reqrow"); if(row){ e.preventDefault(); toggleReqRow(row); }
+});
 $("#teamWrap").addEventListener("click", e=>{
   if(e.target.closest("#addAdminBtn")) addAdmin();
   else if(e.target.closest("#teamRetry")) loadTeam();
