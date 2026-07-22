@@ -190,6 +190,8 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
   .pk-save,.pk-cancel{font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;font-size:9px;letter-spacing:0.04em;border-radius:var(--r-sm);padding:5px 9px;cursor:pointer;}
   .pk-save{background:var(--dark-blue);color:var(--white);border:1px solid var(--dark-blue);}
   .pk-cancel{background:var(--white);color:var(--dark-blue);border:1px solid var(--light-gray);}
+  .del-line{background:none;border:none;color:var(--medium-gray);font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;font-size:9px;letter-spacing:0.04em;cursor:pointer;padding:0 2px;}
+  .del-line:hover{color:#C0392B;}
 
   .empty{padding:44px 20px;text-align:center;color:var(--medium-gray);background:var(--white);border:1px solid var(--light-gray);border-radius:var(--r);box-shadow:var(--shadow);}
   .empty .big{font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;color:var(--light-gray);font-size:18px;margin-bottom:6px;}
@@ -643,6 +645,14 @@ async function deleteReq(issue){
   if(!r.ok){ const e=await r.json().catch(()=>({})); throw new Error(e.error||("HTTP "+r.status)); }
   return await r.json();
 }
+/* Remove one line from a tracker (e.g. a duplicate created when a Req line is
+   converted to a company stock item). The Worker rewrites the marker/body. */
+async function deleteLine(issue, line){
+  const r=await fetch(wbase()+"/req/line/delete",{method:"POST",headers:{"Content-Type":"application/json","x-admin-key":adminKey()},
+    body:JSON.stringify({issue, line})});
+  if(!r.ok){ const e=await r.json().catch(()=>({})); throw new Error(e.error||("HTTP "+r.status)); }
+  return await r.json();
+}
 async function completeReq(issue){
   const r=await fetch(wbase()+"/req/complete",{method:"POST",headers:{"Content-Type":"application/json","x-admin-key":adminKey()},
     body:JSON.stringify({issue})});
@@ -825,6 +835,7 @@ function renderTracker(t){
       ? '<td class="logcell">'+
           '<div class="ev"><span class="evlbl">Deliver</span><input class="dqty" type="text" inputmode="decimal" style="width:64px" placeholder="qty"><button class="btn small" data-ev="delivered|'+t.issue+'|'+esc(l.line)+'">Log</button></div>'+
           '<div class="ev"><span class="evlbl">Pickup</span><input class="pqty" type="text" inputmode="decimal" style="width:64px" placeholder="qty"><input class="pby" type="text" style="width:92px" placeholder="picked up by"><button class="btn small" data-ev="pickup|'+t.issue+'|'+esc(l.line)+'">Log</button></div>'+
+          '<div class="ev"><span class="evlbl"></span><button type="button" class="del-line" data-delline="'+t.issue+'|'+esc(l.line)+'">Remove line</button></div>'+
         '</td>'
       : '';
     // Intentional inline edit (Edit -> change -> Save), same pattern as pickup entries.
@@ -1083,6 +1094,22 @@ function bind(){
         const idx=STATE.trackers.findIndex(t=>t.issue===issue); if(idx>=0) STATE.trackers.splice(idx,1);
         invalidateCache(); toast("Tracker deleted"); render();
       }catch(err){ toast("Delete failed: "+err.message); }
+      return;
+    }
+    const delLine=e.target.closest("[data-delline]");
+    if(delLine){
+      const [issueStr,line]=delLine.getAttribute("data-delline").split("|");
+      const issue=parseInt(issueStr,10);
+      const t=STATE.trackers.find(x=>x.issue===issue);
+      const lineCount=(t&&t.marker&&t.marker.lines||[]).length;
+      if(lineCount<=1){ toast("This is the only line — use Delete order instead."); return; }
+      if(!window.confirm("Remove line "+line+" from this order? This can't be undone.")) return;
+      try{ toast("Removing line…"); const res=await deleteLine(issue, line);
+        const idx=STATE.trackers.findIndex(x=>x.issue===issue); invalidateCache();
+        if(res.complete){ if(idx>=0) STATE.trackers.splice(idx,1); toast("Line removed — tracker complete"); render(); }
+        else { if(idx>=0 && res.tracker) STATE.trackers[idx]=res.tracker; toast("Line removed"); render();
+          const card=document.querySelector('.trk[data-issue="'+issue+'"]'); if(card) card.classList.add("open"); }
+      }catch(err){ toast("Remove failed: "+err.message); }
       return;
     }
     const prt=e.target.closest("[data-print]");

@@ -10,6 +10,7 @@
  *   POST /req/deliver-> ADMIN: log delivered/pickup, set expected qty, or
  *                       correct a pickup qty (kind: delivered|pickup|expected|editpickup).
  *   POST /req/delete -> ADMIN: remove a tracker (close issue, drop req-tracker label).
+ *   POST /req/line/delete -> ADMIN: remove a single line from a tracker (marker rewrite).
  *   POST /req/complete -> ADMIN: manually mark a tracker complete (close, keep label).
  *   POST /req/trade  -> ADMIN: change a tracker's trade (title/body/label rewrite);
  *                       also accepts requisitioner to backfill the originator.
@@ -116,6 +117,8 @@ export default {
       return postDeliver(req, env, h);
     } else if (path === "/req/delete" && req.method === "POST"){
       return postDeleteReq(req, env, h);
+    } else if (path === "/req/line/delete" && req.method === "POST"){
+      return postDeleteLine(req, env, h);
     } else if (path === "/req/complete" && req.method === "POST"){
       return postCompleteReq(req, env, h);
     } else if (path === "/req/trade" && req.method === "POST"){
@@ -348,6 +351,35 @@ async function postDeleteReq(req, env, h){
   });
   if (!pr.ok) { const t = await pr.text(); return json({ error: "github " + pr.status, detail: t.slice(0, 300) }, 502, h); }
   return json({ ok: true, deleted: issue }, 200, h);
+}
+
+/* ADMIN: delete a single line from a tracker — rewrite the marker/body without
+ * that line. Used when a Req line was converted/duplicated (e.g. a Grainger part
+ * re-issued as a company stock item) and the same material now shows twice.
+ * Refuses to remove the last remaining line (delete the whole order instead). */
+async function postDeleteLine(req, env, h){
+  if (!(await checkAdmin(req, env)).ok) return json({ error: "admin only" }, 401, h);
+  let b; try { b = await req.json(); } catch { return json({ error: "bad json" }, 400, h); }
+  const issue = parseInt(b.issue, 10);
+  if (!issue || b.line == null) return json({ error: "missing fields" }, 400, h);
+  const gr = await fetch(`https://api.github.com/repos/${env.GH_REPO}/issues/${issue}`, { headers: ghHeaders(env) });
+  if (!gr.ok) return json({ error: "github " + gr.status }, 502, h);
+  const it = await gr.json();
+  const m = parseMarker(it.body);
+  if (!m || m.type !== "req") return json({ error: "not a tracker" }, 400, h);
+  const lines = m.lines || [];
+  if (!lines.some(l => String(l.line) === String(b.line))) return json({ error: "no such line" }, 400, h);
+  if (lines.length <= 1) return json({ error: "cannot delete the only line — delete the whole order instead" }, 400, h);
+  m.lines = lines.filter(l => String(l.line) !== String(b.line));
+  const complete = m.lines.every(l => lineHandled(l));
+  const patch = { body: reqBody(m) };
+  if (complete) patch.state = "closed";
+  const pr = await fetch(`https://api.github.com/repos/${env.GH_REPO}/issues/${issue}`, {
+    method: "PATCH", headers: { ...ghHeaders(env), "Content-Type": "application/json" }, body: JSON.stringify(patch),
+  });
+  if (!pr.ok) { const t = await pr.text(); return json({ error: "github " + pr.status, detail: t.slice(0, 300) }, 502, h); }
+  const updated = await pr.json();
+  return json({ ok: true, complete, tracker: computeTracker(updated) }, 200, h);
 }
 
 /* ADMIN: manually mark a tracker complete — close the issue (keeping the
