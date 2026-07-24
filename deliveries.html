@@ -308,7 +308,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
       </div>
 
       <div class="toolbar">
-        <div class="search"><input type="text" id="q" aria-label="Search requisitions" placeholder="Search Req #, project, part, originator…"></div>
+        <div class="search"><input type="text" id="q" aria-label="Search requisitions" placeholder="Search Req #, project, part, buyer…"></div>
         <div class="seg" role="tablist">
           <button id="segActive" aria-selected="true">Active</button>
           <button id="segDone" aria-selected="false">Completed</button>
@@ -318,7 +318,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
       </div>
       <div class="filterbar" id="filterbar">
         <span class="fgrp"><span class="flbl">Trade</span><select id="fTrade"><option value="">All trades</option></select></span>
-        <span class="fgrp"><span class="flbl">Originator</span><select id="fOriginator"><option value="">All originators</option></select></span>
+        <span class="fgrp"><span class="flbl">Category</span><select id="fCategory"><option value="">All categories</option></select></span>
         <span class="flbl">Date</span>
         <button type="button" class="btn small secondary" id="todayBtn">Today</button>
         <span class="fgrp"><span class="flbl">From</span><input type="date" id="fFrom" aria-label="Required date from"></span>
@@ -344,8 +344,8 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
 <script>
 "use strict";
 const WORKER_URL = "https://asset-portal.site-asset-manager.workers.dev";
-const TRADES = ["Civil","Electrical","Foundation","Collection","Install","Mechanical",
-  "Commissioning","Substation","BESS","Safety","SM/PCC","Survey","Quality","TLine","Inventory","Decom","Other"];
+const TRADES = ["Electrical","Civil","Install","Commissioning","SIS","Office","Maintenance","Safety","Survey","TLine"];
+const CATEGORIES = ["Indirect","Incorporated","Equipment"];
 const STATE = { trackers:[], state:"open", admin:false, adminName:"", pendingOrders:null, existingReqs:null, existingTrackers:null, page:1, cache:{open:null,closed:null} };
 const PAGE_SIZE = 100;
 const CREATE_PACE_MS = 1200;   // spacing between bulk creates (GitHub throttles rapid issue creation)
@@ -424,14 +424,43 @@ function sheetRows(xml, shared){
   }
   return rows;
 }
-/* ---------- Req parser: one tracker per Order Number ----------
+/* ---------- Req parser: one tracker per requisition (Hubble export) ----------
    Reads the first sheet by EXACT header name (column order may vary).
-   Kept columns: Order Number (Req #), Line Number, Line Description,
-   2nd Item Number (Part #), UM, Request Date, Description Line 2.
-   Everything else is ignored; no ordered quantity is captured. */
-const REQ_COLS = { order:"Order Number", line:"Line Number", desc:"Line Description",
-  part:"2nd Item Number", uom:"UM", reqDate:"Request Date", desc2:"Description Line 2",
-  originator:"Transaction Originator", qty:"Quantity To Receive" };   /* qty -> Expected; never read Unit Cost */
+   Only rows that (a) belong to THIS site (Branch/Plant) and (b) carry a REQ#
+   in Reference 2 become trackers — everything else is procurement backend noise.
+   Order # = the requisition # from Reference 2 (stable across req->PO conversion).
+   Supplier SO splits into a cost Category (prefix) + Trade. Qty Ordered -> Expected. */
+const REQ_COLS = { order:"Order #", ref2:"Reference 2", line:"Line Number",
+  desc:"Description", desc2:"Description 2", part:"2Nd Item Number", qty:"Quantity Ordered",
+  orderDate:"Order Date", reqDate:"Promised Delivery Date", supplierSO:"Supplier SO",
+  buyer:"Buyer #", branch:"Branch/Plant" };
+/* Supplier SO carries a cost-category prefix (IND/INC/EQP…) AND the trade word.
+   Fuzzy-match the trade (typo-tolerant, first match wins for multi-trade cells);
+   unrecognized/blank -> "" (Unassigned, admin sets). */
+const TRADE_ALIASES = [["Electrical",["ELECTRICAL","ELECRICAL","EECTRICAL","EELCTRICAL","ELEC"]],
+  ["Civil",["CIVIL","CVIL"]],["Install",["INSTALL","INTSALL","INATALL","INSTAL"]],
+  ["Commissioning",["COMMISSIONING","COMMISS","COMM"]],["SIS",["SIS"]],["Office",["OFFICE"]],
+  ["Maintenance",["MAINTENANCE","MANTAINANCE","MAINTENENCE","MAINT","MECHANICAL","MECHANIC","MECH"]],
+  ["Safety",["SAFETY"]],["Survey",["SURVEY","SURV"]],["TLine",["TLINE","T-LINE","T LINE"]]];
+function normTrade(s){ const u=String(s||"").replace(/\s+/g," ").toUpperCase().trim(); if(!u) return "";
+  let best="",bp=Infinity; for(const [t,al] of TRADE_ALIASES) for(const a of al){ const p=u.indexOf(a); if(p>=0&&p<bp){bp=p;best=t;} } return best; }
+function normCategory(s){ const tok=String(s||"").toUpperCase().replace(/[^A-Z].*$/,"");
+  if(tok.startsWith("IND")) return "Indirect"; if(tok.startsWith("INC")) return "Incorporated";
+  if(tok.startsWith("EQ")||tok.startsWith("EPQ")) return "Equipment"; return ""; }
+const _digits=s=>{ const m=String(s==null?"":s).replace(/\D/g,""); return m.replace(/^0+/,"")||m; };
+const _reqNum=s=>{ const m=/REQ#?\s*0*(\d+)/i.exec(String(s==null?"":s)); return m?m[1]:""; };
+const _isFreight=(part,desc)=>{ const f=x=>String(x||"").trim().toUpperCase()==="FREIGHT"; return f(part)||f(desc); };
+/* Site code(s) for THIS environment (from data/sites.json) — drop procurement /
+   warehouse / other-site rows by Branch/Plant. Cached after first read; if unknown
+   (e.g. no inventory published yet), the site filter is skipped. */
+let _siteCodes=null;
+async function siteCodes(){
+  if(_siteCodes) return _siteCodes;
+  try{ const r=await fetch("data/sites.json",{cache:"no-store"}); const a=r.ok?await r.json():[];
+    _siteCodes=(Array.isArray(a)?a:[]).map(s=>String(s.code||"").trim()).filter(Boolean); }
+  catch(e){ _siteCodes=[]; }
+  return _siteCodes;
+}
 function firstSheetPath(wb, relMap){
   const m=/<sheet\s+[^>]*r:id="([^"]+)"/.exec(wb);
   if(!m) throw new Error("No sheet found in workbook");
@@ -447,41 +476,55 @@ async function parseReqXlsx(file){
   for(const m of rels.matchAll(/<Relationship\s+[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"/g)) relMap[m[1]]=m[2];
   const rows=sheetRows(await zip.get(firstSheetPath(wb,relMap))||"", shared);
   if(!rows.length) throw new Error("The sheet is empty");
-  // Match headers case-insensitively and whitespace-normalized, so exports that
-  // drift in capitalization or extra spaces (e.g. " Request date") still map.
+  // Match headers case-insensitively and whitespace-normalized (names are fixed; order may vary).
   const norm=s=>String(s||"").replace(/\s+/g," ").trim().toLowerCase();
   const hdrRaw=rows[0].map(x=>String(x||"").trim());
   const hdrNorm=hdrRaw.map(norm);
   const col=name=>hdrNorm.indexOf(norm(name));
   const iOrder=col(REQ_COLS.order);
   if(iOrder<0) throw new Error('Header "'+REQ_COLS.order+'" not found. Headers: '+(hdrRaw.filter(Boolean).join(", ")||"(none)"));
-  const iLine=col(REQ_COLS.line), iDesc=col(REQ_COLS.desc), iPart=col(REQ_COLS.part),
-        iUom=col(REQ_COLS.uom), iReq=col(REQ_COLS.reqDate), iD2=col(REQ_COLS.desc2),
-        iOrig=col(REQ_COLS.originator), iQty=col(REQ_COLS.qty);
-  const byOrder=new Map(), byOrig=new Map();
+  const iRef2=col(REQ_COLS.ref2), iLine=col(REQ_COLS.line), iDesc=col(REQ_COLS.desc), iD2=col(REQ_COLS.desc2),
+        iPart=col(REQ_COLS.part), iQty=col(REQ_COLS.qty), iRD=col(REQ_COLS.reqDate), iSO=col(REQ_COLS.supplierSO),
+        iBuyer=col(REQ_COLS.buyer), iBranch=col(REQ_COLS.branch);
+  const codes=await siteCodes();
+  const D=row=>_digits(iOrder>=0?row[iOrder]:"");
+  const T=row=>iRef2>=0?_reqNum(row[iRef2]):"";
+  const siteOk=row=>{ if(!codes.length || iBranch<0) return true; const bp=String(row[iBranch]||"").trim(); return codes.some(c=>bp.startsWith(c)); };
+  // Pass 1: PO# -> req# map, learned only from rows carrying a REQ# in Reference 2.
+  const d2req=new Map();
+  for(let r=1;r<rows.length;r++){ const t=T(rows[r]); if(t){ const d=D(rows[r]); if(d && !d2req.has(d)) d2req.set(d,t); } }
+  // Pass 2: which reqs were converted to a PO (a REQ# row whose Order # differs from the req#).
+  const converted=new Set();
+  for(let r=1;r<rows.length;r++){ const req=T(rows[r]); if(!req) continue; const d=D(rows[r]); if(d && d!==req) converted.add(req); }
+  // Pass 3: build one tracker per requisition — this site only, drop backend noise / freight / stale req rows.
+  const byOrder=new Map(), tradeBy=new Map(), catBy=new Map(), buyerBy=new Map();
   for(let r=1;r<rows.length;r++){
-    const row=rows[r];
-    const order=cleanNum(iOrder>=0?row[iOrder]:"");
-    if(!order) continue;
+    const row=rows[r]; const req=T(row);
+    if(!req) continue;                                   // no REQ# -> procurement / backend noise
+    if(!siteOk(row)) continue;                           // Branch/Plant not this site
+    const d=D(row);
+    if(converted.has(req) && d===req) continue;          // stale requisition superseded by its PO
     const d1=iDesc>=0?String(row[iDesc]||"").trim():"";
     const d2=iD2>=0?String(row[iD2]||"").trim():"";
     const part=iPart>=0?String(row[iPart]||"").trim():"";
+    if(_isFreight(part,d1)) continue;                    // freight / non-material
     const lnRaw=iLine>=0?cleanNum(row[iLine]):"";
     const qRaw=iQty>=0?cleanNum(row[iQty]):"";
     const line={ line: lnRaw!==""?(parseInt(lnRaw,10)||lnRaw):"", part,
-      desc:d1+(d2?(" "+d2):""), uom:iUom>=0?String(row[iUom]||"").trim():"",
-      requiredDate:iReq>=0?excelSerialToISO(row[iReq]):"",
-      expected:(qRaw!=="" && isFinite(Number(qRaw)))?Number(qRaw):null };   /* prefill Expected from the file when present */
+      desc:d1+(d2?(" "+d2):""), uom:"",
+      requiredDate:iRD>=0?excelSerialToISO(row[iRD]):"",
+      expected:(qRaw!=="" && isFinite(Number(qRaw)))?Number(qRaw):null };
     if(!line.desc && !part && line.line==="") continue;
-    const orig=iOrig>=0?String(row[iOrig]||"").trim():"";
-    if(orig && !byOrig.get(order)) byOrig.set(order, orig);   // first non-empty originator per order
-    if(!byOrder.has(order)) byOrder.set(order, []);
-    byOrder.get(order).push(line);
+    if(!byOrder.has(req)) byOrder.set(req, []);
+    byOrder.get(req).push(line);
+    if(!tradeBy.get(req)){ const tr=iSO>=0?normTrade(row[iSO]):""; if(tr) tradeBy.set(req,tr); }
+    if(!catBy.get(req)){ const ct=iSO>=0?normCategory(row[iSO]):""; if(ct) catBy.set(req,ct); }
+    if(!buyerBy.get(req)){ const bv=iBuyer>=0?String(row[iBuyer]||"").trim():""; if(bv) buyerBy.set(req,bv); }
   }
-  const orders=[...byOrder.entries()].map(([reqNumber,lines])=>({reqNumber, trade:"", lines, excluded:false, originator:byOrig.get(reqNumber)||""}));
+  const orders=[...byOrder.entries()].map(([reqNumber,lines])=>({reqNumber, trade:tradeBy.get(reqNumber)||"", category:catBy.get(reqNumber)||"", lines, excluded:false, originator:buyerBy.get(reqNumber)||""}));
   orders.sort((a,b)=>String(a.reqNumber).localeCompare(String(b.reqNumber),undefined,{numeric:true}));
-  if(!orders.length) throw new Error("No order rows found (every row was missing an Order Number).");
-  return orders;   /* NOTE: no cost/quantity field is ever produced */
+  if(!orders.length) throw new Error("No requisition rows found for this site (each tracked row needs a REQ# in Reference 2).");
+  return orders;
 }
 
 /* ---------- admin (real key wired in Task 4; here it unlocks the UI) ---------- */
@@ -570,10 +613,10 @@ function orderChunks(o){ return Math.max(1, Math.ceil((o.lines.length||0)/MAX_LI
    and carry a "Part i of N" label. */
 function chunkOrder(o){
   const n=orderChunks(o), req=o.originator||"";
-  if(n<=1) return [{ reqNumber:o.reqNumber, trade:o.trade, project:o.project||"", requisitioner:req, lines:o.lines }];
+  if(n<=1) return [{ reqNumber:o.reqNumber, trade:o.trade, category:o.category||"", project:o.project||"", requisitioner:req, lines:o.lines }];
   const out=[];
   for(let i=0;i<n;i++){
-    out.push({ reqNumber:o.reqNumber, trade:o.trade, requisitioner:req,
+    out.push({ reqNumber:o.reqNumber, trade:o.trade, category:o.category||"", requisitioner:req,
       project:(o.project?o.project+" · ":"")+"Part "+(i+1)+" of "+n,
       lines:o.lines.slice(i*MAX_LINES,(i+1)*MAX_LINES) });
   }
@@ -587,7 +630,7 @@ function updateCreateEnabled(){
   $("#createBtn").disabled=!ready;
   $("#createBtn").textContent = nw.length? ("Create "+n+" tracker"+(n===1?"":"s")) : "No new orders";
   const bf=$("#backfillBtn"), bc=backfillCandidates().length;
-  if(bf){ if(bc){ bf.style.display="inline-flex"; bf.textContent="Backfill originator on "+bc+" tracked"; } else bf.style.display="none"; }
+  if(bf){ if(bc){ bf.style.display="inline-flex"; bf.textContent="Backfill buyer on "+bc+" tracked"; } else bf.style.display="none"; }
 }
 const wbase = () => WORKER_URL.replace(/\/$/,"");
 function adminKey(){ return nsGet("bac_admin_key")||""; }
@@ -707,22 +750,23 @@ function animateProgress(root){
 
 /* ---------- render trackers ---------- */
 function trackerOriginator(t){ return (t.marker && t.marker.requisitioner) || ""; }
+function trackerCategory(t){ return (t.marker && t.marker.category) || ""; }
 /* Any line whose required date falls in the inclusive [from,to] range (ISO strings). */
 function trackerInDateRange(t, from, to){ return ((t.marker&&t.marker.lines)||[]).some(l=>{ const d=l.requiredDate; if(!d) return false; if(from && d<from) return false; if(to && d>to) return false; return true; }); }
 function todayISO(){ const n=new Date(), p=x=>String(x).padStart(2,"0"); return n.getFullYear()+"-"+p(n.getMonth()+1)+"-"+p(n.getDate()); }
 function viewTrackers(){
-  const q=$("#q").value.trim().toLowerCase(), tf=$("#fTrade").value, of=$("#fOriginator").value;
+  const q=$("#q").value.trim().toLowerCase(), tf=$("#fTrade").value, cf=$("#fCategory").value;
   const from=$("#fFrom").value, to=$("#fTo").value;
   let v=STATE.trackers.slice();
   if(tf) v=v.filter(t=>t.trade===tf);
-  if(of) v=v.filter(t=>trackerOriginator(t)===of);
+  if(cf) v=v.filter(t=>trackerCategory(t)===cf);
   if(from||to) v=v.filter(t=>trackerInDateRange(t, from, to));
-  if(q) v=v.filter(t=>[t.reqNumber,t.project,t.description,t.trade,trackerOriginator(t)].some(x=>String(x||"").toLowerCase().includes(q)));
+  if(q) v=v.filter(t=>[t.reqNumber,t.project,t.description,t.trade,trackerCategory(t),trackerOriginator(t)].some(x=>String(x||"").toLowerCase().includes(q)));
   return v;
 }
 function activeFilterCount(){
   const range=($("#fFrom").value||$("#fTo").value)?1:0;
-  return [$("#fTrade").value,$("#fOriginator").value].filter(Boolean).length + range;
+  return [$("#fTrade").value,$("#fCategory").value].filter(Boolean).length + range;
 }
 function updateFiltersBtn(){
   const btn=$("#filtersBtn"); if(!btn) return;
@@ -730,13 +774,11 @@ function updateFiltersBtn(){
   btn.textContent = n? ("Filters · "+n) : "Filters";
   btn.classList.toggle("on", n>0);
 }
-/* Populate the originator filter from the distinct originators in the current list. */
-function fillOriginatorFilter(){
-  const sel=$("#fOriginator"); if(!sel) return;
-  const cur=sel.value;
-  const names=[...new Set(STATE.trackers.map(trackerOriginator).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-  sel.innerHTML='<option value="">All originators</option>'+names.map(n=>'<option value="'+esc(n)+'"'+(n===cur?' selected':'')+'>'+esc(n)+'</option>').join("");
-  if(names.includes(cur)) sel.value=cur; else sel.value="";
+/* Populate the category filter (fixed list); preserve the current selection. */
+function fillCategoryFilter(){
+  const sel=$("#fCategory"); if(!sel) return; const cur=sel.value;
+  sel.innerHTML='<option value="">All categories</option>'+CATEGORIES.map(c=>'<option value="'+esc(c)+'"'+(c===cur?' selected':'')+'>'+esc(c)+'</option>').join("");
+  sel.value = CATEGORIES.includes(cur)?cur:"";
 }
 /* Branded, print-optimized pickup sheet for one tracker (new window → print). */
 function printSheet(t){
@@ -786,7 +828,7 @@ function updatePurgeBtn(){
 }
 function render(){
   updatePurgeBtn();
-  fillOriginatorFilter();
+  fillCategoryFilter();
   updateFiltersBtn();
   const list=$("#list"), empty=$("#empty"), v=viewTrackers();
   if(!STATE.trackers.length){
@@ -876,7 +918,8 @@ function renderTracker(t){
 /* ---------- boot ---------- */
 function initTrades(){ const f=$("#fTrade"), sa=$("#setAllTrade");
   TRADES.forEach(t=>{ const o=document.createElement("option");o.value=t;o.textContent=t;f.appendChild(o);
-    const o2=document.createElement("option");o2.value=t;o2.textContent=t;sa.appendChild(o2); }); }
+    const o2=document.createElement("option");o2.value=t;o2.textContent=t;sa.appendChild(o2); });
+  fillCategoryFilter(); }
 function resetNewPanel(){ STATE.pendingOrders=null; STATE.existingReqs=null; $("#reqFile").value=""; $("#setAllTrade").value=""; renderPreview(); }
 function bind(){
   $("#adminBtn").addEventListener("click", adminUnlock);
@@ -959,7 +1002,7 @@ function bind(){
   });
   $("#backfillBtn").addEventListener("click", async ()=>{
     const cands=backfillCandidates(); if(!cands.length) return;
-    if(!window.confirm("Backfill the Transaction Originator onto "+cands.length+" already-tracked order"+(cands.length===1?"":"s")+" from this file?")) return;
+    if(!window.confirm("Backfill the Buyer onto "+cands.length+" already-tracked order"+(cands.length===1?"":"s")+" from this file?")) return;
     $("#backfillBtn").disabled=true;
     let ok=0, fail=0;
     for(let i=0;i<cands.length;i++){
@@ -981,7 +1024,7 @@ function bind(){
   let qTimer;   // debounce search so we don't re-render the whole (large) list on every keystroke
   $("#q").addEventListener("input", ()=>{ clearTimeout(qTimer); qTimer=setTimeout(()=>{ STATE.page=1; render(); }, 180); });
   $("#fTrade").addEventListener("change", ()=>{ STATE.page=1; render(); });
-  $("#fOriginator").addEventListener("change", ()=>{ STATE.page=1; render(); });
+  $("#fCategory").addEventListener("change", ()=>{ STATE.page=1; render(); });
   $("#fFrom").addEventListener("change", ()=>{ STATE.page=1; render(); });
   $("#fTo").addEventListener("change", ()=>{ STATE.page=1; render(); });
   $("#todayBtn").addEventListener("click", ()=>{
@@ -993,7 +1036,7 @@ function bind(){
     $("#filtersBtn").setAttribute("aria-expanded", open?"true":"false");
   });
   $("#clearFilters").addEventListener("click", ()=>{
-    $("#fTrade").value=""; $("#fOriginator").value=""; $("#fFrom").value=""; $("#fTo").value="";
+    $("#fTrade").value=""; $("#fCategory").value=""; $("#fFrom").value=""; $("#fTo").value="";
     STATE.page=1; render();
   });
   $("#segActive").addEventListener("click", async ()=>{ STATE.state="open"; STATE.page=1; $("#segActive").setAttribute("aria-selected","true"); $("#segDone").setAttribute("aria-selected","false"); await loadTrackers(); render(); });
