@@ -38,7 +38,8 @@
  */
 
 const CANON = ["Civil","Electrical","Foundation","Collection","Install","Mechanical",
-  "Commissioning","Substation","BESS","Safety","SM/PCC","Survey","Quality","TLine","Inventory","Decom","Other"];
+  "Commissioning","Substation","BESS","Safety","SM/PCC","Survey","Quality","TLine","Inventory","Decom","Other",
+  "SIS","Office","Maintenance"];
 
 function cors(env){
   return {
@@ -207,7 +208,7 @@ async function getRequests(url, env, h, ctx){
 function reqTitle(m){ return `[Req ${m.reqNumber}]${m.project?(" "+m.project):""} (${m.trade})`; }
 function reqMarker(m){
   return JSON.stringify({
-    type: "req", reqNumber: m.reqNumber, trade: m.trade, project: m.project || "", projectCode: m.projectCode || "",
+    type: "req", reqNumber: m.reqNumber, trade: m.trade, category: m.category || "", project: m.project || "", projectCode: m.projectCode || "",
     shipTo: m.shipTo || "", requisitioner: m.requisitioner || "", date: m.date || "", description: m.description || "",
     lines: (m.lines || []).map(l => ({
       line: l.line, part: l.part || "", desc: l.desc, uom: l.uom || "", requiredDate: l.requiredDate || "",
@@ -258,7 +259,7 @@ async function postReq(req, env, h){
   if (!String(b.reqNumber || "").trim()) return json({ error: "missing reqNumber" }, 400, h);
   if (!CANON.includes(b.trade)) return json({ error: "bad trade" }, 400, h);
   if (!Array.isArray(b.lines) || !b.lines.length) return json({ error: "no lines" }, 400, h);
-  const m = { reqNumber: b.reqNumber, trade: b.trade, project: b.project || "", projectCode: b.projectCode || "",
+  const m = { reqNumber: b.reqNumber, trade: b.trade, category: b.category || "", project: b.project || "", projectCode: b.projectCode || "",
     shipTo: b.shipTo || "", requisitioner: b.requisitioner || "", date: b.date || "", description: b.description || "",
     lines: b.lines.map(l => ({ line: l.line, part: l.part || "", desc: l.desc, uom: l.uom || "", requiredDate: l.requiredDate || "", expected: (l.expected == null || l.expected === "") ? null : Number(l.expected), deliveries: [], pickups: [] })) };
   const labels = ["req-tracker", `trade:${b.trade}`, `site:${b.projectCode || "none"}`];
