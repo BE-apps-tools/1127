@@ -307,6 +307,30 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
         </div>
       </div>
 
+      <!-- Receiving (MRR / EJDE reconciliation + delivery log) -->
+      <div id="receivingView" style="display:none;">
+        <div class="card">
+          <div class="card-head"><h2>Receiving &mdash; EJDE reconciliation</h2></div>
+          <div class="card-body">
+            <div id="recvAdmin" style="display:none;">
+              <div class="field"><label>MRR export (.xlsx) <span style="color:var(--dark-blue)">*</span></label>
+                <input type="file" id="mrrFile" accept=".xlsx"></div>
+              <div id="mrrPreview" class="ordsum" style="display:none;"></div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 4px;">
+                <button class="btn" id="mrrImport" disabled>Import to receiving log</button>
+              </div>
+            </div>
+            <div class="toolbar">
+              <div class="search"><input type="text" id="rq" aria-label="Search receiving" placeholder="Search Ref ID, Unique ID, MRR#, part, supplier, slip&hellip;"></div>
+              <span class="fgrp"><span class="flbl">Status</span><select id="rStatus"><option value="">All statuses</option><option>Received in full</option><option>Partially received</option><option>Open &mdash; nothing received</option><option>Missing &mdash; no EJDE receipt</option><option>Received (not on a tracker)</option></select></span>
+              <span class="fgrp"><span class="flbl">Trade</span><select id="rTrade"><option value="">All trades</option></select></span>
+            </div>
+            <div id="recvSummary" class="ordsum"></div>
+            <div id="recvList" class="table-scroll"></div>
+          </div>
+        </div>
+      </div>
+
       <div class="toolbar">
         <div class="search"><input type="text" id="q" aria-label="Search requisitions" placeholder="Search Req #, project, part, buyer…"></div>
         <div class="seg" role="tablist">
@@ -515,7 +539,8 @@ async function parseReqXlsx(file){
       desc:d1+(d2?(" "+d2):""), uom:"",
       requiredDate:iRD>=0?excelSerialToISO(row[iRD]):"",
       expected:(qRaw!=="" && isFinite(Number(qRaw)))?Number(qRaw):null,
-      received:(rvRaw!=="" && isFinite(Number(rvRaw)))?Number(rvRaw):0 };   /* Quantity Received -> seed Delivered */
+      received:(rvRaw!=="" && isFinite(Number(rvRaw)))?Number(rvRaw):0,   /* Quantity Received -> seed Delivered */
+      orderNo:d };   /* PO Order # -> join key (Order#-Line#) for MRR receiving reconciliation */
     if(!line.desc && !part && line.line==="") continue;
     if(!byOrder.has(req)) byOrder.set(req, []);
     byOrder.get(req).push(line);
@@ -1190,10 +1215,155 @@ function bind(){
     if(tog){ tog.closest(".trk").classList.toggle("open"); }
   });
 }
+/* ============================ Receiving (MRR / EJDE reconciliation) ============================
+   Parse the Hubble MRR export (received material), reconcile against the delivery
+   trackers by Unique Identifier (Order#-Line#), and keep a persistent receipt log
+   (data/receiving.json, each receipt carrying a sequential Ref ID). No cost is ever
+   read or stored. */
+const MRR_COLS = { branch:"Branch/Plant", order:"Order Number", origOrder:"Original Order #",
+  line:"Line Number", desc:"Description", desc2:"Description 2", supplier:"Supplier",
+  ordered:"Quantity Ordered", received:"Quantity Received", date:"Received Date",
+  mrr:"MRR #", container:"Container ID", location:"Location" };   /* Amount Received (cost) intentionally never mapped */
+async function parseMrrXlsx(file){
+  const zip=readXlsxIndex(await file.arrayBuffer());
+  const wb=await zip.get("xl/workbook.xml");
+  const rels=await zip.get("xl/_rels/workbook.xml.rels");
+  const shared=parseShared(await zip.get("xl/sharedStrings.xml"));
+  const relMap={};
+  for(const m of rels.matchAll(/<Relationship\s+[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"/g)) relMap[m[1]]=m[2];
+  const rows=sheetRows(await zip.get(firstSheetPath(wb,relMap))||"", shared);
+  if(!rows.length) throw new Error("The MRR sheet is empty");
+  const norm=s=>String(s||"").replace(/\s+/g," ").trim().toLowerCase();
+  const hdrNorm=rows[0].map(norm); const col=n=>hdrNorm.indexOf(norm(n));
+  const iOrder=col(MRR_COLS.order);
+  if(iOrder<0) throw new Error('MRR header "Order Number" not found. Is this the MRR export?');
+  const iBranch=col(MRR_COLS.branch), iOrig=col(MRR_COLS.origOrder), iLine=col(MRR_COLS.line),
+        iDesc=col(MRR_COLS.desc), iD2=col(MRR_COLS.desc2), iSup=col(MRR_COLS.supplier),
+        iOrd=col(MRR_COLS.ordered), iRcv=col(MRR_COLS.received), iDate=col(MRR_COLS.date),
+        iMrr=col(MRR_COLS.mrr), iCont=col(MRR_COLS.container), iLoc=col(MRR_COLS.location);
+  const codes=await siteCodes();
+  const siteOk=row=>{ if(!codes.length||iBranch<0) return true; const bp=String(row[iBranch]||"").trim(); return codes.some(c=>bp.startsWith(c)); };
+  const out=[];
+  for(let r=1;r<rows.length;r++){
+    const row=rows[r]; const orderNo=_digits(iOrder>=0?row[iOrder]:""); if(!orderNo) continue;
+    if(!siteOk(row)) continue;
+    const line=String(iLine>=0?cleanNum(row[iLine]):"").trim();
+    const d1=iDesc>=0?String(row[iDesc]||"").trim():""; const d2=iD2>=0?String(row[iD2]||"").trim():"";
+    const oRaw=iOrd>=0?cleanNum(row[iOrd]):""; const rRaw=iRcv>=0?cleanNum(row[iRcv]):"";
+    out.push({ uid:orderNo+"-"+line, orderNo, line,
+      desc:d1+(d2?(" "+d2):""), req:iOrig>=0?_digits(row[iOrig]):"",
+      supplier:iSup>=0?String(row[iSup]||"").trim():"", trade:iLoc>=0?normTrade(row[iLoc]):"",
+      ordered:(oRaw!=="" && isFinite(Number(oRaw)))?Number(oRaw):0,
+      received:(rRaw!=="" && isFinite(Number(rRaw)))?Number(rRaw):0,
+      date:iDate>=0?excelSerialToISO(row[iDate]):"", mrr:iMrr>=0?String(row[iMrr]||"").trim():"",
+      slip:iCont>=0?String(row[iCont]||"").trim():"" });
+  }
+  if(!out.length) throw new Error("No MRR rows found for this site.");
+  return out;
+}
+/* uid (Order#-Line#) -> {expected, delivered, req} across ALL trackers (open+closed). */
+function recvTrackerIndex(trackers){
+  const idx=new Map();
+  for(const t of trackers||[]){
+    for(const l of ((t.marker&&t.marker.lines)||[])){
+      if(!l.orderNo) continue;
+      const uid=_digits(l.orderNo)+"-"+String(l.line);
+      const delivered=(l.deliveries||[]).reduce((s,d)=>s+(Number(d.qty)||0),0);
+      const exp=(l.expected==null||l.expected==="")?null:Number(l.expected);
+      idx.set(uid,{expected:exp,delivered,req:t.reqNumber});
+    }
+  }
+  return idx;
+}
+async function loadReceiving(){
+  try{ const r=await fetch("data/receiving.json",{cache:"no-store"}); STATE.receiving=r.ok?(await r.json()):{records:[]}; }
+  catch(e){ STATE.receiving={records:[]}; }
+}
+function recvRows(){
+  const recs=(STATE.receiving&&STATE.receiving.records)||[]; const idx=STATE.recvTrkIndex||new Map();
+  const rows=[]; const seen=new Set();
+  for(const r of recs){
+    seen.add(r.uid); const tl=idx.get(r.uid);
+    const jdeOpen=(Number(r.ordered)||0)-(Number(r.received)||0);
+    const trkOpen=tl?(tl.expected==null?null:tl.expected-tl.delivered):null;
+    const status = (Number(r.received)||0)<=0 ? "Open — nothing received"
+      : jdeOpen>0 ? "Partially received"
+      : tl ? "Received in full" : "Received (not on a tracker)";
+    rows.push({refId:r.refId, uid:r.uid, desc:r.desc, req:(tl&&tl.req)||r.req, supplier:r.supplier, trade:r.trade,
+      ordered:Number(r.ordered)||0, received:Number(r.received)||0, jdeOpen, trkOpen, date:r.date, mrr:r.mrr, slip:r.slip, status});
+  }
+  for(const [uid,tl] of idx){   // tracker lines never received -> Missing
+    if(seen.has(uid)) continue;
+    rows.push({refId:"", uid, desc:"", req:tl.req, supplier:"", trade:"", ordered:tl.expected||0, received:0,
+      jdeOpen:tl.expected||0, trkOpen:tl.expected==null?null:tl.expected-tl.delivered, date:"", mrr:"", slip:"",
+      status:"Missing — no EJDE receipt"});
+  }
+  return rows;
+}
+function renderReceiving(){
+  const q=($("#rq").value||"").trim().toLowerCase(), sf=$("#rStatus").value, tf=$("#rTrade").value;
+  let rows=recvRows();
+  const counts={}; rows.forEach(r=>counts[r.status]=(counts[r.status]||0)+1);
+  if(sf) rows=rows.filter(r=>r.status===sf);
+  if(tf) rows=rows.filter(r=>r.trade===tf);
+  if(q) rows=rows.filter(r=>[r.refId,r.uid,r.mrr,r.desc,r.supplier,r.slip,r.req].some(x=>String(x||"").toLowerCase().includes(q)));
+  const miss=counts["Missing — no EJDE receipt"]||0, part=counts["Partially received"]||0, full=counts["Received in full"]||0, nt=counts["Received (not on a tracker)"]||0;
+  $("#recvSummary").innerHTML = rows.length+" shown &middot; <strong>"+miss+"</strong> missing &middot; "+part+" partial &middot; "+full+" received in full &middot; "+nt+" received (not tracked)";
+  const num=v=>v===""||v==null?"":esc(v);
+  const cls=s=> s.startsWith("Missing")?"over": s.startsWith("Partially")?"soon": s.startsWith("Received in full")?"done":"";
+  const body=rows.slice(0,1000).map(r=>
+    '<tr>'+
+      '<td>'+num(r.refId)+'</td><td><strong>'+esc(r.uid)+'</strong></td><td>'+esc(r.desc)+'</td>'+
+      '<td>'+esc(r.req)+'</td><td>'+esc(r.supplier)+'</td><td>'+esc(r.trade||"—")+'</td>'+
+      '<td>'+num(r.ordered)+'</td><td>'+num(r.received)+'</td><td>'+num(r.jdeOpen)+'</td>'+
+      '<td>'+(r.trkOpen==null?"—":num(r.trkOpen))+'</td><td>'+esc(r.date||"")+'</td>'+
+      '<td>'+esc(r.mrr||"")+'</td><td>'+esc(r.slip||"")+'</td>'+
+      '<td><span class="badge '+cls(r.status)+'">'+esc(r.status)+'</span></td>'+
+    '</tr>').join("");
+  $("#recvList").innerHTML='<table><thead><tr><th>Ref ID</th><th>Unique ID</th><th>Description</th><th>Req #</th><th>Supplier</th><th>Trade</th><th>Qty Ord</th><th>Qty Recv</th><th>JDE Open</th><th>Tracker Open</th><th>Date</th><th>MRR#</th><th>Packing Slip/BOL</th><th>Status</th></tr></thead><tbody>'+
+    (body||'<tr><td colspan="14" class="muted" style="padding:14px">No receiving records yet — import an MRR export.</td></tr>')+'</tbody></table>'+
+    (rows.length>1000?'<div class="muted" style="padding:8px">Showing first 1000 of '+rows.length+' — narrow with search/filters.</div>':'');
+}
+async function importMrr(){
+  if(!STATE.mrrPending||!STATE.mrrPending.length) return;
+  const btn=$("#mrrImport"); btn.disabled=true; btn.textContent="Importing…";
+  try{
+    const r=await fetch(wbase()+"/receiving",{method:"POST",headers:{"Content-Type":"application/json","x-admin-key":adminKey()},body:JSON.stringify({records:STATE.mrrPending})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||!d.ok){ banner("Import failed: "+esc((d&&d.error)||("HTTP "+r.status))); btn.disabled=false; btn.textContent="Import to receiving log"; return; }
+    toast("Imported "+d.added+" new receipt"+(d.added===1?"":"s")+" ("+d.total+" total)");
+    STATE.mrrPending=null; $("#mrrFile").value=""; $("#mrrPreview").style.display="none";
+    btn.textContent="Import to receiving log";
+    await loadReceiving(); renderReceiving();
+  }catch(e){ banner("Import failed: "+esc(e.message)); btn.disabled=false; btn.textContent="Import to receiving log"; }
+}
+async function enterReceiving(){
+  $("#newPanel").classList.remove("show");
+  document.querySelectorAll('main > .toolbar, main > .filterbar, #list, #pager').forEach(el=>{ if(el) el.style.display="none"; });
+  $("#receivingView").style.display="block";
+  $("#recvAdmin").style.display = STATE.admin ? "block" : "none";
+  const tr=$("#rTrade"); TRADES.forEach(t=>{ const o=document.createElement("option"); o.value=t; o.textContent=t; tr.appendChild(o); });
+  $("#rq").addEventListener("input", ()=>{ clearTimeout(window._rqT); window._rqT=setTimeout(renderReceiving,180); });
+  $("#rStatus").addEventListener("change", renderReceiving);
+  $("#rTrade").addEventListener("change", renderReceiving);
+  $("#mrrFile").addEventListener("change", async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    try{ toast("Reading MRR…"); STATE.mrrPending=await parseMrrXlsx(f);
+      const p=$("#mrrPreview"); p.style.display="block"; p.textContent=STATE.mrrPending.length+" receipt line"+(STATE.mrrPending.length===1?"":"s")+" for this site — ready to import";
+      $("#mrrImport").disabled=false;
+    }catch(err){ STATE.mrrPending=null; $("#mrrImport").disabled=true; banner("Could not read MRR: "+err.message); }
+  });
+  $("#mrrImport").addEventListener("click", importMrr);
+  const trackers=await fetchExistingTrackers();
+  STATE.recvTrkIndex=recvTrackerIndex(trackers);
+  await loadReceiving();
+  renderReceiving();
+}
 async function init(){
   initTrades(); bind();
   STATE.adminName=nsGet("bac_admin_name")||"";
   if(nsGet("bac_admin_key")) setAdmin(true);   // stay logged in on this device (shared with the hub)
+  if(new URLSearchParams(location.search).get("view")==="receiving"){ await enterReceiving(); return; }
   if(STATE.admin && new URLSearchParams(location.search).get("admin")==="new"){ $("#newPanel").classList.add("show"); }
   const dq=new URLSearchParams(location.search).get("q"); if(dq){ $("#q").value=dq; }   // deep-link from Dashboard search
   await loadTrackers();
