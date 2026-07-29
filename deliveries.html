@@ -1402,6 +1402,24 @@ async function syncOnsiteFromEJDE(){
   }
   return {lines,orders,ambiguous,diag};
 }
+/* Close every OPEN tracker that is now fully on site. The Worker auto-completes
+   trackers going forward as deliveries land; this reconciles the existing backlog
+   (e.g. lines brought on site by the EJDE sync). Admin only; paced for GitHub
+   throttling. Uses the same on-site rule as the ring (trackerOnSite). */
+async function sweepCompleteOnSite(){
+  if(!STATE.admin) return {closed:0};
+  let open=[];
+  try{ const r=await fetch(wbase()+"/reqs?state=open"); if(r.ok){ const d=await r.json(); open=d.trackers||[]; } }catch(e){ return {closed:0}; }
+  const done=open.filter(t=>{ const n=((t.marker&&t.marker.lines)||[]).length; return n>0 && trackerOnSite(t)===n; });
+  let closed=0;
+  for(let i=0;i<done.length;i++){
+    banner("Completing on-site trackers "+(i+1)+" of "+done.length+"…");
+    for(let a=0;a<4;a++){ if(a>0) await sleep(1500*Math.pow(2,a-1)); try{ await completeReq(done[i].issue); closed++; break; }catch(e){} }
+    if(i<done.length-1) await sleep(CREATE_PACE_MS);
+  }
+  banner("");
+  return {closed};
+}
 async function importMrr(){
   if(!STATE.mrrPending||!STATE.mrrPending.length) return;
   const btn=$("#mrrImport"); btn.disabled=true; btn.textContent="Importing…";
@@ -1426,6 +1444,8 @@ async function importMrr(){
         banner("EJDE sync found no REQ# match — trackers:"+(g.trackers||0)+" · receipts w/REQ#:"+(g.recsWithReq||0)+" · overlap:0");
       }
     }
+    const swept=await sweepCompleteOnSite();            // auto-complete trackers now fully on site
+    if(swept.closed){ toast("Completed "+swept.closed+" fully on-site tracker"+(swept.closed===1?"":"s")); }
     renderReceiving();
   }catch(e){ banner("Import failed: "+esc(e.message)); btn.disabled=false; btn.textContent="Import to receiving log"; }
 }
