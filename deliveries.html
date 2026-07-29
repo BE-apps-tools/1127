@@ -1413,7 +1413,11 @@ async function importMrr(){
       toast("On-site synced from EJDE on "+sync.lines+" line"+(sync.lines===1?"":"s")+" across "+sync.orders+" tracker"+(sync.orders===1?"":"s")+(sync.ambiguous?(" · "+sync.ambiguous+" skipped (duplicate description)"):""));
     } else {
       const g=sync.diag||{};
-      banner("Sync matched 0 — trackers:"+(g.trackers||0)+" tracker-keys:"+(g.trkKeys||0)+" · receipts:"+(g.recs||0)+" w/REQ#:"+(g.recsWithReq||0)+" receipt-keys:"+(g.recvKeys||0)+" · overlap:"+(g.matchedKeys||0)+(sync.ambiguous?(" · "+sync.ambiguous+" ambiguous"):""));
+      if((g.matchedKeys||0)>0){
+        toast("On-site already up to date with EJDE"+(sync.ambiguous?(" · "+sync.ambiguous+" line"+(sync.ambiguous===1?"":"s")+" skipped (duplicate description)"):""));
+      } else {
+        banner("EJDE sync found no REQ# match — trackers:"+(g.trackers||0)+" · receipts w/REQ#:"+(g.recsWithReq||0)+" · overlap:0");
+      }
     }
     renderReceiving();
   }catch(e){ banner("Import failed: "+esc(e.message)); btn.disabled=false; btn.textContent="Import to receiving log"; }
