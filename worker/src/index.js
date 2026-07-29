@@ -136,6 +136,8 @@ export default {
       return postAccess(req, env, h);
     } else if (path === "/receiving" && req.method === "POST"){
       return postReceiving(req, env, h);
+    } else if (path === "/receiving/slip" && req.method === "POST"){
+      return postReceivingSlip(req, env, h);
     } else if (path === "/health" && req.method === "GET"){
       return health(env, h);
     }
@@ -604,6 +606,28 @@ async function postReceiving(req, env, h){
   });
   if (!pr.ok) { const t = await pr.text(); return json({ error: "github " + pr.status, detail: t.slice(0, 300) }, 502, h); }
   return json({ ok: true, added, total: records.length }, 200, h);
+}
+
+/* POST /receiving/slip — ADMIN: edit the Packing Slip / BOL on one receiving record
+ * (by Ref ID) after it's been posted. Only the slip is mutable. */
+async function postReceivingSlip(req, env, h){
+  if (!(await checkAdmin(req, env)).ok) return json({ error: "admin only" }, 401, h);
+  let b; try { b = await req.json(); } catch { return json({ error: "bad json" }, 400, h); }
+  const refId = Number(b.refId); if (!refId) return json({ error: "missing refId" }, 400, h);
+  const slip = String(b.slip || "").slice(0, 60);
+  const gr = await fetch(`https://api.github.com/repos/${env.GH_REPO}/contents/data/receiving.json`, { headers: ghHeaders(env) });
+  if (!gr.ok) return json({ error: "github " + gr.status }, 502, h);
+  const meta = await gr.json();
+  let j; try { j = JSON.parse(b64decode(meta.content || "")); } catch { return json({ error: "bad log" }, 500, h); }
+  const rec = (j.records || []).find(r => Number(r.refId) === refId);
+  if (!rec) return json({ error: "not found" }, 404, h);
+  rec.slip = slip;
+  const put = { message: `Receiving: edit BOL on #${refId} [portal]`, content: b64encode(JSON.stringify(j) + "\n"), sha: meta.sha };
+  const pr = await fetch(`https://api.github.com/repos/${env.GH_REPO}/contents/data/receiving.json`, {
+    method: "PUT", headers: { ...ghHeaders(env), "Content-Type": "application/json" }, body: JSON.stringify(put),
+  });
+  if (!pr.ok) { const t = await pr.text(); return json({ error: "github " + pr.status, detail: t.slice(0, 300) }, 502, h); }
+  return json({ ok: true, slip }, 200, h);
 }
 
 /* ============================ optional view-only access gate ============================
