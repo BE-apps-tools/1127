@@ -1336,24 +1336,51 @@ function renderReceiving(){
     (rows.length>1000?'<div class="muted" style="padding:8px">Showing first 1000 of '+rows.length+' — narrow with search/filters.</div>':'');
 }
 /* Raise on-site (Delivered) qty on matching tracker lines to what EJDE has received.
- * Runs automatically after an MRR import. Match is by Unique ID (Order#-Line#) against
- * the tracker index; EJDE received is summed across every receipt on that line. Top-up
- * only — we only ever add the shortfall, never lower a manually-logged delivery. One
- * /req/sync-received call per tracker issue. Idempotent: re-importing the same MRR is a
- * no-op. Returns {lines, orders} actually topped up. */
+ * Runs automatically after an MRR import.
+ *
+ * Match key is REQ# + line description — the identifiers that exist on BOTH sides for
+ * every tracker (Order#/Line# is absent on trackers built before that field was added):
+ *   - tracker side: the tracker's own req number + each line's description
+ *   - receiving side: the receipt's REQ# (MRR "Original Order #", col D, stored as .req)
+ *                     + description; EJDE received is summed across every receipt sharing
+ *                     that REQ#+description.
+ * For each matched material we raise the tracker line's on-site (Delivered) to the EJDE
+ * received total. Top-up only — we never lower a manually-logged delivery. When a single
+ * description maps to MORE THAN ONE line inside a req we cannot tell which line the
+ * receipts belong to, so we SKIP those (reported as `ambiguous`) rather than over-count.
+ * One /req/sync-received call per tracker issue. Idempotent: re-importing is a no-op.
+ * Returns {lines, orders, ambiguous}. */
+const _reqKey=s=>String(s==null?"":s).replace(/\D/g,"").replace(/^0+/,"");   // numeric REQ#, no padding
+const _descKey=s=>String(s==null?"":s).toLowerCase().replace(/[^a-z0-9]+/g,"");
 async function syncOnsiteFromEJDE(){
-  const idx=STATE.recvTrkIndex; if(!idx||!idx.size) return {lines:0,orders:0};
+  const trackers=STATE.recvTrackers||[];
   const recs=(STATE.receiving&&STATE.receiving.records)||[];
-  const recvByUid=new Map();                          // uid -> total received in EJDE
-  for(const r of recs){ recvByUid.set(r.uid,(recvByUid.get(r.uid)||0)+(Number(r.received)||0)); }
+  if(!trackers.length||!recs.length) return {lines:0,orders:0,ambiguous:0};
+  // tracker lines keyed by req#|desc — track collisions so ambiguous descs are skipped
+  const trkByKey=new Map();                            // "reqKey|descKey" -> [{issue,line,delivered}]
+  for(const t of trackers){
+    const rq=_reqKey(t.reqNumber||(t.marker&&t.marker.reqNumber));
+    for(const l of ((t.marker&&t.marker.lines)||[])){
+      const k=rq+"|"+_descKey(l.desc); if(k==="|"||!rq) continue;
+      const delivered=(l.deliveries||[]).reduce((s,d)=>s+(Number(d.qty)||0),0);
+      if(!trkByKey.has(k)) trkByKey.set(k,[]);
+      trkByKey.get(k).push({issue:t.issue,line:l.line,delivered});
+    }
+  }
+  // EJDE received summed per req#|desc
+  const recvByKey=new Map();
+  for(const r of recs){ const rq=_reqKey(r.req); if(!rq) continue; const k=rq+"|"+_descKey(r.desc); recvByKey.set(k,(recvByKey.get(k)||0)+(Number(r.received)||0)); }
   const byIssue=new Map();                             // issue -> [{line, delivered}]
-  for(const [uid,total] of recvByUid){
-    const tl=idx.get(uid); if(!tl||!tl.issue) continue;
+  let ambiguous=0;
+  for(const [k,total] of recvByKey){
+    const cand=trkByKey.get(k); if(!cand||!cand.length) continue;
+    if(cand.length>1){ ambiguous+=cand.length; continue; }   // desc not unique in the req — skip
+    const tl=cand[0];
     if(!(total>tl.delivered)) continue;                // top-up only
     if(!byIssue.has(tl.issue)) byIssue.set(tl.issue,[]);
     byIssue.get(tl.issue).push({line:tl.line, delivered:total});
   }
-  if(!byIssue.size) return {lines:0,orders:0};
+  if(!byIssue.size) return {lines:0,orders:0,ambiguous};
   let lines=0, orders=0;
   for(const [issue,updates] of byIssue){
     try{
@@ -1362,7 +1389,7 @@ async function syncOnsiteFromEJDE(){
       if(r.ok&&d.ok&&d.synced){ lines+=d.synced; orders++; }
     }catch(e){ /* skip this tracker — the others still sync */ }
   }
-  return {lines,orders};
+  return {lines,orders,ambiguous};
 }
 async function importMrr(){
   if(!STATE.mrrPending||!STATE.mrrPending.length) return;
@@ -1375,11 +1402,13 @@ async function importMrr(){
     STATE.mrrPending=null; $("#mrrFile").value=""; $("#mrrPreview").style.display="none";
     btn.textContent="Import to receiving log";
     await loadReceiving();
-    const sync=await syncOnsiteFromEJDE();             // pull EJDE received into on-site on matching trackers
+    const sync=await syncOnsiteFromEJDE();             // pull EJDE received into on-site on matching trackers (REQ#+desc)
     if(sync.lines){
       const trackers=await fetchExistingTrackers();     // refresh so on-site reflects the top-ups
-      STATE.recvTrkIndex=recvTrackerIndex(trackers);
-      toast("On-site synced from EJDE on "+sync.lines+" line"+(sync.lines===1?"":"s")+" across "+sync.orders+" tracker"+(sync.orders===1?"":"s"));
+      STATE.recvTrackers=trackers; STATE.recvTrkIndex=recvTrackerIndex(trackers);
+      toast("On-site synced from EJDE on "+sync.lines+" line"+(sync.lines===1?"":"s")+" across "+sync.orders+" tracker"+(sync.orders===1?"":"s")+(sync.ambiguous?(" · "+sync.ambiguous+" skipped (duplicate description)"):""));
+    } else if(sync.ambiguous){
+      toast("Nothing to sync · "+sync.ambiguous+" line"+(sync.ambiguous===1?"":"s")+" skipped (duplicate description within a req)");
     }
     renderReceiving();
   }catch(e){ banner("Import failed: "+esc(e.message)); btn.disabled=false; btn.textContent="Import to receiving log"; }
@@ -1415,7 +1444,7 @@ async function enterReceiving(){
     inp.disabled=false;
   });
   const trackers=await fetchExistingTrackers();
-  STATE.recvTrkIndex=recvTrackerIndex(trackers);
+  STATE.recvTrackers=trackers; STATE.recvTrkIndex=recvTrackerIndex(trackers);
   await loadReceiving();
   renderReceiving();
 }
