@@ -322,7 +322,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
             </div>
             <div class="toolbar">
               <div class="search"><input type="text" id="rq" aria-label="Search receiving" placeholder="Search Ref ID, Unique ID, MRR#, part, supplier, slip&hellip;"></div>
-              <span class="fgrp"><span class="flbl">Status</span><select id="rStatus"><option value="">All statuses</option><option>Received in full</option><option>Partially received</option><option>Open &mdash; nothing received</option><option>Missing &mdash; no EJDE receipt</option><option>Received (not on a tracker)</option></select></span>
+              <span class="fgrp"><span class="flbl">Status</span><select id="rStatus"><option value="">All statuses</option><option>Completed</option><option>Partially received</option><option>Open &mdash; nothing received</option><option>Missing &mdash; no EJDE receipt</option></select></span>
               <span class="fgrp"><span class="flbl">Trade</span><select id="rTrade"><option value="">All trades</option></select></span>
             </div>
             <div id="recvSummary" class="ordsum"></div>
@@ -332,6 +332,8 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
               /* Description, Supplier, Packing Slip/BOL may wrap; every other column stays on one line */
               #recvList td:nth-child(3),#recvList td:nth-child(5),#recvList td:nth-child(13){white-space:normal;min-width:150px;}
               #recvList .badge{white-space:nowrap;}
+              #recvList .slip-edit{width:150px;font:inherit;padding:3px 6px;border:1px solid var(--light-gray);border-radius:6px;color:var(--dark-gray);}
+              #recvList .slip-edit:focus{outline:2px solid var(--energy-blue);outline-offset:-1px;}
             </style>
             <div id="recvList" class="table-scroll"></div>
           </div>
@@ -1295,7 +1297,7 @@ function recvRows(){
     const trkOpen=tl?(tl.expected==null?null:tl.expected-tl.delivered):null;
     const status = (Number(r.received)||0)<=0 ? "Open — nothing received"
       : jdeOpen>0 ? "Partially received"
-      : tl ? "Received in full" : "Received (not on a tracker)";
+      : "Completed";   /* JDE open 0 & fully received */
     rows.push({refId:r.refId, uid:r.uid, desc:r.desc, req:(tl&&tl.req)||r.req, supplier:r.supplier, trade:r.trade,
       ordered:Number(r.ordered)||0, received:Number(r.received)||0, jdeOpen, trkOpen, date:r.date, mrr:r.mrr, slip:r.slip, status});
   }
@@ -1314,17 +1316,18 @@ function renderReceiving(){
   if(sf) rows=rows.filter(r=>r.status===sf);
   if(tf) rows=rows.filter(r=>r.trade===tf);
   if(q) rows=rows.filter(r=>[r.refId,r.uid,r.mrr,r.desc,r.supplier,r.slip,r.req].some(x=>String(x||"").toLowerCase().includes(q)));
-  const miss=counts["Missing — no EJDE receipt"]||0, part=counts["Partially received"]||0, full=counts["Received in full"]||0, nt=counts["Received (not on a tracker)"]||0;
-  $("#recvSummary").innerHTML = rows.length+" shown &middot; <strong>"+miss+"</strong> missing &middot; "+part+" partial &middot; "+full+" received in full &middot; "+nt+" received (not tracked)";
+  const miss=counts["Missing — no EJDE receipt"]||0, part=counts["Partially received"]||0, done=counts["Completed"]||0, open0=counts["Open — nothing received"]||0;
+  $("#recvSummary").innerHTML = rows.length+" shown &middot; <strong>"+miss+"</strong> missing &middot; "+part+" partial &middot; "+done+" completed"+(open0?(" &middot; "+open0+" open"):"");
   const num=v=>v===""||v==null?"":esc(v);
-  const cls=s=> s.startsWith("Missing")?"over": s.startsWith("Partially")?"soon": s.startsWith("Received in full")?"done":"";
+  const cls=s=> s.startsWith("Missing")?"over": s.startsWith("Partially")?"soon": s.startsWith("Completed")?"done":"";
   const body=rows.slice(0,1000).map(r=>
     '<tr>'+
       '<td>'+num(r.refId)+'</td><td><strong>'+esc(r.uid)+'</strong></td><td>'+esc(r.desc)+'</td>'+
       '<td>'+esc(r.req)+'</td><td>'+esc(r.supplier)+'</td><td>'+esc(r.trade||"—")+'</td>'+
       '<td>'+num(r.ordered)+'</td><td>'+num(r.received)+'</td><td>'+num(r.jdeOpen)+'</td>'+
       '<td>'+(r.trkOpen==null?"—":num(r.trkOpen))+'</td><td>'+esc(r.date||"")+'</td>'+
-      '<td>'+esc(r.mrr||"")+'</td><td>'+esc(r.slip||"")+'</td>'+
+      '<td>'+esc(r.mrr||"")+'</td>'+
+      '<td>'+((STATE.admin && r.refId!=="") ? '<input class="slip-edit" data-ref="'+esc(r.refId)+'" value="'+esc(r.slip||"")+'" aria-label="Packing slip / BOL">' : esc(r.slip||""))+'</td>'+
       '<td><span class="badge '+cls(r.status)+'">'+esc(r.status)+'</span></td>'+
     '</tr>').join("");
   $("#recvList").innerHTML='<table><thead><tr><th>Ref ID</th><th>Unique ID</th><th>Description</th><th>Req #</th><th>Supplier</th><th>Trade</th><th>Qty Ord</th><th>Qty Recv</th><th>JDE Open</th><th>Tracker Open</th><th>Date</th><th>MRR#</th><th>Packing Slip/BOL</th><th>Status</th></tr></thead><tbody>'+
@@ -1362,6 +1365,18 @@ async function enterReceiving(){
     }catch(err){ STATE.mrrPending=null; $("#mrrImport").disabled=true; banner("Could not read MRR: "+err.message); }
   });
   $("#mrrImport").addEventListener("click", importMrr);
+  $("#recvList").addEventListener("change", async e=>{   // edit Packing Slip / BOL after posting
+    const inp=e.target.closest(".slip-edit"); if(!inp) return;
+    const refId=Number(inp.getAttribute("data-ref")), slip=inp.value.trim();
+    inp.disabled=true;
+    try{
+      const r=await fetch(wbase()+"/receiving/slip",{method:"POST",headers:{"Content-Type":"application/json","x-admin-key":adminKey()},body:JSON.stringify({refId,slip})});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok||!d.ok){ banner("Couldn't save BOL: "+esc((d&&d.error)||("HTTP "+r.status))); }
+      else { const rec=((STATE.receiving&&STATE.receiving.records)||[]).find(x=>Number(x.refId)===refId); if(rec) rec.slip=slip; toast("BOL updated"); }
+    }catch(err){ banner("Couldn't save BOL: "+esc(err.message)); }
+    inp.disabled=false;
+  });
   const trackers=await fetchExistingTrackers();
   STATE.recvTrkIndex=recvTrackerIndex(trackers);
   await loadReceiving();
