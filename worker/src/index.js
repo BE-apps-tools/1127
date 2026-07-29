@@ -9,6 +9,7 @@
  *   GET  /reqs       -> list trackers (?state=open|closed), cached ~60s.
  *   POST /req/deliver-> ADMIN: log delivered/pickup, set expected qty, or
  *                       correct a pickup qty (kind: delivered|pickup|expected|editpickup).
+ *   POST /req/sync-received -> ADMIN: top-up on-site qty from EJDE receiving (one PATCH/tracker).
  *   POST /req/delete -> ADMIN: remove a tracker (close issue, drop req-tracker label).
  *   POST /req/line/delete -> ADMIN: remove a single line from a tracker (marker rewrite).
  *   POST /req/complete -> ADMIN: manually mark a tracker complete (close, keep label).
@@ -116,6 +117,8 @@ export default {
       return getReqs(url, env, h, ctx);
     } else if (path === "/req/deliver" && req.method === "POST"){
       return postDeliver(req, env, h);
+    } else if (path === "/req/sync-received" && req.method === "POST"){
+      return postSyncReceived(req, env, h);
     } else if (path === "/req/delete" && req.method === "POST"){
       return postDeleteReq(req, env, h);
     } else if (path === "/req/line/delete" && req.method === "POST"){
@@ -338,6 +341,50 @@ async function postDeliver(req, env, h){
   if (!pr.ok) { const t = await pr.text(); return json({ error: "github " + pr.status, detail: t.slice(0, 300) }, 502, h); }
   const updated = await pr.json();
   return json({ ok: true, complete, tracker: computeTracker(updated) }, 200, h);
+}
+
+/* ADMIN: top-up on-site quantities from EJDE receiving in one shot.
+ * Body: { issue, updates:[{line, delivered}] } where `delivered` is the ABSOLUTE
+ * quantity received in EJDE for that line. For each line we compare the target to
+ * the current sum of deliveries and, when the target is higher, push a single
+ * make-up delivery of (target - current) tagged loggedBy "EJDE sync". Top-up only:
+ * we never remove or lower a manually-logged delivery. One PATCH per tracker.
+ * Idempotent — re-running with the same receiving data is a no-op. */
+async function postSyncReceived(req, env, h){
+  if (!(await checkAdmin(req, env)).ok) return json({ error: "admin only" }, 401, h);
+  let b; try { b = await req.json(); } catch { return json({ error: "bad json" }, 400, h); }
+  const issue = parseInt(b.issue, 10);
+  const updates = Array.isArray(b.updates) ? b.updates : [];
+  if (!issue || !updates.length) return json({ error: "missing fields" }, 400, h);
+  const gr = await fetch(`https://api.github.com/repos/${env.GH_REPO}/issues/${issue}`, { headers: ghHeaders(env) });
+  if (!gr.ok) return json({ error: "github " + gr.status }, 502, h);
+  const it = await gr.json();
+  const m = parseMarker(it.body);
+  if (!m || m.type !== "req") return json({ error: "not a tracker" }, 400, h);
+  const date = new Date().toISOString().slice(0, 10);
+  const changed = [];
+  for (const u of updates){
+    const target = Number(u.delivered);
+    if (!isFinite(target)) continue;
+    const line = (m.lines || []).find(l => String(l.line) === String(u.line));
+    if (!line) continue;
+    const current = lineDelivered(line);
+    const topUp = target - current;
+    if (topUp <= 0) continue;                       // top-up only — never lower on-site
+    line.deliveries = line.deliveries || [];
+    line.deliveries.push({ qty: topUp, date, loggedBy: "EJDE sync" });
+    changed.push({ line: line.line, added: topUp, onsite: target });
+  }
+  if (!changed.length) return json({ ok: true, synced: 0, changed: [] }, 200, h);
+  const complete = (m.lines || []).every(l => lineHandled(l));
+  const patch = { body: reqBody(m) };
+  if (complete) patch.state = "closed";
+  const pr = await fetch(`https://api.github.com/repos/${env.GH_REPO}/issues/${issue}`, {
+    method: "PATCH", headers: { ...ghHeaders(env), "Content-Type": "application/json" }, body: JSON.stringify(patch),
+  });
+  if (!pr.ok) { const t = await pr.text(); return json({ error: "github " + pr.status, detail: t.slice(0, 300) }, 502, h); }
+  const updated = await pr.json();
+  return json({ ok: true, synced: changed.length, changed, complete, tracker: computeTracker(updated) }, 200, h);
 }
 
 /* ADMIN: delete a tracker — close the issue and drop the req-tracker label so it
