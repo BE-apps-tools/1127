@@ -432,8 +432,8 @@ function sheetRows(xml, shared){
    Supplier SO splits into a cost Category (prefix) + Trade. Qty Ordered -> Expected. */
 const REQ_COLS = { order:"Order #", ref2:"Reference 2", line:"Line Number",
   desc:"Description", desc2:"Description 2", part:"2Nd Item Number", qty:"Quantity Ordered",
-  orderDate:"Order Date", reqDate:"Promised Delivery Date", supplierSO:"Supplier SO",
-  buyer:"Buyer #", branch:"Branch/Plant" };
+  received:"Quantity Received", orderDate:"Order Date", reqDate:"Promised Delivery Date",
+  supplierSO:"Supplier SO", buyer:"Buyer #", branch:"Branch/Plant" };
 /* Supplier SO carries a cost-category prefix (IND/INC/EQP…) AND the trade word.
    Fuzzy-match the trade (typo-tolerant, first match wins for multi-trade cells);
    unrecognized/blank -> "" (Unassigned, admin sets). */
@@ -484,8 +484,8 @@ async function parseReqXlsx(file){
   const iOrder=col(REQ_COLS.order);
   if(iOrder<0) throw new Error('Header "'+REQ_COLS.order+'" not found. Headers: '+(hdrRaw.filter(Boolean).join(", ")||"(none)"));
   const iRef2=col(REQ_COLS.ref2), iLine=col(REQ_COLS.line), iDesc=col(REQ_COLS.desc), iD2=col(REQ_COLS.desc2),
-        iPart=col(REQ_COLS.part), iQty=col(REQ_COLS.qty), iRD=col(REQ_COLS.reqDate), iSO=col(REQ_COLS.supplierSO),
-        iBuyer=col(REQ_COLS.buyer), iBranch=col(REQ_COLS.branch);
+        iPart=col(REQ_COLS.part), iQty=col(REQ_COLS.qty), iRecv=col(REQ_COLS.received), iRD=col(REQ_COLS.reqDate),
+        iSO=col(REQ_COLS.supplierSO), iBuyer=col(REQ_COLS.buyer), iBranch=col(REQ_COLS.branch);
   const codes=await siteCodes();
   const D=row=>_digits(iOrder>=0?row[iOrder]:"");
   const T=row=>iRef2>=0?_reqNum(row[iRef2]):"";
@@ -510,10 +510,12 @@ async function parseReqXlsx(file){
     if(_isFreight(part,d1)) continue;                    // freight / non-material
     const lnRaw=iLine>=0?cleanNum(row[iLine]):"";
     const qRaw=iQty>=0?cleanNum(row[iQty]):"";
+    const rvRaw=iRecv>=0?cleanNum(row[iRecv]):"";
     const line={ line: lnRaw!==""?(parseInt(lnRaw,10)||lnRaw):"", part,
       desc:d1+(d2?(" "+d2):""), uom:"",
       requiredDate:iRD>=0?excelSerialToISO(row[iRD]):"",
-      expected:(qRaw!=="" && isFinite(Number(qRaw)))?Number(qRaw):null };
+      expected:(qRaw!=="" && isFinite(Number(qRaw)))?Number(qRaw):null,
+      received:(rvRaw!=="" && isFinite(Number(rvRaw)))?Number(rvRaw):0 };   /* Quantity Received -> seed Delivered */
     if(!line.desc && !part && line.line==="") continue;
     if(!byOrder.has(req)) byOrder.set(req, []);
     byOrder.get(req).push(line);

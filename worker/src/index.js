@@ -261,7 +261,9 @@ async function postReq(req, env, h){
   if (!Array.isArray(b.lines) || !b.lines.length) return json({ error: "no lines" }, 400, h);
   const m = { reqNumber: b.reqNumber, trade: b.trade, category: b.category || "", project: b.project || "", projectCode: b.projectCode || "",
     shipTo: b.shipTo || "", requisitioner: b.requisitioner || "", date: b.date || "", description: b.description || "",
-    lines: b.lines.map(l => ({ line: l.line, part: l.part || "", desc: l.desc, uom: l.uom || "", requiredDate: l.requiredDate || "", expected: (l.expected == null || l.expected === "") ? null : Number(l.expected), deliveries: [], pickups: [] })) };
+    lines: b.lines.map(l => ({ line: l.line, part: l.part || "", desc: l.desc, uom: l.uom || "", requiredDate: l.requiredDate || "", expected: (l.expected == null || l.expected === "") ? null : Number(l.expected),
+      // Seed Delivered from the export's Quantity Received so trackers arrive pre-filled.
+      deliveries: (Number(l.received) > 0) ? [{ qty: Number(l.received), date: new Date().toISOString().slice(0, 10), loggedBy: "Hubble import" }] : [], pickups: [] })) };
   const labels = ["req-tracker", `trade:${b.trade}`, `site:${b.projectCode || "none"}`];
   const r = await fetch(`https://api.github.com/repos/${env.GH_REPO}/issues`, {
     method: "POST", headers: { ...ghHeaders(env), "Content-Type": "application/json" },
