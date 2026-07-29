@@ -1270,7 +1270,8 @@ async function parseMrrXlsx(file){
   if(!out.length) throw new Error("No MRR rows found for this site.");
   return out;
 }
-/* uid (Order#-Line#) -> {expected, delivered, req} across ALL trackers (open+closed). */
+/* uid (Order#-Line#) -> {expected, delivered, req, issue, line} across ALL trackers
+ * (open+closed). issue/line let the EJDE→tracker sync post a top-up to the right line. */
 function recvTrackerIndex(trackers){
   const idx=new Map();
   for(const t of trackers||[]){
@@ -1279,7 +1280,7 @@ function recvTrackerIndex(trackers){
       const uid=_digits(l.orderNo)+"-"+String(l.line);
       const delivered=(l.deliveries||[]).reduce((s,d)=>s+(Number(d.qty)||0),0);
       const exp=(l.expected==null||l.expected==="")?null:Number(l.expected);
-      idx.set(uid,{expected:exp,delivered,req:t.reqNumber});
+      idx.set(uid,{expected:exp,delivered,req:t.reqNumber,issue:t.issue,line:l.line});
     }
   }
   return idx;
@@ -1334,6 +1335,35 @@ function renderReceiving(){
     (body||'<tr><td colspan="14" class="muted" style="padding:14px">No receiving records yet — import an MRR export.</td></tr>')+'</tbody></table>'+
     (rows.length>1000?'<div class="muted" style="padding:8px">Showing first 1000 of '+rows.length+' — narrow with search/filters.</div>':'');
 }
+/* Raise on-site (Delivered) qty on matching tracker lines to what EJDE has received.
+ * Runs automatically after an MRR import. Match is by Unique ID (Order#-Line#) against
+ * the tracker index; EJDE received is summed across every receipt on that line. Top-up
+ * only — we only ever add the shortfall, never lower a manually-logged delivery. One
+ * /req/sync-received call per tracker issue. Idempotent: re-importing the same MRR is a
+ * no-op. Returns {lines, orders} actually topped up. */
+async function syncOnsiteFromEJDE(){
+  const idx=STATE.recvTrkIndex; if(!idx||!idx.size) return {lines:0,orders:0};
+  const recs=(STATE.receiving&&STATE.receiving.records)||[];
+  const recvByUid=new Map();                          // uid -> total received in EJDE
+  for(const r of recs){ recvByUid.set(r.uid,(recvByUid.get(r.uid)||0)+(Number(r.received)||0)); }
+  const byIssue=new Map();                             // issue -> [{line, delivered}]
+  for(const [uid,total] of recvByUid){
+    const tl=idx.get(uid); if(!tl||!tl.issue) continue;
+    if(!(total>tl.delivered)) continue;                // top-up only
+    if(!byIssue.has(tl.issue)) byIssue.set(tl.issue,[]);
+    byIssue.get(tl.issue).push({line:tl.line, delivered:total});
+  }
+  if(!byIssue.size) return {lines:0,orders:0};
+  let lines=0, orders=0;
+  for(const [issue,updates] of byIssue){
+    try{
+      const r=await fetch(wbase()+"/req/sync-received",{method:"POST",headers:{"Content-Type":"application/json","x-admin-key":adminKey()},body:JSON.stringify({issue,updates})});
+      const d=await r.json().catch(()=>({}));
+      if(r.ok&&d.ok&&d.synced){ lines+=d.synced; orders++; }
+    }catch(e){ /* skip this tracker — the others still sync */ }
+  }
+  return {lines,orders};
+}
 async function importMrr(){
   if(!STATE.mrrPending||!STATE.mrrPending.length) return;
   const btn=$("#mrrImport"); btn.disabled=true; btn.textContent="Importing…";
@@ -1344,7 +1374,14 @@ async function importMrr(){
     toast("Imported "+d.added+" new receipt"+(d.added===1?"":"s")+" ("+d.total+" total)");
     STATE.mrrPending=null; $("#mrrFile").value=""; $("#mrrPreview").style.display="none";
     btn.textContent="Import to receiving log";
-    await loadReceiving(); renderReceiving();
+    await loadReceiving();
+    const sync=await syncOnsiteFromEJDE();             // pull EJDE received into on-site on matching trackers
+    if(sync.lines){
+      const trackers=await fetchExistingTrackers();     // refresh so on-site reflects the top-ups
+      STATE.recvTrkIndex=recvTrackerIndex(trackers);
+      toast("On-site synced from EJDE on "+sync.lines+" line"+(sync.lines===1?"":"s")+" across "+sync.orders+" tracker"+(sync.orders===1?"":"s"));
+    }
+    renderReceiving();
   }catch(e){ banner("Import failed: "+esc(e.message)); btn.disabled=false; btn.textContent="Import to receiving log"; }
 }
 async function enterReceiving(){
