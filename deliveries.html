@@ -326,6 +326,13 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
               <span class="fgrp"><span class="flbl">Trade</span><select id="rTrade"><option value="">All trades</option></select></span>
             </div>
             <div id="recvSummary" class="ordsum"></div>
+            <style>
+              #recvList table{font-size:12px;}
+              #recvList th,#recvList td{white-space:nowrap;vertical-align:top;}
+              /* Description, Supplier, Packing Slip/BOL may wrap; every other column stays on one line */
+              #recvList td:nth-child(3),#recvList td:nth-child(5),#recvList td:nth-child(13){white-space:normal;min-width:150px;}
+              #recvList .badge{white-space:nowrap;}
+            </style>
             <div id="recvList" class="table-scroll"></div>
           </div>
         </div>
@@ -1340,6 +1347,7 @@ async function importMrr(){
 async function enterReceiving(){
   $("#newPanel").classList.remove("show");
   document.querySelectorAll('main > .toolbar, main > .filterbar, #list, #pager').forEach(el=>{ if(el) el.style.display="none"; });
+  const mainEl=document.querySelector("main"); if(mainEl) mainEl.style.maxWidth="none";   // let the wide reconciliation table use the full page
   $("#receivingView").style.display="block";
   $("#recvAdmin").style.display = STATE.admin ? "block" : "none";
   const tr=$("#rTrade"); TRADES.forEach(t=>{ const o=document.createElement("option"); o.value=t; o.textContent=t; tr.appendChild(o); });
