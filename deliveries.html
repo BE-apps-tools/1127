@@ -340,6 +340,12 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
               #recvList .slip-edit:focus{outline:2px solid var(--energy-blue);outline-offset:-1px;}
             </style>
             <div id="recvList" class="table-scroll"></div>
+            <div class="pager" id="recvPager" style="display:none;">
+              <button class="pg-btn" id="recvPgPrev" aria-label="Previous page">&lsaquo;</button>
+              <select id="recvPgSel" aria-label="Page"></select>
+              <button class="pg-btn" id="recvPgNext" aria-label="Next page">&rsaquo;</button>
+              <span class="pg-info" id="recvPgInfo"></span>
+            </div>
           </div>
         </div>
       </div>
@@ -1340,7 +1346,10 @@ function renderReceiving(){
   $("#recvSummary").innerHTML = rows.length+" shown &middot; <strong>"+miss+"</strong> missing &middot; "+part+" partial &middot; "+done+" completed"+(open0?(" &middot; "+open0+" open"):"");
   const num=v=>v===""||v==null?"":esc(v);
   const cls=s=> s.startsWith("Missing")?"over": s.startsWith("Partially")?"soon": s.startsWith("Completed")?"done":"";
-  const body=rows.slice(0,1000).map(r=>
+  const total=rows.length, pages=Math.max(1,Math.ceil(total/PAGE_SIZE));
+  if(STATE.recvPage>pages) STATE.recvPage=pages; if(!STATE.recvPage||STATE.recvPage<1) STATE.recvPage=1;
+  const start=(STATE.recvPage-1)*PAGE_SIZE, pageRows=rows.slice(start,start+PAGE_SIZE);
+  const body=pageRows.map(r=>
     '<tr>'+
       '<td>'+num(r.refId)+'</td><td><strong>'+esc(r.uid)+'</strong></td><td>'+esc(r.desc)+'</td>'+
       '<td>'+esc(r.req)+'</td><td>'+esc(r.supplier)+'</td><td>'+esc(r.trade||"—")+'</td>'+
@@ -1351,9 +1360,20 @@ function renderReceiving(){
       '<td><span class="badge '+cls(r.status)+'">'+esc(r.status)+'</span></td>'+
     '</tr>').join("");
   $("#recvList").innerHTML='<table><thead><tr><th>Ref ID</th><th>Unique ID</th><th>Description</th><th>Req #</th><th>Supplier</th><th>Trade</th><th>Qty Ord</th><th>Qty Recv</th><th>JDE Open</th><th>Tracker Open</th><th>Date</th><th>MRR#</th><th>Packing Slip/BOL</th><th>Status</th></tr></thead><tbody>'+
-    (body||'<tr><td colspan="14" class="muted" style="padding:14px">No receiving records yet — import an MRR export.</td></tr>')+'</tbody></table>'+
-    (rows.length>1000?'<div class="muted" style="padding:8px">Showing first 1000 of '+rows.length+' — narrow with search/filters.</div>':'');
+    (body||'<tr><td colspan="14" class="muted" style="padding:14px">No receiving records yet — import an MRR export.</td></tr>')+'</tbody></table>';
+  renderRecvPager(total,pages,start,pageRows.length);
 }
+function renderRecvPager(total,pages,start,shown){
+  const pager=$("#recvPager"); if(!pager) return;
+  if(!total){ pager.style.display="none"; return; }
+  pager.style.display="flex";
+  const sel=$("#recvPgSel"); let opts="";
+  for(let i=1;i<=pages;i++){ const s=(i-1)*PAGE_SIZE+1, e=Math.min(i*PAGE_SIZE,total); opts+='<option value="'+i+'"'+(i===STATE.recvPage?' selected':'')+'>'+s+'–'+e+'</option>'; }
+  sel.innerHTML=opts; sel.disabled=pages<=1;
+  $("#recvPgPrev").disabled=STATE.recvPage<=1; $("#recvPgNext").disabled=STATE.recvPage>=pages;
+  $("#recvPgInfo").textContent="Records "+(start+1)+"–"+(start+shown)+" of "+total;
+}
+function gotoRecvPage(n){ STATE.recvPage=n; renderReceiving(); const l=$("#recvList"); if(l) l.scrollIntoView({block:"start"}); }
 /* Raise on-site (Delivered) qty on matching tracker lines to what EJDE has received.
  * Runs automatically after an MRR import.
  *
@@ -1482,9 +1502,12 @@ async function enterReceiving(){
   const tr=$("#rTrade"); TRADES.forEach(t=>{ const o=document.createElement("option"); o.value=t; o.textContent=t; tr.appendChild(o); });
   // Persist the receiving filters so they survive leaving and returning to the view.
   $("#rq").value=nsGet("recv_q")||""; $("#rStatus").value=nsGet("recv_status")||""; $("#rTrade").value=nsGet("recv_trade")||"";
-  $("#rq").addEventListener("input", ()=>{ nsSet("recv_q",$("#rq").value); clearTimeout(window._rqT); window._rqT=setTimeout(renderReceiving,180); });
-  $("#rStatus").addEventListener("change", ()=>{ nsSet("recv_status",$("#rStatus").value); renderReceiving(); });
-  $("#rTrade").addEventListener("change", ()=>{ nsSet("recv_trade",$("#rTrade").value); renderReceiving(); });
+  $("#rq").addEventListener("input", ()=>{ nsSet("recv_q",$("#rq").value); clearTimeout(window._rqT); window._rqT=setTimeout(()=>{ STATE.recvPage=1; renderReceiving(); },180); });
+  $("#rStatus").addEventListener("change", ()=>{ nsSet("recv_status",$("#rStatus").value); STATE.recvPage=1; renderReceiving(); });
+  $("#rTrade").addEventListener("change", ()=>{ nsSet("recv_trade",$("#rTrade").value); STATE.recvPage=1; renderReceiving(); });
+  $("#recvPgPrev").addEventListener("click", ()=>{ if(STATE.recvPage>1) gotoRecvPage(STATE.recvPage-1); });
+  $("#recvPgNext").addEventListener("click", ()=>{ gotoRecvPage(STATE.recvPage+1); });
+  $("#recvPgSel").addEventListener("change", e=>{ gotoRecvPage(Number(e.target.value)||1); });
   $("#mrrFile").addEventListener("change", async e=>{
     const f=e.target.files[0]; if(!f) return;
     try{ toast("Reading MRR…"); STATE.mrrPending=await parseMrrXlsx(f);
