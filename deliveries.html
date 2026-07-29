@@ -1300,15 +1300,23 @@ async function loadReceiving(){
 function recvRows(){
   const recs=(STATE.receiving&&STATE.receiving.records)||[]; const idx=STATE.recvTrkIndex||new Map();
   const rows=[]; const seen=new Set();
+  // JDE Open / status are LINE-level: a line can be filled by several receipts
+  // (different MRR#s), so total received across all receipts of a Unique ID is
+  // what determines how much is still open — not any single receipt.
+  const recvByUid=new Map(), ordByUid=new Map();
+  for(const r of recs){ const u=r.uid;
+    recvByUid.set(u,(recvByUid.get(u)||0)+(Number(r.received)||0));
+    ordByUid.set(u,Math.max(ordByUid.get(u)||0,Number(r.ordered)||0)); }
   for(const r of recs){
     seen.add(r.uid); const tl=idx.get(r.uid);
-    const jdeOpen=(Number(r.ordered)||0)-(Number(r.received)||0);
+    const ordered=ordByUid.get(r.uid)||0, totRecv=recvByUid.get(r.uid)||0;
+    const jdeOpen=Math.max(0, ordered-totRecv);   // line-level: ordered minus ALL receipts for this line
     const trkOpen=tl?(tl.expected==null?null:tl.expected-tl.delivered):null;
-    const status = (Number(r.received)||0)<=0 ? "Open — nothing received"
+    const status = totRecv<=0 ? "Open — nothing received"
       : jdeOpen>0 ? "Partially received"
-      : "Completed";   /* JDE open 0 & fully received */
+      : "Completed";   /* line fully received across all its receipts */
     rows.push({refId:r.refId, uid:r.uid, desc:r.desc, req:(tl&&tl.req)||r.req, supplier:r.supplier, trade:r.trade,
-      ordered:Number(r.ordered)||0, received:Number(r.received)||0, jdeOpen, trkOpen, date:r.date, mrr:r.mrr, slip:r.slip, status});
+      ordered:ordered, received:Number(r.received)||0, jdeOpen, trkOpen, date:r.date, mrr:r.mrr, slip:r.slip, status});
   }
   for(const [uid,tl] of idx){   // tracker lines never received -> Missing
     if(seen.has(uid)) continue;
