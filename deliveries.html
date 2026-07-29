@@ -318,6 +318,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
               <div id="mrrPreview" class="ordsum" style="display:none;"></div>
               <div style="display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 4px;">
                 <button class="btn" id="mrrImport" disabled>Import to receiving log</button>
+                <button class="btn secondary" id="sweepOnSite">Complete fully on-site trackers</button>
               </div>
             </div>
             <div class="toolbar">
@@ -1404,21 +1405,33 @@ async function syncOnsiteFromEJDE(){
 }
 /* Close every OPEN tracker that is now fully on site. The Worker auto-completes
    trackers going forward as deliveries land; this reconciles the existing backlog
-   (e.g. lines brought on site by the EJDE sync). Admin only; paced for GitHub
-   throttling. Uses the same on-site rule as the ring (trackerOnSite). */
+   (e.g. lines brought on site by the EJDE sync). Admin only. Resumable and
+   idempotent: already-closed trackers drop out of the open list, so if a run is
+   interrupted the next one continues where it left off. Uses the same on-site
+   rule as the ring (trackerOnSite). Returns {closed, failed, total}. */
 async function sweepCompleteOnSite(){
-  if(!STATE.admin) return {closed:0};
+  if(!STATE.admin) return {closed:0,failed:0,total:0};
   let open=[];
-  try{ const r=await fetch(wbase()+"/reqs?state=open"); if(r.ok){ const d=await r.json(); open=d.trackers||[]; } }catch(e){ return {closed:0}; }
+  try{ const r=await fetch(wbase()+"/reqs?state=open",{cache:"no-store"}); if(r.ok){ const d=await r.json(); open=d.trackers||[]; } }catch(e){ return {closed:0,failed:0,total:0}; }
   const done=open.filter(t=>{ const n=((t.marker&&t.marker.lines)||[]).length; return n>0 && trackerOnSite(t)===n; });
-  let closed=0;
+  let closed=0, failed=0;
   for(let i=0;i<done.length;i++){
-    banner("Completing on-site trackers "+(i+1)+" of "+done.length+"…");
-    for(let a=0;a<4;a++){ if(a>0) await sleep(1500*Math.pow(2,a-1)); try{ await completeReq(done[i].issue); closed++; break; }catch(e){} }
-    if(i<done.length-1) await sleep(CREATE_PACE_MS);
+    banner("Completing on-site trackers "+(i+1)+" of "+done.length+"…  (keep this tab open)");
+    let ok=false;
+    for(let a=0;a<5 && !ok;a++){ if(a>0) await sleep(2000*Math.pow(2,a-1)); try{ await completeReq(done[i].issue); ok=true; }catch(e){} }   // backoff on GitHub throttle
+    ok ? closed++ : failed++;
+    if(i<done.length-1) await sleep(400);   // light pacing; retries absorb any secondary-limit 403s
   }
   banner("");
-  return {closed};
+  return {closed,failed,total:done.length};
+}
+async function runSweepOnSite(){
+  const btn=$("#sweepOnSite"); if(btn){ btn.disabled=true; btn.textContent="Completing…"; }
+  const s=await sweepCompleteOnSite();
+  if(btn){ btn.disabled=false; btn.textContent="Complete fully on-site trackers"; }
+  if(!s.total){ toast("No fully on-site trackers to complete"); }
+  else { toast("Completed "+s.closed+" fully on-site tracker"+(s.closed===1?"":"s")+(s.failed?(" · "+s.failed+" still pending — click again to finish"):"")); }
+  return s;
 }
 async function importMrr(){
   if(!STATE.mrrPending||!STATE.mrrPending.length) return;
@@ -1445,7 +1458,7 @@ async function importMrr(){
       }
     }
     const swept=await sweepCompleteOnSite();            // auto-complete trackers now fully on site
-    if(swept.closed){ toast("Completed "+swept.closed+" fully on-site tracker"+(swept.closed===1?"":"s")); }
+    if(swept.total){ toast("Completed "+swept.closed+" fully on-site tracker"+(swept.closed===1?"":"s")+(swept.failed?(" · "+swept.failed+" still pending — use “Complete fully on-site trackers”"):"")); }
     renderReceiving();
   }catch(e){ banner("Import failed: "+esc(e.message)); btn.disabled=false; btn.textContent="Import to receiving log"; }
 }
@@ -1467,6 +1480,7 @@ async function enterReceiving(){
     }catch(err){ STATE.mrrPending=null; $("#mrrImport").disabled=true; banner("Could not read MRR: "+err.message); }
   });
   $("#mrrImport").addEventListener("click", importMrr);
+  $("#sweepOnSite").addEventListener("click", runSweepOnSite);
   $("#recvList").addEventListener("change", async e=>{   // edit Packing Slip / BOL after posting
     const inp=e.target.closest(".slip-edit"); if(!inp) return;
     const refId=Number(inp.getAttribute("data-ref")), slip=inp.value.trim();
