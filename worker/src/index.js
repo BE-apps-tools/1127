@@ -134,6 +134,8 @@ export default {
       return postAdmins(req, env, h);
     } else if (path === "/access" && req.method === "POST"){
       return postAccess(req, env, h);
+    } else if (path === "/receiving" && req.method === "POST"){
+      return postReceiving(req, env, h);
     } else if (path === "/health" && req.method === "GET"){
       return health(env, h);
     }
@@ -211,7 +213,7 @@ function reqMarker(m){
     type: "req", reqNumber: m.reqNumber, trade: m.trade, category: m.category || "", project: m.project || "", projectCode: m.projectCode || "",
     shipTo: m.shipTo || "", requisitioner: m.requisitioner || "", date: m.date || "", description: m.description || "",
     lines: (m.lines || []).map(l => ({
-      line: l.line, part: l.part || "", desc: l.desc, uom: l.uom || "", requiredDate: l.requiredDate || "",
+      line: l.line, orderNo: l.orderNo || "", part: l.part || "", desc: l.desc, uom: l.uom || "", requiredDate: l.requiredDate || "",
       expected: (l.expected == null || l.expected === "") ? null : Number(l.expected),
       deliveries: (l.deliveries || []).map(d => ({ qty: d.qty, date: d.date, loggedBy: d.loggedBy || "" })),
       pickups: (l.pickups || []).map(p => ({ qty: p.qty, by: p.by || "", date: p.date, loggedBy: p.loggedBy || "" })),
@@ -261,7 +263,7 @@ async function postReq(req, env, h){
   if (!Array.isArray(b.lines) || !b.lines.length) return json({ error: "no lines" }, 400, h);
   const m = { reqNumber: b.reqNumber, trade: b.trade, category: b.category || "", project: b.project || "", projectCode: b.projectCode || "",
     shipTo: b.shipTo || "", requisitioner: b.requisitioner || "", date: b.date || "", description: b.description || "",
-    lines: b.lines.map(l => ({ line: l.line, part: l.part || "", desc: l.desc, uom: l.uom || "", requiredDate: l.requiredDate || "", expected: (l.expected == null || l.expected === "") ? null : Number(l.expected),
+    lines: b.lines.map(l => ({ line: l.line, orderNo: l.orderNo || "", part: l.part || "", desc: l.desc, uom: l.uom || "", requiredDate: l.requiredDate || "", expected: (l.expected == null || l.expected === "") ? null : Number(l.expected),
       // Seed Delivered from the export's Quantity Received so trackers arrive pre-filled.
       deliveries: (Number(l.received) > 0) ? [{ qty: Number(l.received), date: new Date().toISOString().slice(0, 10), loggedBy: "Hubble import" }] : [], pickups: [] })) };
   const labels = ["req-tracker", `trade:${b.trade}`, `site:${b.projectCode || "none"}`];
@@ -556,6 +558,52 @@ async function postAdmins(req, env, h){
   if (!pr.ok) { const t = await pr.text(); return json({ error: "github " + pr.status, detail: t.slice(0, 300) }, 502, h); }
   _adminsCache = { at: 0, admins: null };   // invalidate so the change is live immediately
   return json({ ok: true, admins: admins.map(a => ({ name: a.name, added: a.added || "" })) }, 200, h);
+}
+
+/* ============================ receiving log (MRR reconciliation) ============================
+ * POST /receiving — ADMIN: merge parsed MRR receipt records into data/receiving.json,
+ * assigning a sequential Ref ID to each NEW receipt (dedup key orderNo|line|mrr).
+ * Stores the raw receipt log ONLY (never cost); JDE/Tracker open + status are computed
+ * client-side against the live delivery trackers, so reconciliation is always current. */
+async function postReceiving(req, env, h){
+  if (!(await checkAdmin(req, env)).ok) return json({ error: "admin only" }, 401, h);
+  let b; try { b = await req.json(); } catch { return json({ error: "bad json" }, 400, h); }
+  const incoming = Array.isArray(b.records) ? b.records : [];
+  if (!incoming.length) return json({ error: "no records" }, 400, h);
+  let refSeq = 0, records = [], sha = null;
+  const gr = await fetch(`https://api.github.com/repos/${env.GH_REPO}/contents/data/receiving.json`, { headers: ghHeaders(env) });
+  if (gr.ok){
+    const meta = await gr.json(); sha = meta.sha;
+    try { const j = JSON.parse(b64decode(meta.content || "")); if (Array.isArray(j.records)) records = j.records; if (Number.isFinite(j.refSeq)) refSeq = j.refSeq; } catch { /* start fresh */ }
+  } else if (gr.status !== 404){
+    return json({ error: "github " + gr.status }, 502, h);
+  }
+  const seen = new Set(records.map(r => `${r.orderNo}|${r.line}|${r.mrr}`));
+  let added = 0;
+  for (const r of incoming){
+    if (!r || !r.orderNo) continue;
+    const k = `${r.orderNo}|${r.line}|${r.mrr}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    records.push({
+      refId: ++refSeq,
+      uid: String(r.uid || (r.orderNo + "-" + (r.line || ""))),
+      orderNo: String(r.orderNo), line: String(r.line || ""),
+      desc: String(r.desc || "").slice(0, 200), req: String(r.req || ""),
+      supplier: String(r.supplier || "").slice(0, 120), trade: String(r.trade || ""),
+      ordered: Number(r.ordered) || 0, received: Number(r.received) || 0,
+      date: String(r.date || ""), mrr: String(r.mrr || ""), slip: String(r.slip || "").slice(0, 60),
+    });
+    added++;
+  }
+  const bodyStr = JSON.stringify({ refSeq, records }) + "\n";
+  const put = { message: `Receiving: +${added} receipt(s) [portal]`, content: b64encode(bodyStr) };
+  if (sha) put.sha = sha;
+  const pr = await fetch(`https://api.github.com/repos/${env.GH_REPO}/contents/data/receiving.json`, {
+    method: "PUT", headers: { ...ghHeaders(env), "Content-Type": "application/json" }, body: JSON.stringify(put),
+  });
+  if (!pr.ok) { const t = await pr.text(); return json({ error: "github " + pr.status, detail: t.slice(0, 300) }, 502, h); }
+  return json({ ok: true, added, total: records.length }, 200, h);
 }
 
 /* ============================ optional view-only access gate ============================
