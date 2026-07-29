@@ -1353,34 +1353,38 @@ function renderReceiving(){
 const _reqKey=s=>String(s==null?"":s).replace(/\D/g,"").replace(/^0+/,"");   // numeric REQ#, no padding
 const _descKey=s=>String(s==null?"":s).toLowerCase().replace(/[^a-z0-9]+/g,"");
 async function syncOnsiteFromEJDE(){
-  const trackers=STATE.recvTrackers||[];
+  let trackers=STATE.recvTrackers||[];
+  if(!trackers.length){ try{ trackers=await fetchExistingTrackers(); STATE.recvTrackers=trackers; }catch(e){} }   // fallback: load if the view didn't
   const recs=(STATE.receiving&&STATE.receiving.records)||[];
-  if(!trackers.length||!recs.length) return {lines:0,orders:0,ambiguous:0};
   // tracker lines keyed by req#|desc — track collisions so ambiguous descs are skipped
   const trkByKey=new Map();                            // "reqKey|descKey" -> [{issue,line,delivered}]
+  let trkLines=0;
   for(const t of trackers){
     const rq=_reqKey(t.reqNumber||(t.marker&&t.marker.reqNumber));
     for(const l of ((t.marker&&t.marker.lines)||[])){
-      const k=rq+"|"+_descKey(l.desc); if(k==="|"||!rq) continue;
+      if(!rq) continue; const dk=_descKey(l.desc); if(!dk) continue; const k=rq+"|"+dk; trkLines++;
       const delivered=(l.deliveries||[]).reduce((s,d)=>s+(Number(d.qty)||0),0);
       if(!trkByKey.has(k)) trkByKey.set(k,[]);
       trkByKey.get(k).push({issue:t.issue,line:l.line,delivered});
     }
   }
   // EJDE received summed per req#|desc
-  const recvByKey=new Map();
-  for(const r of recs){ const rq=_reqKey(r.req); if(!rq) continue; const k=rq+"|"+_descKey(r.desc); recvByKey.set(k,(recvByKey.get(k)||0)+(Number(r.received)||0)); }
+  const recvByKey=new Map(); let recsWithReq=0;
+  for(const r of recs){ const rq=_reqKey(r.req); if(!rq) continue; recsWithReq++; const k=rq+"|"+_descKey(r.desc); recvByKey.set(k,(recvByKey.get(k)||0)+(Number(r.received)||0)); }
   const byIssue=new Map();                             // issue -> [{line, delivered}]
-  let ambiguous=0;
+  let ambiguous=0, matchedKeys=0;
   for(const [k,total] of recvByKey){
     const cand=trkByKey.get(k); if(!cand||!cand.length) continue;
+    matchedKeys++;
     if(cand.length>1){ ambiguous+=cand.length; continue; }   // desc not unique in the req — skip
     const tl=cand[0];
     if(!(total>tl.delivered)) continue;                // top-up only
     if(!byIssue.has(tl.issue)) byIssue.set(tl.issue,[]);
     byIssue.get(tl.issue).push({line:tl.line, delivered:total});
   }
-  if(!byIssue.size) return {lines:0,orders:0,ambiguous};
+  const diag={trackers:trackers.length,trkLines,trkKeys:trkByKey.size,recs:recs.length,recsWithReq,recvKeys:recvByKey.size,matchedKeys};
+  try{ console.log("[EJDE sync]",JSON.stringify(diag)); }catch(e){}
+  if(!byIssue.size) return {lines:0,orders:0,ambiguous,diag};
   let lines=0, orders=0;
   for(const [issue,updates] of byIssue){
     try{
@@ -1389,7 +1393,7 @@ async function syncOnsiteFromEJDE(){
       if(r.ok&&d.ok&&d.synced){ lines+=d.synced; orders++; }
     }catch(e){ /* skip this tracker — the others still sync */ }
   }
-  return {lines,orders,ambiguous};
+  return {lines,orders,ambiguous,diag};
 }
 async function importMrr(){
   if(!STATE.mrrPending||!STATE.mrrPending.length) return;
@@ -1407,8 +1411,9 @@ async function importMrr(){
       const trackers=await fetchExistingTrackers();     // refresh so on-site reflects the top-ups
       STATE.recvTrackers=trackers; STATE.recvTrkIndex=recvTrackerIndex(trackers);
       toast("On-site synced from EJDE on "+sync.lines+" line"+(sync.lines===1?"":"s")+" across "+sync.orders+" tracker"+(sync.orders===1?"":"s")+(sync.ambiguous?(" · "+sync.ambiguous+" skipped (duplicate description)"):""));
-    } else if(sync.ambiguous){
-      toast("Nothing to sync · "+sync.ambiguous+" line"+(sync.ambiguous===1?"":"s")+" skipped (duplicate description within a req)");
+    } else {
+      const g=sync.diag||{};
+      banner("Sync matched 0 — trackers:"+(g.trackers||0)+" tracker-keys:"+(g.trkKeys||0)+" · receipts:"+(g.recs||0)+" w/REQ#:"+(g.recsWithReq||0)+" receipt-keys:"+(g.recvKeys||0)+" · overlap:"+(g.matchedKeys||0)+(sync.ambiguous?(" · "+sync.ambiguous+" ambiguous"):""));
     }
     renderReceiving();
   }catch(e){ banner("Import failed: "+esc(e.message)); btn.disabled=false; btn.textContent="Import to receiving log"; }
