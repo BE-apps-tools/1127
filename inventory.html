@@ -918,7 +918,35 @@ async function publishInventory(){
     toast("Published "+inv.meta.assetCount+" assets — live in ~1–2 min");
     banner("info","Inventory published ("+inv.meta.assetCount+" assets, "+inv.index.length+" sites). GitHub Pages rebuilds in ~1–2 minutes; refresh then.");
     STATE.pendingInventory=null; $("#emFile").value=""; renderEmPreview(); $("#importPanel").style.display="none";
+    const ar=await autoResolveOnPublish(inv);   // close reassign requests the new master now satisfies
+    if(ar.resolved){ toast("Auto-resolved "+ar.resolved+" reassignment request"+(ar.resolved===1?"":"s")+" — the master now matches");
+      if(STATE.site){ await loadOpenRequests(STATE.site); renderInventory(); } }   // refresh the pending-request overlay/badges
   }catch(err){ toast("Publish failed: "+err.message); $("#emPublish").disabled=false; }
+}
+/* After a publish, auto-close every open REASSIGN request whose requested trade
+ * now matches the just-published master for that unit+serial. Matches against the
+ * in-memory inv (immediate; the live data lags ~1–2 min behind Pages). Issue
+ * reports are never auto-resolved — they have no "done" signal. Admin only. */
+async function autoResolveOnPublish(inv){
+  const norm=t=>String(t||"").trim().toLowerCase();
+  const tradeByKey=new Map(); const sd=(inv&&inv.siteData)||{};
+  for(const code in sd){ for(const a of sd[code]){ tradeByKey.set(String(a.unit||"").trim()+"|"+String(a.serial||"").trim(), norm(a.trade)); } }
+  let issues=[];
+  try{ const r=await fetch("https://api.github.com/repos/be-apps-tools/1127/issues?state=open&per_page=100",{headers:{Accept:"application/vnd.github+json"}});
+    if(r.ok){ const a=await r.json(); issues=Array.isArray(a)?a.filter(it=>!it.pull_request):[]; } }catch(e){ return {resolved:0}; }
+  const marker=body=>{ const m=/```json\s*({[\s\S]*?})\s*```/.exec(body||""); if(!m) return null; try{ return JSON.parse(m[1]); }catch(_){ return null; } };
+  let resolved=0;
+  for(const it of issues){
+    const L=(it.labels||[]).map(x=>typeof x==="string"?x:x.name);
+    if(!L.includes("request:reassign")) continue;
+    const mk=marker(it.body)||{}; const rt=norm(mk.requestedTrade); if(!rt) continue;
+    const cur=tradeByKey.get(String(mk.unit||"").trim()+"|"+String(mk.serial||"").trim());
+    if(cur!=null && cur===rt){
+      try{ const rr=await fetch(wbase()+"/request/resolve",{method:"POST",headers:{"Content-Type":"application/json","x-admin-key":adminKey()},body:JSON.stringify({issue:it.number})}); if(rr.ok) resolved++; }catch(_){}
+      await new Promise(r=>setTimeout(r,300));   // light pacing for GitHub
+    }
+  }
+  return {resolved};
 }
 
 /* ---------- boot ---------- */

@@ -146,6 +146,8 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
   .req-main strong{color:var(--dark-blue);}
   .req-sn{color:var(--medium-gray);font-size:12px;}
   .req-meta{color:var(--medium-gray);font-size:12px;}
+  .req-date{flex:0 0 auto;font-family:'Arial Black', Arial, sans-serif;font-size:10px;letter-spacing:0.03em;text-transform:uppercase;
+    color:var(--medium-gray);background:var(--bright-gray);border:1px solid var(--light-gray);border-radius:999px;padding:4px 10px;white-space:nowrap;}
   .req-chev{flex:0 0 auto;width:8px;height:8px;border-right:2px solid var(--medium-gray);
     border-bottom:2px solid var(--medium-gray);transform:rotate(45deg);transition:transform .2s ease;}
   .req[open] > summary .req-chev{transform:rotate(-135deg);}
@@ -578,7 +580,9 @@ function renderOpenReqs(reqs){
     const badge = isRe ? '<span class="badge">Reassign</span>' : '<span class="badge issue">Issue</span>';
     const change = isRe ? (esc(r.current||"(none)")+' &rarr; '+esc(r.requestedTrade||"?")) : 'Reported issue';
     const meta = [r.site, r.requester].filter(Boolean).map(esc).join(' &middot; ');
-    const submitted = r.created ? esc(String(r.created).slice(0,10)) : "—";
+    const subFmt = r.created ? (function(){ const p=String(r.created).slice(0,10).split("-"); return p.length===3?(p[1]+"-"+p[2]+"-"+p[0].slice(2)):String(r.created).slice(0,10); })() : "";
+    const submitted = subFmt ? esc(subFmt) : "—";
+    const dateChip = subFmt ? '<span class="req-date">Submitted '+esc(subFmt)+'</span>' : '';
     const note = r.detail
       ? '<div class="req-note"><span class="rf-l">Note from requester</span>'+esc(r.detail).replace(/\n/g,"<br>")+'</div>' : "";
     const facts =
@@ -593,6 +597,7 @@ function renderOpenReqs(reqs){
         '<span class="req-main"><strong>Unit '+esc(r.unit||"?")+'</strong> '+
           '<span class="req-sn">SN '+esc(r.serial||"—")+'</span> &middot; '+change+'</span>'+
         (meta?'<span class="req-meta">'+meta+'</span>':"")+
+        dateChip+
         '<span class="req-chev" aria-hidden="true"></span>'+
       '</summary>'+
       '<div class="req-body">'+note+'<div class="req-facts">'+facts+'</div>'+
