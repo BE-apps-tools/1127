@@ -111,6 +111,8 @@ export default {
     if (path === "/requests"){
       if (req.method === "POST") return postRequest(req, env, h);
       if (req.method === "GET")  return getRequests(url, env, h, ctx);
+    } else if (path === "/request/resolve" && req.method === "POST"){
+      return postResolveRequest(req, env, h);
     } else if (path === "/req" && req.method === "POST"){
       return postReq(req, env, h);
     } else if (path === "/reqs" && req.method === "GET"){
@@ -181,6 +183,20 @@ async function postRequest(req, env, h){
   if (!r.ok) { const t = await r.text(); return json({ error: "github " + r.status, detail: t.slice(0, 300) }, 502, h); }
   const gi = await r.json();
   return json({ ok: true, issueNumber: gi.number, url: gi.html_url }, 201, h);
+}
+/* ADMIN: resolve a trade-assignment / issue request — close the issue so it drops
+ * off the open-requests list once the change has been actioned. */
+async function postResolveRequest(req, env, h){
+  if (!(await checkAdmin(req, env)).ok) return json({ error: "admin only" }, 401, h);
+  let b; try { b = await req.json(); } catch { return json({ error: "bad json" }, 400, h); }
+  const issue = parseInt(b.issue, 10);
+  if (!issue) return json({ error: "missing issue" }, 400, h);
+  const pr = await fetch(`https://api.github.com/repos/${env.GH_REPO}/issues/${issue}`, {
+    method: "PATCH", headers: { ...ghHeaders(env), "Content-Type": "application/json" },
+    body: JSON.stringify({ state: "closed", state_reason: "completed" }),
+  });
+  if (!pr.ok) { const t = await pr.text(); return json({ error: "github " + pr.status, detail: t.slice(0, 300) }, 502, h); }
+  return json({ ok: true, resolved: issue }, 200, h);
 }
 function parseMarker(body){
   const m = /```json\s*({[\s\S]*?})\s*```/.exec(body || "");

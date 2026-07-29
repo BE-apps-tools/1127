@@ -157,6 +157,11 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
   .rf-l{display:block;font-size:11px;color:var(--medium-gray);margin-bottom:2px;}
   .rf-v{font-size:13.5px;color:var(--dark-gray);}
   .rf-v strong{color:var(--dark-blue);}
+  .req-actions{margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;}
+  .req-resolve{font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;font-size:11px;letter-spacing:0.04em;
+    padding:9px 16px;border:1px solid var(--dark-blue);background:var(--dark-blue);color:var(--white);border-radius:var(--r-sm);cursor:pointer;}
+  .req-resolve:hover{background:var(--energy-blue);border-color:var(--energy-blue);}
+  .req-resolve:disabled{opacity:0.55;cursor:default;}
 
   /* ---------- Admin guide (signed-in only) ---------- */
   .guide-sec{margin-top:24px;}
@@ -590,7 +595,9 @@ function renderOpenReqs(reqs){
         (meta?'<span class="req-meta">'+meta+'</span>':"")+
         '<span class="req-chev" aria-hidden="true"></span>'+
       '</summary>'+
-      '<div class="req-body">'+note+'<div class="req-facts">'+facts+'</div></div>'+
+      '<div class="req-body">'+note+'<div class="req-facts">'+facts+'</div>'+
+        '<div class="req-actions"><button class="req-resolve" data-resolve="'+r.number+'">Mark resolved</button></div>'+
+      '</div>'+
     '</details>';
   }).join("") : '<div class="rq-empty">No open change requests. Nothing to action right now.</div>';
   $("#openReqsWrap").innerHTML =
@@ -672,8 +679,24 @@ function toggleReqRow(row){
 }
 $("#openReqsWrap").addEventListener("click", e=>{
   if(e.target.closest("#rqRefresh")){ loadOpenRequests(); return; }
+  const rb=e.target.closest("[data-resolve]"); if(rb){ resolveRequest(rb); return; }
   const row=e.target.closest(".reqrow"); if(row) toggleReqRow(row);
 });
+async function resolveRequest(btn){
+  const issue=parseInt(btn.getAttribute("data-resolve"),10); if(!issue) return;
+  if(!window.confirm("Mark this request resolved? It will be closed and removed from the list.")) return;
+  btn.disabled=true; const orig=btn.textContent; btn.textContent="Resolving…";
+  try{
+    const r=await fetch(wbase()+"/request/resolve",{method:"POST",headers:{"Content-Type":"application/json","x-admin-key":adminKey()},body:JSON.stringify({issue})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||!d.ok){ btn.disabled=false; btn.textContent=orig; alert("Couldn't resolve: "+((d&&d.error)||("HTTP "+r.status))); return; }
+    const det=btn.closest("details.req"); if(det) det.remove();   // optimistic: drop the row now
+    const h=document.querySelector("#openReqsWrap .card-head h3");   // decrement the count in the header
+    if(h){ const m=/\((\d+)\)/.exec(h.textContent); const n=m?Math.max(0,parseInt(m[1],10)-1):0;
+      h.textContent="Trade assignment requests"+(n?(" ("+n+")"):""); }
+    if(!document.querySelector("#openReqsWrap details.req")){ const c=document.querySelector("#openReqsWrap .reqcard"); if(c) c.insertAdjacentHTML("beforeend",'<div class="rq-empty">No open change requests. Nothing to action right now.</div>'); }
+  }catch(err){ btn.disabled=false; btn.textContent=orig; alert("Couldn't resolve: "+err.message); }
+}
 $("#openReqsWrap").addEventListener("keydown", e=>{
   if(e.key!=="Enter" && e.key!==" ") return;
   const row=e.target.closest(".reqrow"); if(row){ e.preventDefault(); toggleReqRow(row); }
