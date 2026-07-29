@@ -754,6 +754,11 @@ function lineStatus(delivered, picked){
 }
 function statusClass(s){ return s==="Picked up"?"st-complete":((s==="On site"||s==="Partial pickup")?"st-onsite":"st-none"); }
 function linePickPct(delivered, picked){ if(delivered<=0) return picked>0?100:0; return Math.max(0,Math.min(100,Math.round(100*picked/delivered))); }
+/* On-site is the PRIMARY progress metric. A line is on site once its delivered
+   qty covers the expected qty — or, when no expected qty is on file, once any
+   qty is on site. Pickup is a secondary, optional readout. */
+function lineOnSite(l){ const e=lineExpected(l), d=lineDelivered(l); return (e!=null && e>0) ? d>=e : d>0; }
+function trackerOnSite(t){ const ls=(t.marker&&t.marker.lines)||[]; let n=0; for(const l of ls){ if(lineOnSite(l)) n++; } return n; }
 /* Required-date urgency: overdue = past due and nothing on site yet; due soon = within 3 days and not on site. */
 function daysUntil(iso){ if(!iso) return null; const d=new Date(iso+"T00:00:00"); if(isNaN(d)) return null;
   const n=new Date(); const t=new Date(n.getFullYear(),n.getMonth(),n.getDate()); return Math.round((d-t)/86400000); }
@@ -846,7 +851,7 @@ function printSheet(t){
     `</style></head><body>`+
     `<div class="hd"><div><div class="wm">Blattner</div><div class="sub">Site Inventory Portal</div></div><div class="sub">Printed ${today}</div></div>`+
     `<h1>Req ${esc(t.reqNumber)} &middot; ${esc(t.trade||"")}</h1>`+
-    `<div class="meta">${t.project?esc(t.project)+" &middot; ":""}${lines.length} line${lines.length===1?"":"s"} &middot; ${t.linesComplete}/${t.linesTotal} picked up</div>`+
+    `<div class="meta">${t.project?esc(t.project)+" &middot; ":""}${lines.length} line${lines.length===1?"":"s"} &middot; ${lines.filter(lineOnSite).length}/${lines.length} on site${t.linesComplete?(" &middot; "+t.linesComplete+" picked up"):""}</div>`+
     `<table><thead><tr><th>Line</th><th>Part #</th><th>Description</th><th>UoM</th><th>Required</th><th>Expected</th><th>Delivered</th><th>Pending</th><th>Picked up</th><th>Status</th><th>Picked up by / date</th></tr></thead><tbody>${rowsHtml}</tbody></table>`+
     `<div class="sign"><div>Received by (print &amp; sign)</div><div>Date</div></div>`+
     `<div class="foot">Blattner Site Inventory Portal &middot; internal use</div>`+
@@ -893,7 +898,8 @@ function renderPager(total, pages, start, shown){
 }
 function gotoPage(n){ STATE.page=n; render(); const l=$("#list"); if(l) l.scrollIntoView({block:"start"}); }
 function renderTracker(t){
-  const pct=t.linesTotal?Math.round(100*t.linesComplete/t.linesTotal):0;
+  const onSite=trackerOnSite(t), lineCount=t.linesTotal||((t.marker&&t.marker.lines)||[]).length;
+  const pct=lineCount?Math.round(100*onSite/lineCount):0;   // ring = on-site (primary)
   const rows=((t.marker&&t.marker.lines)||[]).map(l=>{
     const d=lineDelivered(l), p=linePickedUp(l), st=lineStatus(d,p), lp=linePickPct(d,p), e=lineExpected(l), pend=linePending(l);
     const canEditPk = STATE.admin && STATE.state==="open";
@@ -943,7 +949,8 @@ function renderTracker(t){
   return '<div class="trk'+(isDone?' done':'')+'" data-issue="'+t.issue+'">'+
     '<div class="top" data-toggle="'+t.issue+'"><span class="req">Req '+esc(t.reqNumber)+'</span> '+tradeCtl+overBadge+doneBadge+' '+
       (t.project?'<span class="meta">'+esc(t.project)+'</span>':'')+origMeta+
-      '<span class="prog"><span class="lines">'+t.linesComplete+'/'+t.linesTotal+' picked up</span>'+ringSvg(pct)+'</span>'+completeBtn+'</div>'+
+      (t.linesComplete>0?'<span class="meta">'+t.linesComplete+'/'+lineCount+' picked up</span>':'')+
+      '<span class="prog"><span class="lines">'+onSite+'/'+lineCount+' on site</span>'+ringSvg(pct)+'</span>'+completeBtn+'</div>'+
     '<div class="detail"><div class="table-scroll"><table><thead><tr><th>Line</th><th>Part #</th><th>Description</th><th>UoM</th><th>Required</th><th>Expected</th><th>Delivered</th><th>Pending</th><th>Picked up</th><th>Picked up by</th><th>Status</th>'+adminHead+'</tr></thead><tbody>'+rows+'</tbody></table></div>'+
       '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">'+
       '<button class="btn small secondary" data-print="'+t.issue+'">Print sheet</button>'+
