@@ -234,6 +234,10 @@ function lineStatus(delivered, picked){
   return "On site";
 }
 function lineHandled(l){ const d = lineDelivered(l), p = linePickedUp(l); return p > 0 && p >= d; }
+/* On-site completion (mirrors the front-end lineOnSite). A line is complete once
+ * its delivered qty covers the expected qty — or, when no expected qty is on file,
+ * once any qty is on site. This — NOT pickup — is what auto-completes a tracker. */
+function lineComplete(l){ const e = lineExpected(l), d = lineDelivered(l); return (e != null && e > 0) ? d >= e : d > 0; }
 function lineExpected(l){ return (l && l.expected != null && l.expected !== "") ? Number(l.expected) : null; }
 function linePending(l){ const e = lineExpected(l); return e == null ? null : Math.max(0, e - lineDelivered(l)); }
 function reqBody(m){
@@ -277,7 +281,13 @@ async function postReq(req, env, h){
     body: JSON.stringify({ title: reqTitle(m), body: reqBody(m), labels }),
   });
   if (!r.ok) { const t = await r.text(); return json({ error: "github " + r.status, detail: t.slice(0, 300) }, 502, h); }
-  const gi = await r.json();
+  let gi = await r.json();
+  if ((m.lines || []).every(l => lineComplete(l))){   // born fully on site (e.g. a BOM already fully received) -> complete
+    const pc = await fetch(`https://api.github.com/repos/${env.GH_REPO}/issues/${gi.number}`, {
+      method: "PATCH", headers: { ...ghHeaders(env), "Content-Type": "application/json" }, body: JSON.stringify({ state: "closed", state_reason: "completed" }),
+    });
+    if (pc.ok) gi = await pc.json();
+  }
   return json({ ok: true, issueNumber: gi.number, url: gi.html_url, tracker: computeTracker(gi) }, 201, h);
 }
 
@@ -332,7 +342,7 @@ async function postDeliver(req, env, h){
     line.deliveries = line.deliveries || [];
     line.deliveries.push({ qty, date, loggedBy });
   }
-  const complete = (m.lines || []).every(l => lineHandled(l));
+  const complete = (m.lines || []).every(l => lineComplete(l));   // auto-complete on full on-site delivery
   const patch = { body: reqBody(m) };
   if (complete) patch.state = "closed";
   const pr = await fetch(`https://api.github.com/repos/${env.GH_REPO}/issues/${issue}`, {
@@ -376,7 +386,7 @@ async function postSyncReceived(req, env, h){
     changed.push({ line: line.line, added: topUp, onsite: target });
   }
   if (!changed.length) return json({ ok: true, synced: 0, changed: [] }, 200, h);
-  const complete = (m.lines || []).every(l => lineHandled(l));
+  const complete = (m.lines || []).every(l => lineComplete(l));   // auto-complete on full on-site delivery
   const patch = { body: reqBody(m) };
   if (complete) patch.state = "closed";
   const pr = await fetch(`https://api.github.com/repos/${env.GH_REPO}/issues/${issue}`, {
@@ -425,7 +435,7 @@ async function postDeleteLine(req, env, h){
   if (!lines.some(l => String(l.line) === String(b.line))) return json({ error: "no such line" }, 400, h);
   if (lines.length <= 1) return json({ error: "cannot delete the only line — delete the whole order instead" }, 400, h);
   m.lines = lines.filter(l => String(l.line) !== String(b.line));
-  const complete = m.lines.every(l => lineHandled(l));
+  const complete = m.lines.every(l => lineComplete(l));   // auto-complete on full on-site delivery
   const patch = { body: reqBody(m) };
   if (complete) patch.state = "closed";
   const pr = await fetch(`https://api.github.com/repos/${env.GH_REPO}/issues/${issue}`, {
