@@ -452,6 +452,12 @@ function fmtUpdated(iso){
 function cacheSet(k,v){ try{ nsSet(k, JSON.stringify(v)); }catch(e){} }
 function cacheGet(k){ try{ const v=nsGet(k); return v?JSON.parse(v):null; }catch(e){ return null; } }
 
+/* Remember the picked site on this device so it survives leaving the Assets tab
+   and coming back (the rail links carry no query string). */
+const SITE_KEY = "bac_portal_site";
+function rememberSite(code){ if(code) cacheSet(SITE_KEY, String(code)); else nsDel(SITE_KEY); }
+function rememberedSite(){ const v=cacheGet(SITE_KEY); return v==null?"":String(v); }
+
 /* ---------- toast + banner ---------- */
 let toastT=null;
 function toast(m){ const t=$("#toast"); t.textContent=m; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"),3000); }
@@ -960,7 +966,7 @@ function fillTradeControls(){
 }
 /* Load a site's assets + open requests and render (shared by the picker and deep-links). */
 async function selectSite(code){
-  STATE.site=code; STATE.selected.clear();
+  STATE.site=code; STATE.selected.clear(); rememberSite(code);
   if(!code){ STATE.assets=[]; OPEN_REQ={}; renderStats(); renderInventory(); $("#count").textContent=""; return; }
   $("#count").textContent="Loading…";
   $("#invEmpty").style.display="block";
@@ -1077,15 +1083,20 @@ async function init(){
   const pSort=params.get("sort"); if(pSort){ STATE.sort={key:pSort, dir: params.get("dir")==="desc"?"desc":"asc"}; }
   if(params.get("q")) $("#q").value=params.get("q");
   const pTrade=params.get("trade"); if(pTrade){ $("#fTrade").value = pTrade==="unassigned"?TRADE_NONE:pTrade; }
-  const pSite=params.get("site");
+  // Site comes from the URL when deep-linked; otherwise fall back to the last site
+  // picked on this device so switching tabs and returning keeps the selection.
+  const urlSite=params.get("site");
+  const pSite=urlSite || rememberedSite();
   if(pSite && STATE.siteIndex.some(s=>String(s.code)===pSite)){
     sel.value=pSite;
     await selectSite(pSite);
     const pStatus=params.get("status"); if(pStatus){ $("#fStatus").value=pStatus; renderInventory(); }
   } else {
+    if(pSite) rememberSite("");   // stale code (site no longer published) — forget it
     renderInventory();
   }
   STATE.ready=true;
+  if(!urlSite && STATE.site) syncUrl();   // reflect the restored site in the URL so the view stays shareable
   flushQueue();
   window.addEventListener("online", async ()=>{
     await flushQueue();
