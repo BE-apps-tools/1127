@@ -325,7 +325,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
         </div>
         <section class="inv-stats" id="invStats" style="display:none;" aria-label="Site summary"></section>
         <div class="toolbar">
-          <div class="search"><input type="text" id="q" aria-label="Search assets by unit or serial number, or description" placeholder="Search Unit # or Serial # or description…" autocomplete="off"></div>
+          <div class="search"><input type="text" id="q" aria-label="Search assets by unit or serial number, description, or assigned employee" placeholder="Search Unit # or Serial # or description or assigned…" autocomplete="off"></div>
           <select id="fTrade"><option value="">All trades</option></select>
           <select id="fStatus"><option value="">All statuses</option></select>
           <button class="btn small secondary" id="exportCsv">Export CSV</button>
@@ -543,6 +543,10 @@ function renderStats(){
 }
 
 /* ---------- inventory ---------- */
+/* "0" is the Equipment Master's placeholder for "nobody assigned" — never show,
+   match, or sort on it. Used by the table, search, sort and CSV export alike. */
+function assignedOf(a){ return a.assignedEmployee==="0" ? "" : String(a.assignedEmployee||""); }
+function sortVal(a,key){ return key==="assignedEmployee" ? assignedOf(a) : (a[key]==null?"":String(a[key])); }
 function viewAssets(){
   const q=$("#q").value.trim().toLowerCase();
   const tf=$("#fTrade").value, sf=$("#fStatus").value;
@@ -550,11 +554,11 @@ function viewAssets(){
   if(tf===TRADE_NONE) v=v.filter(a=>!String(a.trade||"").trim());
   else if(tf) v=v.filter(a=>a.trade===tf);
   if(sf) v=v.filter(a=>a.status===sf);
-  if(q) v=v.filter(a=>[a.unit,a.serial,a.description,a.description2].some(x=>String(x||"").toLowerCase().includes(q)));
+  if(q) v=v.filter(a=>[a.unit,a.serial,a.description,a.description2,assignedOf(a)].some(x=>String(x||"").toLowerCase().includes(q)));
   const s=STATE.sort;
   if(s && s.key){
     const dir = s.dir==="desc" ? -1 : 1;
-    v.sort((a,b)=>dir*String(a[s.key]==null?"":a[s.key]).localeCompare(String(b[s.key]==null?"":b[s.key]), undefined, {numeric:true, sensitivity:"base"}));
+    v.sort((a,b)=>dir*sortVal(a,s.key).localeCompare(sortVal(b,s.key), undefined, {numeric:true, sensitivity:"base"}));
   } else {
     v.sort((a,b)=>String(a.unit).localeCompare(String(b.unit), undefined, {numeric:true}));
   }
@@ -617,7 +621,7 @@ function renderInventory(){
       '<td>'+esc(a.mfg)+(a.modelYear?' / '+esc(a.modelYear):'')+'</td>'+
       '<td class="status-cell">'+statusDot(a.status)+esc(a.status)+'</td>'+
       '<td>'+(a.trade?'<span class="trade-badge">'+esc(a.trade)+'</span>':'<span class="trade-badge none">Unassigned</span>')+'</td>'+
-      '<td>'+esc(a.assignedEmployee==="0"?"":a.assignedEmployee)+'</td>'+
+      '<td>'+esc(assignedOf(a))+'</td>'+
       '<td><div class="row-actions">'+pendBadge+'<button class="btn small" data-req-unit="'+esc(a.unit)+'" data-req-serial="'+esc(a.serial)+'">Request</button></div></td>';
     const detail=document.createElement("tr"); detail.className="detail-row"; detail.style.display="none";
     detail.innerHTML='<td colspan="9"><div class="detail-grid">'+
@@ -1044,7 +1048,7 @@ function exportCsv(){
     ["Company","company"],["Location","location"],["Location Code","locationCode"],["Transfer #","transferNumber"],
     ["Finance","financeMethod"],["Asset #","assetNumber"],["From Date","fromDate"],["Acquired","acquiredDate"],
     ["Additional Info","additionalInfo"],["Remarks","remarks"]];
-  const val=(a,k)=> k==="assignedEmployee" ? (a.assignedEmployee==="0"?"":a.assignedEmployee) : a[k];
+  const val=(a,k)=> k==="assignedEmployee" ? assignedOf(a) : a[k];
   const lines=[cols.map(c=>csvCell(c[0])).join(",")];
   v.forEach(a=>lines.push(cols.map(c=>csvCell(val(a,c[1]))).join(",")));
   const blob=new Blob(["﻿"+lines.join("\r\n")],{type:"text/csv;charset=utf-8;"});
