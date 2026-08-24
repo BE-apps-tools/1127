@@ -671,19 +671,25 @@ async function batchSubmit(){
   if(!window.confirm("Submit reassignment request → "+trade+" for "+todo.length+" asset"+(todo.length===1?"":"s")+"?"+(skipped?(" ("+skipped+" already open, skipped)"):""))) return;
   cacheSet("bac_portal_requester", requester);
   $("#batchSubmit").disabled=true;
-  let ok=0, fail=0;
+  let ok=0, unsent=0, failStatus=0;
   for(let i=0;i<todo.length;i++){
     const a=todo[i]; toast("Submitting "+(i+1)+"/"+todo.length+"…");
     const res=await submitRequest({ type:"reassign", site:STATE.site, unit:a.unit, serial:a.serial,
       description:a.description, currentTrade:a.trade||"", requestedTrade:trade,
       detail:"Batch reassignment to "+trade, requester });
-    if(res.ok||res.queued) ok++; else fail++;
+    if(res.ok||res.queued) ok++;
+    else {                         // a rejection hits every row alike — stop rather than hammer it
+      failStatus=res.status||0; unsent=todo.length-ok; break;
+    }
   }
-  STATE.selected.clear();
+  if(unsent) banner("err", (ok? ok+" submitted, then the remaining "+unsent+" stopped: "
+                              : "Nothing was submitted: ")+rejectHint(failStatus)+
+    ". Those assets are still selected — try again once that is resolved.");
+  else STATE.selected.clear();     // keep the selection when there is more to retry
   if(WORKER_URL){ await loadOpenRequests(STATE.site); }
   renderInventory(); renderMyRequests();
-  $("#batchSubmit").disabled=false; $("#batchTrade").value="";
-  toast("Submitted "+ok+" request"+(ok===1?"":"s")+(skipped?(" · "+skipped+" skipped"):"")+(fail?(" · "+fail+" failed"):""));
+  $("#batchSubmit").disabled=false; if(!unsent) $("#batchTrade").value="";
+  toast("Submitted "+ok+" request"+(ok===1?"":"s")+(skipped?(" · "+skipped+" skipped"):"")+(unsent?(" · "+unsent+" not sent"):""));
 }
 
 /* ---------- request flow ---------- */
@@ -728,39 +734,66 @@ function buildRequestPayload(){
 function logRequest(entry){
   const log=cacheGet("bac_portal_requests")||[]; log.unshift(entry); cacheSet("bac_portal_requests",log);
 }
+function queueRequest(p){
+  const q=cacheGet("bac_portal_queue")||[]; q.push(Object.assign({},p,{at:new Date().toISOString()})); cacheSet("bac_portal_queue",q);
+}
+/* Why a submit failed, in the user's terms — a rejection is not "offline". */
+function rejectHint(status){
+  if(status===401||status===403) return "the portal's submit key was rejected (an admin needs to check the Worker's SUBMIT_KEY)";
+  if(status===400) return "the server rejected the details; check the fields and try again";
+  if(status===404) return "the request endpoint wasn't found (an admin needs to check the Worker URL)";
+  return "the server refused it (" + status + ")";
+}
+/* Outcomes: {ok} created · {queued, offline} unreachable, retried later ·
+   {queued} transient server error, retried later · {rejected, status} refused —
+   retrying cannot help, so it is NOT queued and the user is told plainly. */
 async function submitRequest(p){
   // Pre-deploy / dev: no Worker configured -> keep a local-only log.
   if(!WORKER_URL){
     logRequest(Object.assign({},p,{issueNumber:0,url:"#(local)",at:new Date().toISOString()}));
     return {ok:true, local:true};
   }
+  let r;
   try{
-    const r=await fetch(wbase()+"/requests",{method:"POST",
+    r=await fetch(wbase()+"/requests",{method:"POST",
       headers:{"Content-Type":"application/json","x-submit-key":SUBMIT_KEY}, body:JSON.stringify(p)});
-    if(!r.ok) throw new Error("server "+r.status);
-    const d=await r.json();
-    logRequest(Object.assign({},p,{issueNumber:d.issueNumber,url:d.url,at:new Date().toISOString()}));
-    return {ok:true, issueNumber:d.issueNumber, url:d.url};
-  }catch(err){
-    const q=cacheGet("bac_portal_queue")||[]; q.push(Object.assign({},p,{at:new Date().toISOString()})); cacheSet("bac_portal_queue",q);
-    return {ok:false, queued:true};
+  }catch(err){                       // no response at all: offline, DNS, CORS, blocked
+    queueRequest(p);
+    return {ok:false, queued:true, offline:true};
   }
+  if(!r.ok){
+    if(r.status>=500 || r.status===429){ queueRequest(p); return {ok:false, queued:true, status:r.status}; }
+    return {ok:false, rejected:true, status:r.status};
+  }
+  // The Issue exists by now, so never re-queue past this point — that would duplicate it.
+  let d={}; try{ d=await r.json(); }catch(e){}
+  logRequest(Object.assign({},p,{issueNumber:d.issueNumber,url:d.url,at:new Date().toISOString()}));
+  return {ok:true, issueNumber:d.issueNumber, url:d.url};
 }
 async function flushQueue(){
   if(!WORKER_URL) return;
   const q=cacheGet("bac_portal_queue")||[]; if(!q.length) return;
-  const remain=[];
+  const remain=[]; let sent=0, dropped=0, lastStatus=0;
   for(const p of q){
+    let r;
     try{
-      const r=await fetch(wbase()+"/requests",{method:"POST",
+      r=await fetch(wbase()+"/requests",{method:"POST",
         headers:{"Content-Type":"application/json","x-submit-key":SUBMIT_KEY}, body:JSON.stringify(p)});
-      if(!r.ok) throw 0;
-      const d=await r.json();
-      logRequest(Object.assign({},p,{issueNumber:d.issueNumber,url:d.url}));
-    }catch(e){ remain.push(p); }
+    }catch(e){ remain.push(p); continue; }         // still unreachable — keep for next time
+    if(!r.ok){
+      if(r.status>=500 || r.status===429){ remain.push(p); }
+      else { dropped++; lastStatus=r.status; }     // refused: retrying forever would never clear it
+      continue;
+    }
+    let d={}; try{ d=await r.json(); }catch(e){}
+    logRequest(Object.assign({},p,{issueNumber:d.issueNumber,url:d.url}));
+    sent++;
   }
   cacheSet("bac_portal_queue",remain);
-  if(remain.length!==q.length) renderMyRequests();
+  if(sent||dropped) renderMyRequests();
+  if(sent) toast("Sent "+sent+" queued request"+(sent===1?"":"s"));
+  if(dropped) banner("err", dropped+" queued request"+(dropped===1?"":"s")+" could not be sent and "+
+    (dropped===1?"was":"were")+" discarded — "+rejectHint(lastStatus)+". Please submit again once that is fixed.");
 }
 /* Pending-request overlay (from the Worker's cached GET /requests). */
 async function loadOpenRequests(code){
@@ -1114,7 +1147,14 @@ function bind(){
     if(!p.detail){ toast("Add a detail/reason"); return; }
     cacheSet("bac_portal_requester", p.requester);
     const res=await submitRequest(p);
-    if(res.queued) toast("Saved offline — will send when back online");
+    if(res.rejected){
+      toast("Not submitted — "+rejectHint(res.status));
+      banner("err","Unit "+p.unit+" was NOT submitted: "+rejectHint(res.status)+". Nothing was saved — try again once that is resolved.");
+      return;                                   // stay on the form so the details aren't lost
+    }
+    if(res.queued) toast(res.offline
+      ? "Saved on this device — will send when back online"
+      : "Server busy ("+res.status+") — saved on this device, will retry");
     else toast("Request submitted for Unit "+p.unit);
     if(res.ok && WORKER_URL){ await loadOpenRequests(STATE.site); renderInventory(); }
     switchTab("my");
