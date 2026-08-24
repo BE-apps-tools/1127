@@ -815,6 +815,7 @@ async function health(env, h){
   const out = {
     hasToken: !!env.GH_TOKEN, hasRepo: !!env.GH_REPO, repo: env.GH_REPO || null,
     hasSubmitKey: !!env.SUBMIT_KEY, hasAdminKey: !!env.ADMIN_KEY,
+    hasTeamsWebhook: !!String(env.TEAMS_WEBHOOK_URL || "").trim(),   // never the URL itself
     allowedOrigin: env.ALLOWED_ORIGIN || null, github: null,
   };
   if (env.GH_TOKEN && env.GH_REPO){

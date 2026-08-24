@@ -125,6 +125,19 @@ test("a rejected request never alerts", async () => {
   assert.equal(calls.length, 0, "bad key must not reach GitHub or Teams");
 });
 
+test("/health reports whether the webhook is set, never the URL", async () => {
+  globalThis.fetch = async () => new Response("{}", { status: 200 });
+  const get = async env => (await (await worker.fetch(
+    new Request("https://w.example/health"), env, { waitUntil(){} })).json());
+
+  const on = await get({ TEAMS_WEBHOOK_URL: WORKFLOW_HOOK });
+  assert.equal(on.hasTeamsWebhook, true);
+  assert.ok(!JSON.stringify(on).includes("logic.azure.com"), "the URL must never be exposed");
+
+  assert.equal((await get({})).hasTeamsWebhook, false);
+  assert.equal((await get({ TEAMS_WEBHOOK_URL: "   " })).hasTeamsWebhook, false, "blank is not configured");
+});
+
 let failed = 0;
 for (const [name, fn] of tests){
   try { await fn(); console.log("ok   - " + name); }

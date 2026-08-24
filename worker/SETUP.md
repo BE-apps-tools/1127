@@ -90,7 +90,10 @@ straight to the GitHub Issue.
    wrangler secret put TEAMS_WEBHOOK_URL     # paste the workflow URL
    ```
    (Dashboard: **Settings → Variables → Add**, mark it *encrypted*.)
-3. Submit a test request from the portal — the card should land in the channel
+3. Open `<worker-url>/health` — it must show **`"hasTeamsWebhook": true`**. If the
+   field is missing entirely, the Worker is still running older code: redeploy it.
+   (The URL itself is never reported.)
+4. Submit a test request from the portal — the card should land in the channel
    within a few seconds.
 
 Notes:
