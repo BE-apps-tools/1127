@@ -78,8 +78,15 @@ present — the same result as the `build-data` Action.
 
 Set one secret and every request submitted from **Assets → Request Change** also
 posts a card to a Teams channel — unit, serial, description, site, current trade,
-requested trade, the detail the requester typed, who submitted it, and a button
-straight to the GitHub Issue.
+requested trade, the detail the requester typed, who submitted it, and two buttons:
+**Review in portal** (opens `admin.html?view=requests&issue=<n>`, which expands that
+request ready to action) and **GitHub issue** for the raw record.
+
+The portal URL is derived from `ALLOWED_ORIGIN` + the repo name, which is right for
+GitHub Pages. Serving the portal from somewhere else (custom domain, subpath)? Set
+**`PORTAL_URL`** to its base — e.g. `https://portal.example.com/bei/` — and that wins.
+With neither available the card falls back to the Issue link alone rather than
+building something broken.
 
 1. In Teams, open the target channel → **⋯ → Workflows** → template **"Send webhook
    alerts to a channel"** ("Get updates in Teams from tools like GitHub, Zapier, or

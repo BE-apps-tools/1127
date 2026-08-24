@@ -24,7 +24,7 @@ const ISSUE_REQ = { ...REASSIGN, type: "issue", requestedTrade: "", currentTrade
 
 /* Run one POST /requests through the worker. `hookStatus` drives what the stubbed
  * Teams webhook answers with; "throw" simulates the endpoint being unreachable. */
-async function submit(body, { webhook = "", hookStatus = 202 } = {}){
+async function submit(body, { webhook = "", hookStatus = 202, env: extraEnv = {} } = {}){
   const calls = [], pending = [];
   globalThis.fetch = async (url, init = {}) => {
     const u = String(url);
@@ -33,7 +33,7 @@ async function submit(body, { webhook = "", hookStatus = 202 } = {}){
     if (hookStatus === "throw") throw new Error("connect ECONNREFUSED");
     return new Response("1", { status: hookStatus });
   };
-  const env = { SUBMIT_KEY: "sk", GH_TOKEN: "t", GH_REPO: "o/r", TEAMS_WEBHOOK_URL: webhook };
+  const env = { SUBMIT_KEY: "sk", GH_TOKEN: "t", GH_REPO: "o/r", TEAMS_WEBHOOK_URL: webhook, ...extraEnv };
   const req = new Request("https://w.example/requests", {
     method: "POST", headers: { "x-submit-key": "sk", "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -78,7 +78,50 @@ test("Workflows webhook -> Adaptive Card with the request's facts", async () => 
     "Site": "36620001127", "Current trade": "(none)", "Requested trade": "Civil",
     "Detail": "Belongs to the civil crew", "Requester": "Ruben Ruiz",
   });
+  // No portal URL derivable from this env, so the Issue is the only way through.
   assert.deepEqual(card.actions, [{ type: "Action.OpenUrl", title: "Open request", url: ISSUE.html_url }]);
+});
+
+const PAGES = { ALLOWED_ORIGIN: "https://be-apps-tools.github.io", GH_REPO: "be-apps-tools/1127" };
+const actionsOf = r => r.hook[0].body.attachments[0].content.actions;
+
+test("portal link leads, deep-linked to the request, Issue kept behind it", async () => {
+  const r = await submit(REASSIGN, { webhook: WORKFLOW_HOOK, env: PAGES });
+  assert.deepEqual(actionsOf(r), [
+    { type: "Action.OpenUrl", title: "Review in portal",
+      url: "https://be-apps-tools.github.io/1127/admin.html?view=requests&issue=42" },
+    { type: "Action.OpenUrl", title: "GitHub issue", url: ISSUE.html_url },
+  ]);
+});
+
+test("PORTAL_URL overrides the derived URL, trailing slash or not", async () => {
+  for (const given of ["https://portal.example/bei", "https://portal.example/bei/"]){
+    const r = await submit(REASSIGN, { webhook: WORKFLOW_HOOK, env: { ...PAGES, PORTAL_URL: given } });
+    assert.equal(actionsOf(r)[0].url, "https://portal.example/bei/admin.html?view=requests&issue=42");
+  }
+});
+
+test("an <owner>.github.io repo is served at the origin root", async () => {
+  const r = await submit(REASSIGN, { webhook: WORKFLOW_HOOK,
+    env: { ALLOWED_ORIGIN: "https://acme.github.io", GH_REPO: "acme/acme.github.io" } });
+  assert.equal(actionsOf(r)[0].url, "https://acme.github.io/admin.html?view=requests&issue=42");
+});
+
+test("no usable origin -> Issue-only card, never a broken link", async () => {
+  for (const env of [{ ALLOWED_ORIGIN: "*" }, { ALLOWED_ORIGIN: "" }, { ALLOWED_ORIGIN: "https://x.io", GH_REPO: "noslash" }]){
+    const r = await submit(REASSIGN, { webhook: WORKFLOW_HOOK, env });
+    const a = actionsOf(r);
+    assert.equal(a.length, 1, JSON.stringify(env));
+    assert.equal(a[0].url, ISSUE.html_url);
+  }
+});
+
+test("legacy connector card carries both links too", async () => {
+  const r = await submit(REASSIGN, { webhook: LEGACY_HOOK, env: PAGES });
+  assert.deepEqual(r.hook[0].body.potentialAction.map(a => [a.name, a.targets[0].uri]), [
+    ["Review in portal", "https://be-apps-tools.github.io/1127/admin.html?view=requests&issue=42"],
+    ["GitHub issue", ISSUE.html_url],
+  ]);
 });
 
 test("issue-type request -> issue headline, no requested-trade fact", async () => {

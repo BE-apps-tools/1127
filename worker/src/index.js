@@ -197,16 +197,34 @@ function teamsFacts(b){
   f.push(["Requester", b.requester]);
   return f.map(([k, v]) => [k, String(v == null ? "" : v).slice(0, 600)]);
 }
-function teamsPayload(b, issue, legacy){
-  const title = teamsHeadline(b), facts = teamsFacts(b);
-  const link = issue && issue.url ? issue.url : "";
+/* Where the portal is served from, for deep links out of a Teams card. PORTAL_URL
+ * wins; otherwise derive the GitHub Pages URL from the origin + repo name. */
+function portalBase(env){
+  const explicit = String(env.PORTAL_URL || "").trim();
+  if (explicit) return explicit.replace(/\/*$/, "/");
+  const origin = String(env.ALLOWED_ORIGIN || "").trim();
+  if (!origin || origin === "*" || !/^https?:\/\//.test(origin)) return "";
+  const repo = String(env.GH_REPO || "").split("/")[1] || "";
+  if (!repo) return "";
+  // A <owner>.github.io repo is served at the origin root; anything else at /<repo>/.
+  return origin.replace(/\/*$/, "/") + (/\.github\.io$/i.test(repo) ? "" : encodeURIComponent(repo) + "/");
+}
+/* Buttons on the card, best first: action it in the portal, then the raw Issue. */
+function teamsLinks(env, issue){
+  const out = [], base = portalBase(env), n = issue && issue.number;
+  if (base) out.push(["Review in portal", base + "admin.html?view=requests" + (n ? "&issue=" + n : "")]);
+  if (issue && issue.url) out.push([base ? "GitHub issue" : "Open request", issue.url]);
+  return out;
+}
+function teamsPayload(b, issue, legacy, env){
+  const title = teamsHeadline(b), facts = teamsFacts(b), links = teamsLinks(env || {}, issue);
   if (legacy){
     return {
       "@type": "MessageCard", "@context": "https://schema.org/extensions",
       themeColor: TEAMS_COLOR, summary: title, title,
       sections: [{ facts: facts.map(([name, value]) => ({ name, value })), markdown: false }],
-      potentialAction: link
-        ? [{ "@type": "OpenUri", name: "Open request", targets: [{ os: "default", uri: link }] }] : [],
+      potentialAction: links.map(([name, uri]) =>
+        ({ "@type": "OpenUri", name, targets: [{ os: "default", uri }] })),
     };
   }
   return {
@@ -219,7 +237,7 @@ function teamsPayload(b, issue, legacy){
           { type: "TextBlock", size: "Medium", weight: "Bolder", text: title, wrap: true },
           { type: "FactSet", facts: facts.map(([title, value]) => ({ title, value })) },
         ],
-        actions: link ? [{ type: "Action.OpenUrl", title: "Open request", url: link }] : [],
+        actions: links.map(([title, url]) => ({ type: "Action.OpenUrl", title, url })),
       },
     }],
   };
@@ -231,7 +249,7 @@ async function notifyTeams(env, b, issue){
   try {
     const r = await fetch(hook, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(teamsPayload(b, issue, teamsIsLegacyConnector(hook))),
+      body: JSON.stringify(teamsPayload(b, issue, teamsIsLegacyConnector(hook), env)),
     });
     if (!r.ok) console.log(`teams webhook ${r.status}: ${(await r.text()).slice(0, 200)}`);
     return { ok: r.ok, status: r.status };
