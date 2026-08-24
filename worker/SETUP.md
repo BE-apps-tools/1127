@@ -81,9 +81,12 @@ posts a card to a Teams channel — unit, serial, description, site, current tra
 requested trade, the detail the requester typed, who submitted it, and a button
 straight to the GitHub Issue.
 
-1. In Teams, open the target channel → **⋯ → Workflows** → template **"Post to a
-   channel when a webhook request is received"**. Pick the team + channel, finish,
-   and copy the generated URL.
+1. In Teams, open the target channel → **⋯ → Workflows** → template **"Send webhook
+   alerts to a channel"** ("Get updates in Teams from tools like GitHub, Zapier, or
+   any apps compatible with…"). Pick the team + channel, finish, and copy the URL it
+   shows. Lost it? Reopen the flow from **Workflows Home** and read it off the
+   trigger. Older tenants name the same template "Post to a channel when a webhook
+   request is received".
 2. Give it to the Worker:
    ```bash
    cd worker
