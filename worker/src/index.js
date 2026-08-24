@@ -23,8 +23,12 @@
  *   GET  /admins       -> ADMIN: list admins ({name, added}; never hashes).
  *   POST /admins       -> ADMIN: add/remove an admin; commits data/admins.json.
  *
+ * Teams alerts (optional):
+ *   Set TEAMS_WEBHOOK_URL and every POST /requests also posts a card to that
+ *   Teams channel. Fire-and-forget: a webhook outage never fails a submit.
+ *
  * Secrets/vars:
- *   GH_TOKEN, GH_REPO, SUBMIT_KEY, ALLOWED_ORIGIN,
+ *   GH_TOKEN, GH_REPO, SUBMIT_KEY, ALLOWED_ORIGIN, TEAMS_WEBHOOK_URL (optional),
  *   ADMIN_KEY  (private "master" key; gates the /req*, /inventory and /admins
  *              write routes — NOT in any page. Set once at deploy; always works.)
  *
@@ -109,7 +113,7 @@ export default {
     const url = new URL(req.url);
     const path = url.pathname;
     if (path === "/requests"){
-      if (req.method === "POST") return postRequest(req, env, h);
+      if (req.method === "POST") return postRequest(req, env, h, ctx);
       if (req.method === "GET")  return getRequests(url, env, h, ctx);
     } else if (path === "/request/resolve" && req.method === "POST"){
       return postResolveRequest(req, env, h);
@@ -169,7 +173,74 @@ function buildBody(b){
     "```json", buildMarker(b), "```",
   ].join("\n");
 }
-async function postRequest(req, env, h){
+/* ---------- Teams alert on a submitted request (optional) ----------
+ * Power Automate "Workflows" webhooks take an Adaptive Card; the retired Office
+ * 365 connector webhooks (outlook.office.com/webhook/…) take a MessageCard. The
+ * URL's host says which, so there is no extra setting to get wrong. */
+const TEAMS_COLOR = "0C5A9E";        // Blattner blue
+function teamsIsLegacyConnector(hook){
+  let host = ""; try { host = new URL(hook).hostname.toLowerCase(); } catch { return false; }
+  return host.endsWith("office.com") || host.endsWith("office365.com") || host.endsWith("outlook.com");
+}
+function teamsHeadline(b){
+  return b.type === "reassign"
+    ? `Trade reassignment requested — Unit ${b.unit} -> ${b.requestedTrade}`
+    : `Asset issue reported — Unit ${b.unit}`;
+}
+/* Same fields the Issue body carries, as [label, value] pairs. */
+function teamsFacts(b){
+  const f = [["Unit", b.unit], ["Serial", b.serial]];
+  if (b.description) f.push(["Description", b.description]);
+  f.push(["Site", b.site], ["Current trade", b.currentTrade || "(none)"]);
+  if (b.type === "reassign") f.push(["Requested trade", b.requestedTrade]);
+  if (b.detail) f.push(["Detail", b.detail]);
+  f.push(["Requester", b.requester]);
+  return f.map(([k, v]) => [k, String(v == null ? "" : v).slice(0, 600)]);
+}
+function teamsPayload(b, issue, legacy){
+  const title = teamsHeadline(b), facts = teamsFacts(b);
+  const link = issue && issue.url ? issue.url : "";
+  if (legacy){
+    return {
+      "@type": "MessageCard", "@context": "https://schema.org/extensions",
+      themeColor: TEAMS_COLOR, summary: title, title,
+      sections: [{ facts: facts.map(([name, value]) => ({ name, value })), markdown: false }],
+      potentialAction: link
+        ? [{ "@type": "OpenUri", name: "Open request", targets: [{ os: "default", uri: link }] }] : [],
+    };
+  }
+  return {
+    type: "message",
+    attachments: [{
+      contentType: "application/vnd.microsoft.card.adaptive", contentUrl: null,
+      content: {
+        $schema: "http://adaptivecards.io/schemas/adaptive-card.json", type: "AdaptiveCard", version: "1.4",
+        body: [
+          { type: "TextBlock", size: "Medium", weight: "Bolder", text: title, wrap: true },
+          { type: "FactSet", facts: facts.map(([title, value]) => ({ title, value })) },
+        ],
+        actions: link ? [{ type: "Action.OpenUrl", title: "Open request", url: link }] : [],
+      },
+    }],
+  };
+}
+/* Never throws and never rejects — the caller hands this to ctx.waitUntil(). */
+async function notifyTeams(env, b, issue){
+  const hook = String(env.TEAMS_WEBHOOK_URL || "").trim();
+  if (!hook) return { skipped: true };
+  try {
+    const r = await fetch(hook, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(teamsPayload(b, issue, teamsIsLegacyConnector(hook))),
+    });
+    if (!r.ok) console.log(`teams webhook ${r.status}: ${(await r.text()).slice(0, 200)}`);
+    return { ok: r.ok, status: r.status };
+  } catch (e) {
+    console.log("teams webhook failed: " + (e && e.message ? e.message : e));
+    return { ok: false, error: String(e && e.message ? e.message : e) };
+  }
+}
+async function postRequest(req, env, h, ctx){
   if (req.headers.get("x-submit-key") !== env.SUBMIT_KEY) return json({ error: "bad key" }, 401, h);
   let b; try { b = await req.json(); } catch { return json({ error: "bad json" }, 400, h); }
   const required = ["type", "site", "unit", "serial", "requester"].every(k => String(b[k] || "").trim());
@@ -182,6 +253,9 @@ async function postRequest(req, env, h){
   });
   if (!r.ok) { const t = await r.text(); return json({ error: "github " + r.status, detail: t.slice(0, 300) }, 502, h); }
   const gi = await r.json();
+  // Alert Teams after the Issue exists, but don't make the submitter wait on it.
+  const alert = notifyTeams(env, b, { number: gi.number, url: gi.html_url });
+  if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(alert);
   return json({ ok: true, issueNumber: gi.number, url: gi.html_url }, 201, h);
 }
 /* ADMIN: resolve a trade-assignment / issue request — close the issue so it drops

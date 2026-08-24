@@ -32,3 +32,6 @@ jobs:
 
       - name: Syntax-check the Worker
         run: node --check worker/src/index.js
+
+      - name: Worker Teams-alert tests
+        run: node worker/tests/teams.test.mjs

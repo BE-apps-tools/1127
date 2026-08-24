@@ -124,3 +124,4 @@ GitHub notifies you of new issues (watch the repo / check the **Issues** tab).
 | Action failed: "no Equipment Master…found" | The file isn't in `source/` or the name doesn't match the pattern. |
 | Submit says "saved offline" repeatedly | The Worker can't create issues — usually the `GH_TOKEN` expired or lost Issues:write. Regenerate + update the secret. |
 | A site you removed still shows | Hard-refresh; the build clears stale sites on each run, so it should drop after the next build. |
+| Teams cards stopped arriving (requests still land as Issues) | Only the alert is broken — nothing is lost. Run `wrangler tail` and submit a test request: a `teams webhook …` line gives the status. Usual causes: the Teams workflow was turned off/deleted, or `TEAMS_WEBHOOK_URL` is unset or stale. See `worker/SETUP.md` §7. |
