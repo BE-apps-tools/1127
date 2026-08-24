@@ -209,12 +209,13 @@ function portalBase(env){
   // A <owner>.github.io repo is served at the origin root; anything else at /<repo>/.
   return origin.replace(/\/*$/, "/") + (/\.github\.io$/i.test(repo) ? "" : encodeURIComponent(repo) + "/");
 }
-/* Buttons on the card, best first: action it in the portal, then the raw Issue. */
+/* One button: the portal, where the request actually gets actioned. The Issue link
+ * is only a fallback for a deployment with no derivable portal URL, so the card
+ * always has some way through. */
 function teamsLinks(env, issue){
-  const out = [], base = portalBase(env), n = issue && issue.number;
-  if (base) out.push(["Review in portal", base + "admin.html?view=requests" + (n ? "&issue=" + n : "")]);
-  if (issue && issue.url) out.push([base ? "GitHub issue" : "Open request", issue.url]);
-  return out;
+  const base = portalBase(env), n = issue && issue.number;
+  if (base) return [["Review in portal", base + "admin.html?view=requests" + (n ? "&issue=" + n : "")]];
+  return issue && issue.url ? [["Open request", issue.url]] : [];
 }
 function teamsPayload(b, issue, legacy, env){
   const title = teamsHeadline(b), facts = teamsFacts(b), links = teamsLinks(env || {}, issue);

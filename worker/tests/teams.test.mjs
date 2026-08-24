@@ -85,13 +85,13 @@ test("Workflows webhook -> Adaptive Card with the request's facts", async () => 
 const PAGES = { ALLOWED_ORIGIN: "https://be-apps-tools.github.io", GH_REPO: "be-apps-tools/1127" };
 const actionsOf = r => r.hook[0].body.attachments[0].content.actions;
 
-test("portal link leads, deep-linked to the request, Issue kept behind it", async () => {
+test("one button: the portal, deep-linked to the request", async () => {
   const r = await submit(REASSIGN, { webhook: WORKFLOW_HOOK, env: PAGES });
   assert.deepEqual(actionsOf(r), [
     { type: "Action.OpenUrl", title: "Review in portal",
       url: "https://be-apps-tools.github.io/1127/admin.html?view=requests&issue=42" },
-    { type: "Action.OpenUrl", title: "GitHub issue", url: ISSUE.html_url },
   ]);
+  assert.ok(!JSON.stringify(r.hook[0].body).includes("github.com"), "no GitHub link on the card");
 });
 
 test("PORTAL_URL overrides the derived URL, trailing slash or not", async () => {
@@ -116,11 +116,10 @@ test("no usable origin -> Issue-only card, never a broken link", async () => {
   }
 });
 
-test("legacy connector card carries both links too", async () => {
+test("legacy connector card gets the same single portal button", async () => {
   const r = await submit(REASSIGN, { webhook: LEGACY_HOOK, env: PAGES });
   assert.deepEqual(r.hook[0].body.potentialAction.map(a => [a.name, a.targets[0].uri]), [
     ["Review in portal", "https://be-apps-tools.github.io/1127/admin.html?view=requests&issue=42"],
-    ["GitHub issue", ISSUE.html_url],
   ]);
 });
 
