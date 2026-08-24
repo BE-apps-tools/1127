@@ -240,8 +240,8 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
       </div>
 
       <div class="gsearch">
-        <input type="text" id="gq" autocomplete="off" aria-label="Search assets or delivery trackers"
-          placeholder="Search assets (unit / serial / description) or trackers (Req # / part #)…">
+        <input type="text" id="gq" autocomplete="off" aria-label="Search assets by unit, serial, description or assigned employee, or delivery trackers by request or part number"
+          placeholder="Search assets (unit / serial / description / assigned) or trackers (Req # / part #)…">
         <div class="gresults" id="gresults"></div>
       </div>
 
@@ -321,18 +321,19 @@ function alertTile(lbl, num, sub, alert){
   return '<div class="kpi"><div class="grow"><div class="lbl">'+esc(lbl)+'</div><div class="num'+(alert?' alert':'')+'">'+esc(num)+'</div>'+
     (sub?'<div class="sub">'+esc(sub)+'</div>':'')+'</div></div>';
 }
-/* Global search: match assets (unit/serial/desc) and trackers (Req#/part). */
+/* Global search: match assets (unit/serial/desc/assigned) and trackers (Req#/part). */
 function renderGResults(raw){
   const el=$("#gresults"); const q=String(raw||"").trim().toLowerCase();
   if(!q){ el.classList.remove("show"); el.innerHTML=""; return; }
-  const am=GS.assets.filter(a=>[a.unit,a.serial,a.description,a.description2].some(x=>String(x||"").toLowerCase().includes(q))).slice(0,8);
+  const am=GS.assets.filter(a=>[a.unit,a.serial,a.description,a.description2,a.assigned].some(x=>String(x||"").toLowerCase().includes(q))).slice(0,8);
   const tm=GS.trackers.filter(t=>String(t.reqNumber||"").toLowerCase().includes(q) || (t.parts||[]).some(p=>String(p||"").toLowerCase().includes(q))).slice(0,6);
   if(!am.length && !tm.length){ el.innerHTML='<div class="gr-empty">No matches</div>'; el.classList.add("show"); return; }
   let html="";
   if(am.length){ html+='<div class="gr-head">Assets</div>'+am.map(a=>
     '<a class="gr-item" href="inventory.html?site='+encodeURIComponent(a.siteCode||"")+'&q='+encodeURIComponent(a.unit||"")+'">'+
       '<span class="gr-main">'+esc(a.unit)+(a.description?(' &middot; '+esc(a.description)):'')+'</span>'+
-      '<span class="gr-sub">'+esc(a.serial||"")+' &middot; '+esc(a.siteName||"")+' &middot; '+esc(a.trade||"Unassigned")+'</span></a>').join(""); }
+      '<span class="gr-sub">'+esc(a.serial||"")+' &middot; '+esc(a.siteName||"")+' &middot; '+esc(a.trade||"Unassigned")+
+      (a.assigned?(' &middot; '+esc(a.assigned)):'')+'</span></a>').join(""); }
   if(tm.length){ html+='<div class="gr-head">Delivery trackers</div>'+tm.map(t=>
     '<a class="gr-item" href="deliveries.html?q='+encodeURIComponent(t.reqNumber||"")+'">'+
       '<span class="gr-main">Req '+esc(t.reqNumber)+(t.trade?(' &middot; '+esc(t.trade)):'')+'</span>'+
@@ -362,7 +363,8 @@ async function loadDashboard(){
         else if(st.indexOf("AV")!==0 && st.indexOf("AC")!==0) attention++;
         if(!String(a.trade||"")) unassigned++;
         GS.assets.push({ unit:a.unit, serial:a.serial, description:a.description, description2:a.description2,
-          trade:a.trade, siteCode:site.code, siteName:site.name });
+          trade:a.trade, assigned:(a.assignedEmployee==="0"?"":String(a.assignedEmployee||"")),   // "0" = nobody assigned
+          siteCode:site.code, siteName:site.name });
       });
     });
   }catch(e){}
