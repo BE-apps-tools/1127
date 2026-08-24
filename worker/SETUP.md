@@ -104,6 +104,10 @@ Notes:
   revoke, delete the workflow in Teams (or turn it off) and remove the secret.
 - Leave `TEAMS_WEBHOOK_URL` unset and nothing is sent — the route behaves exactly
   as before.
+- `WorkflowTriggerIsNotEnabled … state 'Deleted'` in the logs means the secret holds
+  the URL of a flow that no longer exists — recreate the flow (a replaced flow gets a
+  new URL) and update the secret. The flow's run history shows **no runs at all** in
+  this case, because there is no flow left to run.
 - The alert is fire-and-forget (`ctx.waitUntil`): the submitter never waits on
   Teams, and a webhook that is down, throttled, or misconfigured **cannot fail a
   request submit** — the Issue is already created. Failures are logged only, so
