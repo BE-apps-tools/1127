@@ -178,6 +178,11 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
   .empty{padding:48px 20px;text-align:center;color:var(--medium-gray);background:var(--white);border:1px solid var(--light-gray);border-radius:var(--r);box-shadow:var(--shadow);}
   .empty .big{font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;color:var(--light-gray);font-size:18px;margin-bottom:6px;}
   .showing{margin-top:10px;font-size:11px;color:var(--medium-gray);}
+  /* Pager — walk long site lists a page at a time instead of capping the table */
+  .pager{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:14px;}
+  .pager .pginfo{font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:0.05em;color:var(--dark-blue);padding:0 4px;}
+  .pager .pgsize{font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.06em;color:var(--medium-gray);margin-left:auto;}
+  .pager select{width:auto;min-width:90px;flex:0 0 auto;}
 
   /* My Requests */
   .req-item{border:1px solid var(--light-gray);border-left:4px solid var(--energy-blue);border-radius:var(--r-sm);background:var(--white);padding:12px 14px;margin-bottom:10px;box-shadow:var(--shadow);}
@@ -320,7 +325,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
         </div>
         <section class="inv-stats" id="invStats" style="display:none;" aria-label="Site summary"></section>
         <div class="toolbar">
-          <div class="search"><input type="text" id="q" aria-label="Search assets by unit or serial number, or description" placeholder="Search Unit # or Serial # or description…" autocomplete="off"></div>
+          <div class="search"><input type="text" id="q" aria-label="Search assets by unit or serial number, description, or assigned employee" placeholder="Search Unit # or Serial # or description or assigned…" autocomplete="off"></div>
           <select id="fTrade"><option value="">All trades</option></select>
           <select id="fStatus"><option value="">All statuses</option></select>
           <button class="btn small secondary" id="exportCsv">Export CSV</button>
@@ -343,6 +348,20 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
           </table>
         </div>
         <div class="empty" id="invEmpty" style="display:none;"></div>
+        <div class="pager" id="pager" style="display:none;" aria-label="Table pages">
+          <button class="btn small secondary" id="pgFirst" title="First page" aria-label="First page">&laquo;</button>
+          <button class="btn small secondary" id="pgPrev" title="Previous page" aria-label="Previous page">&lsaquo; Prev</button>
+          <span class="pginfo" id="pgInfo" aria-live="polite"></span>
+          <button class="btn small secondary" id="pgNext" title="Next page" aria-label="Next page">Next &rsaquo;</button>
+          <button class="btn small secondary" id="pgLast" title="Last page" aria-label="Last page">&raquo;</button>
+          <label class="pgsize" for="pgSize">Per page</label>
+          <select id="pgSize" aria-label="Rows per page">
+            <option value="50">50</option>
+            <option value="100" selected>100</option>
+            <option value="250">250</option>
+            <option value="500">500</option>
+          </select>
+        </div>
         <div class="showing" id="showing"></div>
       </section>
 
@@ -422,7 +441,7 @@ const TRADES = ["Civil","Electrical","Foundation","Collection","Install","Mechan
 let WORKER_URL = "https://asset-portal.site-asset-manager.workers.dev";
 let SUBMIT_KEY = "access123!";   // spam deterrent; matches the Worker's SUBMIT_KEY var
 
-const STATE = { site:"", assets:[], meta:null, siteIndex:[], admin:false, adminName:"", pendingInventory:null, selected:new Set(), sort:null, ready:false };
+const STATE = { site:"", assets:[], meta:null, siteIndex:[], admin:false, adminName:"", pendingInventory:null, selected:new Set(), sort:null, page:1, ready:false };
 let REQ_TARGET = null;
 let OPEN_REQ = {};                    // "unit|serial" -> [ {issue,url,type,requestedTrade} ]
 const rkey = (u,s) => u + "|" + s;
@@ -451,6 +470,12 @@ function fmtUpdated(iso){
 /* ---------- storage / cache ---------- */
 function cacheSet(k,v){ try{ nsSet(k, JSON.stringify(v)); }catch(e){} }
 function cacheGet(k){ try{ const v=nsGet(k); return v?JSON.parse(v):null; }catch(e){ return null; } }
+
+/* Remember the picked site on this device so it survives leaving the Assets tab
+   and coming back (the rail links carry no query string). */
+const SITE_KEY = "bac_portal_site";
+function rememberSite(code){ if(code) cacheSet(SITE_KEY, String(code)); else nsDel(SITE_KEY); }
+function rememberedSite(){ const v=cacheGet(SITE_KEY); return v==null?"":String(v); }
 
 /* ---------- toast + banner ---------- */
 let toastT=null;
@@ -518,6 +543,10 @@ function renderStats(){
 }
 
 /* ---------- inventory ---------- */
+/* "0" is the Equipment Master's placeholder for "nobody assigned" — never show,
+   match, or sort on it. Used by the table, search, sort and CSV export alike. */
+function assignedOf(a){ return a.assignedEmployee==="0" ? "" : String(a.assignedEmployee||""); }
+function sortVal(a,key){ return key==="assignedEmployee" ? assignedOf(a) : (a[key]==null?"":String(a[key])); }
 function viewAssets(){
   const q=$("#q").value.trim().toLowerCase();
   const tf=$("#fTrade").value, sf=$("#fStatus").value;
@@ -525,11 +554,11 @@ function viewAssets(){
   if(tf===TRADE_NONE) v=v.filter(a=>!String(a.trade||"").trim());
   else if(tf) v=v.filter(a=>a.trade===tf);
   if(sf) v=v.filter(a=>a.status===sf);
-  if(q) v=v.filter(a=>[a.unit,a.serial,a.description,a.description2].some(x=>String(x||"").toLowerCase().includes(q)));
+  if(q) v=v.filter(a=>[a.unit,a.serial,a.description,a.description2,assignedOf(a)].some(x=>String(x||"").toLowerCase().includes(q)));
   const s=STATE.sort;
   if(s && s.key){
     const dir = s.dir==="desc" ? -1 : 1;
-    v.sort((a,b)=>dir*String(a[s.key]==null?"":a[s.key]).localeCompare(String(b[s.key]==null?"":b[s.key]), undefined, {numeric:true, sensitivity:"base"}));
+    v.sort((a,b)=>dir*sortVal(a,s.key).localeCompare(sortVal(b,s.key), undefined, {numeric:true, sensitivity:"base"}));
   } else {
     v.sort((a,b)=>String(a.unit).localeCompare(String(b.unit), undefined, {numeric:true}));
   }
@@ -548,6 +577,27 @@ function updateSortHeaders(){
     if(STATE.sort && th.dataset.sort===STATE.sort.key){ th.classList.add("sorted"); if(STATE.sort.dir==="desc") th.classList.add("desc"); }
   });
 }
+/* ---------- paging ---------- */
+const PER_DEFAULT = 100;
+function perPage(){ const el=$("#pgSize"), n=el?parseInt(el.value,10):PER_DEFAULT; return n>0?n:PER_DEFAULT; }
+function pageCount(total){ return Math.max(1, Math.ceil(total/perPage())); }
+/* Jump to a page (clamped to what the current filters leave visible). */
+function gotoPage(p){
+  const pc=pageCount(viewAssets().length);
+  const next=Math.max(1, Math.min(Math.round(p)||1, pc));
+  if(next===STATE.page) return;
+  STATE.page=next; renderInventory(); syncUrl();
+  const ts=$("#panel-inv .table-scroll");
+  if(ts){ ts.scrollTop=0; ts.scrollIntoView({block:"start", behavior:"smooth"}); }
+}
+function renderPager(total, pc){
+  const bar=$("#pager"); if(!bar) return;
+  bar.style.display = total ? "flex" : "none";
+  $("#pgInfo").textContent = "Page " + STATE.page + " of " + pc;
+  const first=STATE.page<=1, last=STATE.page>=pc;
+  $("#pgFirst").disabled=first; $("#pgPrev").disabled=first;
+  $("#pgNext").disabled=last;   $("#pgLast").disabled=last;
+}
 function renderInventory(){
   updateSortHeaders();
   const body=$("#invBody"); body.innerHTML="";
@@ -555,8 +605,10 @@ function renderInventory(){
   $("#invEmpty").style.display = STATE.assets.length? "none":"block";
   if(STATE.assets.length===0){ $("#invEmpty").innerHTML='<div class="big">No site selected</div><div>Choose a site above to view its equipment.</div>'; }
   else if(v.length===0){ $("#invEmpty").style.display="block"; $("#invEmpty").innerHTML='<div class="big">No matches</div><div>Adjust your search or filters.</div>'; }
-  const CAP=400;
-  const shown=v.slice(0,CAP);
+  const per=perPage(), pc=pageCount(v.length);
+  STATE.page=Math.max(1, Math.min(STATE.page, pc));   // filters may have shrunk the list under us
+  const start=(STATE.page-1)*per;
+  const shown=v.slice(start, start+per);
   shown.forEach((a,i)=>{
     const tr=document.createElement("tr"); tr.className="asset-row";
     const pend=(OPEN_REQ[rkey(a.unit,a.serial)]||[]);
@@ -569,7 +621,7 @@ function renderInventory(){
       '<td>'+esc(a.mfg)+(a.modelYear?' / '+esc(a.modelYear):'')+'</td>'+
       '<td class="status-cell">'+statusDot(a.status)+esc(a.status)+'</td>'+
       '<td>'+(a.trade?'<span class="trade-badge">'+esc(a.trade)+'</span>':'<span class="trade-badge none">Unassigned</span>')+'</td>'+
-      '<td>'+esc(a.assignedEmployee==="0"?"":a.assignedEmployee)+'</td>'+
+      '<td>'+esc(assignedOf(a))+'</td>'+
       '<td><div class="row-actions">'+pendBadge+'<button class="btn small" data-req-unit="'+esc(a.unit)+'" data-req-serial="'+esc(a.serial)+'">Request</button></div></td>';
     const detail=document.createElement("tr"); detail.className="detail-row"; detail.style.display="none";
     detail.innerHTML='<td colspan="9"><div class="detail-grid">'+
@@ -582,11 +634,12 @@ function renderInventory(){
     body.appendChild(tr); body.appendChild(detail);
   });
   updateBatchBar();
-  $("#showing").textContent = STATE.assets.length
-    ? ("Showing " + shown.length + " of " + v.length + " matches"
-        + (v.length > CAP ? " — refine your search to narrow this list" : "")
-        + " · " + STATE.assets.length + " total at site")
-    : "";
+  renderPager(v.length, pc);
+  $("#showing").textContent = !STATE.assets.length ? ""
+    : (v.length
+        ? ("Showing " + (start+1) + "–" + (start+shown.length) + " of " + v.length + " matches"
+            + " · " + STATE.assets.length + " total at site")
+        : ("No matches · " + STATE.assets.length + " total at site"));
 }
 function dt(k,val){ return '<div><span class="k">'+esc(k)+'</span><br>'+(val&&val!=="0"?esc(val):"&mdash;")+'</div>'; }
 
@@ -960,7 +1013,7 @@ function fillTradeControls(){
 }
 /* Load a site's assets + open requests and render (shared by the picker and deep-links). */
 async function selectSite(code){
-  STATE.site=code; STATE.selected.clear();
+  STATE.site=code; STATE.selected.clear(); rememberSite(code);
   if(!code){ STATE.assets=[]; OPEN_REQ={}; renderStats(); renderInventory(); $("#count").textContent=""; return; }
   $("#count").textContent="Loading…";
   $("#invEmpty").style.display="block";
@@ -979,6 +1032,8 @@ function syncUrl(){
   const tf=$("#fTrade").value; if(tf===TRADE_NONE) p.set("trade","unassigned"); else if(tf) p.set("trade",tf);
   const sf=$("#fStatus").value; if(sf) p.set("status",sf);
   if(STATE.sort && STATE.sort.key){ p.set("sort",STATE.sort.key); if(STATE.sort.dir==="desc") p.set("dir","desc"); }
+  if(STATE.page>1) p.set("page",String(STATE.page));
+  const per=perPage(); if(per!==PER_DEFAULT) p.set("per",String(per));
   const cur=new URLSearchParams(location.search); if(cur.get("admin")) p.set("admin",cur.get("admin"));
   const qs=p.toString();
   history.replaceState(null,"",location.pathname+(qs?("?"+qs):"")+location.hash);
@@ -993,7 +1048,7 @@ function exportCsv(){
     ["Company","company"],["Location","location"],["Location Code","locationCode"],["Transfer #","transferNumber"],
     ["Finance","financeMethod"],["Asset #","assetNumber"],["From Date","fromDate"],["Acquired","acquiredDate"],
     ["Additional Info","additionalInfo"],["Remarks","remarks"]];
-  const val=(a,k)=> k==="assignedEmployee" ? (a.assignedEmployee==="0"?"":a.assignedEmployee) : a[k];
+  const val=(a,k)=> k==="assignedEmployee" ? assignedOf(a) : a[k];
   const lines=[cols.map(c=>csvCell(c[0])).join(",")];
   v.forEach(a=>lines.push(cols.map(c=>csvCell(val(a,c[1]))).join(",")));
   const blob=new Blob(["﻿"+lines.join("\r\n")],{type:"text/csv;charset=utf-8;"});
@@ -1013,18 +1068,23 @@ function bind(){
     catch(err){ STATE.pendingInventory=null; renderEmPreview(); banner("err","Could not read file: "+err.message); }
   });
   $("#emPublish").addEventListener("click", publishInventory);
-  $("#siteSelect").addEventListener("change", async e=>{ await selectSite(e.target.value); syncUrl(); });
+  $("#siteSelect").addEventListener("change", async e=>{ STATE.page=1; await selectSite(e.target.value); syncUrl(); });
   let qTimer=null;
-  $("#q").addEventListener("input", ()=>{ clearTimeout(qTimer); qTimer=setTimeout(()=>{ renderInventory(); syncUrl(); }, 180); });
-  $("#fTrade").addEventListener("change", ()=>{ renderInventory(); syncUrl(); });
-  $("#fStatus").addEventListener("change", ()=>{ renderInventory(); syncUrl(); });
+  $("#q").addEventListener("input", ()=>{ clearTimeout(qTimer); qTimer=setTimeout(()=>{ STATE.page=1; renderInventory(); syncUrl(); }, 180); });
+  $("#fTrade").addEventListener("change", ()=>{ STATE.page=1; renderInventory(); syncUrl(); });
+  $("#fStatus").addEventListener("change", ()=>{ STATE.page=1; renderInventory(); syncUrl(); });
   $("#exportCsv").addEventListener("click", exportCsv);
+  $("#pgFirst").addEventListener("click", ()=>gotoPage(1));
+  $("#pgPrev").addEventListener("click", ()=>gotoPage(STATE.page-1));
+  $("#pgNext").addEventListener("click", ()=>gotoPage(STATE.page+1));
+  $("#pgLast").addEventListener("click", ()=>gotoPage(pageCount(viewAssets().length)));
+  $("#pgSize").addEventListener("change", ()=>{ STATE.page=1; renderInventory(); syncUrl(); });
   document.querySelectorAll("thead th[data-sort]").forEach(th=>{
     th.addEventListener("click", ()=>{
       const k=th.dataset.sort;
       if(STATE.sort && STATE.sort.key===k){ STATE.sort.dir = STATE.sort.dir==="desc"?"asc":"desc"; }
       else { STATE.sort={key:k, dir:"asc"}; }
-      renderInventory(); syncUrl();
+      STATE.page=1; renderInventory(); syncUrl();
     });
   });
   $("#invBody").addEventListener("click", e=>{
@@ -1077,15 +1137,22 @@ async function init(){
   const pSort=params.get("sort"); if(pSort){ STATE.sort={key:pSort, dir: params.get("dir")==="desc"?"desc":"asc"}; }
   if(params.get("q")) $("#q").value=params.get("q");
   const pTrade=params.get("trade"); if(pTrade){ $("#fTrade").value = pTrade==="unassigned"?TRADE_NONE:pTrade; }
-  const pSite=params.get("site");
+  const pPer=params.get("per"); if(pPer && [...$("#pgSize").options].some(o=>o.value===pPer)){ $("#pgSize").value=pPer; }
+  const pPage=parseInt(params.get("page")||"",10); if(pPage>1) STATE.page=pPage;   // clamped by renderInventory
+  // Site comes from the URL when deep-linked; otherwise fall back to the last site
+  // picked on this device so switching tabs and returning keeps the selection.
+  const urlSite=params.get("site");
+  const pSite=urlSite || rememberedSite();
   if(pSite && STATE.siteIndex.some(s=>String(s.code)===pSite)){
     sel.value=pSite;
     await selectSite(pSite);
     const pStatus=params.get("status"); if(pStatus){ $("#fStatus").value=pStatus; renderInventory(); }
   } else {
+    if(pSite) rememberSite("");   // stale code (site no longer published) — forget it
     renderInventory();
   }
   STATE.ready=true;
+  syncUrl();   // reflect the restored site (and any clamped page) in the URL so the view stays shareable
   flushQueue();
   window.addEventListener("online", async ()=>{
     await flushQueue();
