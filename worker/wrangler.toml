@@ -16,3 +16,7 @@ ALLOWED_ORIGIN = "https://be-apps-tools.github.io"
 #                 posts a card to that Teams channel (see SETUP.md §7). Leave it
 #                 unset and nothing is sent. It is a secret: anyone holding the
 #                 URL can post to the channel.
+#
+# PORTAL_URL – OPTIONAL, not a secret. Base URL the portal is served from, used for
+# the Teams card's "Review in portal" button. Only needed when the portal is not at
+# ALLOWED_ORIGIN + "/<repo>/" (custom domain, subpath); otherwise it is derived.

@@ -51,6 +51,7 @@ environments except the `be-apps-tools.github.io` domain (which is why the
   | `GH_REPO` | Text | `be-apps-tools/<repo>` |
   | `ALLOWED_ORIGIN` | Text | `https://be-apps-tools.github.io` |
   | `TEAMS_WEBHOOK_URL` | **Secret** (encrypted) | *optional* — Teams channel alerts on submitted requests (`worker/SETUP.md` §7). Use **this site's own channel**, not another environment's. Omit for none. |
+  | `PORTAL_URL` | Text | *optional* — only if this portal isn't served at `ALLOWED_ORIGIN` + `/<repo>/`; sets where the Teams card's "Review in portal" button points. |
 
 - Only **`GH_TOKEN`**, **`ADMIN_KEY`** and **`TEAMS_WEBHOOK_URL`** are real secrets. Copy the Worker's public URL (`https://<name>.<subdomain>.workers.dev`). Confirm with `<url>/health` in an **incognito** window: it must show `"repo":"be-apps-tools/<repo>"` and `"adminCount":0` (the `adminCount` field also proves you deployed the current code — if it's missing, re-paste `worker/src/index.js` and Deploy again).
 

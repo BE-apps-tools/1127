@@ -78,12 +78,22 @@ present — the same result as the `build-data` Action.
 
 Set one secret and every request submitted from **Assets → Request Change** also
 posts a card to a Teams channel — unit, serial, description, site, current trade,
-requested trade, the detail the requester typed, who submitted it, and a button
-straight to the GitHub Issue.
+requested trade, the detail the requester typed, who submitted it, and a **Review in
+portal** button that opens `admin.html?view=requests&issue=<n>` with that request
+expanded, ready to action.
 
-1. In Teams, open the target channel → **⋯ → Workflows** → template **"Post to a
-   channel when a webhook request is received"**. Pick the team + channel, finish,
-   and copy the generated URL.
+The portal URL is derived from `ALLOWED_ORIGIN` + the repo name, which is right for
+GitHub Pages. Serving the portal from somewhere else (custom domain, subpath)? Set
+**`PORTAL_URL`** to its base — e.g. `https://portal.example.com/bei/` — and that wins.
+If neither yields a URL the button falls back to the GitHub Issue, so the card always
+has a way through rather than a broken link.
+
+1. In Teams, open the target channel → **⋯ → Workflows** → template **"Send webhook
+   alerts to a channel"** ("Get updates in Teams from tools like GitHub, Zapier, or
+   any apps compatible with…"). Pick the team + channel, finish, and copy the URL it
+   shows. Lost it? Reopen the flow from **Workflows Home** and read it off the
+   trigger. Older tenants name the same template "Post to a channel when a webhook
+   request is received".
 2. Give it to the Worker:
    ```bash
    cd worker
@@ -101,6 +111,10 @@ Notes:
   revoke, delete the workflow in Teams (or turn it off) and remove the secret.
 - Leave `TEAMS_WEBHOOK_URL` unset and nothing is sent — the route behaves exactly
   as before.
+- `WorkflowTriggerIsNotEnabled … state 'Deleted'` in the logs means the secret holds
+  the URL of a flow that no longer exists — recreate the flow (a replaced flow gets a
+  new URL) and update the secret. The flow's run history shows **no runs at all** in
+  this case, because there is no flow left to run.
 - The alert is fire-and-forget (`ctx.waitUntil`): the submitter never waits on
   Teams, and a webhook that is down, throttled, or misconfigured **cannot fail a
   request submit** — the Issue is already created. Failures are logged only, so

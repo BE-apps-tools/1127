@@ -572,6 +572,20 @@ async function loadOpenRequests(){
     return;
   }
   renderOpenReqs(reqs);
+  focusRequest();
+}
+/* Deep link from a Teams alert (admin.html?view=requests&issue=<n>): expand and
+   scroll to that one request once the list has rendered. Consumed after use so a
+   later Refresh doesn't yank the page around. */
+let FOCUS_ISSUE = 0;
+function focusRequest(){
+  if(!FOCUS_ISSUE) return;
+  const btn=document.querySelector('#openReqsWrap [data-resolve="'+FOCUS_ISSUE+'"]');
+  FOCUS_ISSUE=0;
+  const d=btn&&btn.closest("details.req");
+  if(!d) return;                       // already resolved, or not in the open list
+  d.open=true;
+  setTimeout(()=>d.scrollIntoView({behavior:"smooth",block:"center"}), 60);
 }
 function renderOpenReqs(reqs){
   const fact = (l,v)=> '<div class="rf"><span class="rf-l">'+l+'</span><span class="rf-v">'+v+'</span></div>';
@@ -716,6 +730,15 @@ $("#accessWrap").addEventListener("click", e=>{
   else if(e.target.closest("#accPublic")) makePublic();
 });
 renderAdmin();
+/* ?view=requests opens the requests list straight away (Teams alerts link here).
+   Signed out, the page shows the admin sign-in card instead — as it should. */
+(function(){
+  const p=new URLSearchParams(location.search);
+  if(p.get("view")!=="requests") return;
+  FOCUS_ISSUE=parseInt(p.get("issue")||"",10)||0;
+  const btn=$("#openReqsBtn");
+  if(btn) toggleReqs(btn);
+})();
 </script>
 <script>(function(){try{var e=document.getElementById("railReceiving");if(!e)return;if(nsGet("bac_admin_key"))e.style.display="";if(/[?&]view=receiving/.test(location.search)){e.classList.add("active");var d=document.getElementById("railDeliveries");if(d)d.classList.remove("active");}}catch(_){}})();</script>
 </body>
