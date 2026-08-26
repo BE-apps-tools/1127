@@ -1333,8 +1333,25 @@ function recvRows(){
       jdeOpen:tl.expected||0, trkOpen:tl.expected==null?null:tl.expected-tl.delivered, date:"", mrr:"", slip:"",
       status:"Missing — no EJDE receipt"});
   }
+  // Ref ID ascending, numerically. Don't inherit data/receiving.json's file order:
+  // imports append, and any renumbering leaves the log interleaved. Missing rows have
+  // no Ref ID at all, so they sort last, by Unique ID.
+  rows.sort((a,b)=>{
+    const na=recvRefNum(a), nb=recvRefNum(b);
+    if(na===null || nb===null){
+      if(na!==null) return -1;
+      if(nb!==null) return 1;
+      return uidCmp(a,b);
+    }
+    return na-nb || uidCmp(a,b);
+  });
   return rows;
 }
+function recvRefNum(r){
+  const n=Number(r.refId);
+  return (r.refId===""||r.refId==null||!Number.isFinite(n)) ? null : n;
+}
+function uidCmp(a,b){ return String(a.uid||"").localeCompare(String(b.uid||""), undefined, {numeric:true}); }
 function renderReceiving(){
   const q=($("#rq").value||"").trim().toLowerCase(), sf=$("#rStatus").value, tf=$("#rTrade").value;
   let rows=recvRows();
