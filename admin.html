@@ -45,6 +45,11 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
     box-shadow:12px 0 0 currentColor,0 12px 0 currentColor,12px 12px 0 currentColor;}
   .ic-assets::before{content:"";position:absolute;left:0;top:2px;width:20px;height:3px;border-radius:2px;background:currentColor;
     box-shadow:0 7px 0 currentColor,0 14px 0 currentColor;}
+  /* KPI icon: three rising bars */
+  .ic-kpi::before{content:"";position:absolute;left:1px;bottom:1px;width:4px;height:8px;border-radius:1px;background:currentColor;
+    box-shadow:6px 0 0 currentColor,12px 0 0 currentColor;}
+  .ic-kpi::after{content:"";position:absolute;left:7px;bottom:1px;width:4px;height:13px;border-radius:1px;background:currentColor;
+    box-shadow:6px 0 0 currentColor;}
   .ic-deliv::before{content:"";box-sizing:border-box;position:absolute;left:1px;top:1px;width:18px;height:18px;border:2px solid currentColor;border-radius:3px;}
   .ic-deliv::after{content:"";box-sizing:border-box;position:absolute;left:6px;top:5px;width:6px;height:10px;border:2px solid currentColor;
     border-top:none;border-left:none;transform:rotate(45deg);}
@@ -250,6 +255,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
 </svg></a>
     <a class="rail-item" href="index.html"><span class="rail-ic ic-hub"></span><span class="rail-lbl">Dashboard</span></a>
     <a class="rail-item" href="inventory.html"><span class="rail-ic ic-assets"></span><span class="rail-lbl">Assets</span></a>
+    <a class="rail-item" href="kpis.html"><span class="rail-ic ic-kpi"></span><span class="rail-lbl">KPIs</span></a>
     <a id="railDeliveries" class="rail-item" href="deliveries.html"><span class="rail-ic ic-deliv"></span><span class="rail-lbl">Deliveries</span></a>
     <a id="railReceiving" class="rail-item" href="deliveries.html?view=receiving" style="display:none"><span class="rail-ic ic-recv"></span><span class="rail-lbl">Receiving</span></a>
     <a class="rail-item active" href="admin.html"><span class="rail-ic ic-admin"></span><span class="rail-lbl">Admin</span></a>
@@ -323,6 +329,19 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
             <p>Under <strong>Equipment Master</strong> (or Assets → <em>Import Equipment Master</em>), upload the latest <span class="k">.xlsx</span> export. It's parsed <strong>in your browser</strong> — the file is never uploaded, only the built inventory JSON is committed.</p>
             <p>Check the preview counts, then <strong>Publish</strong>. The site refreshes for everyone in a minute or two.</p>
             <a class="go" href="inventory.html?admin=import">Open importer</a>
+          </div>
+        </details>
+
+        <details class="step">
+          <summary class="step-head"><span class="step-num">3b</span><span class="step-t">Publish KPI reports (utilization / PM / cost)</span><span class="step-chev"></span></summary>
+          <div class="step-body">
+            <p>Under <strong>KPI reports</strong> (or KPIs → <em>?admin=import</em>), drop one or more report <span class="k">.xlsx</span> files. Each file's family — <strong>utilization / hour meter</strong>, <strong>maintenance / PM / work orders</strong>, or <strong>cost / rental / fuel</strong> — is detected from its <strong>column headers</strong>, so filenames and column order don't matter. Parsed in your browser; only the extracted per-unit values are committed.</p>
+            <ul>
+              <li>Publishing one family <strong>replaces just that family</strong> and leaves the others alone — import them whenever each report arrives.</li>
+              <li>The preview shows the family, row and unit counts, and which columns matched. If a file isn't recognised it lists the headers it found — pass those on and the alias list can be taught the new spelling.</li>
+              <li>Committing the report to <span class="k">source/</span> instead does exactly the same thing on the next build.</li>
+            </ul>
+            <a class="go" href="kpis.html?admin=import">Open importer</a>
           </div>
         </details>
 
@@ -634,6 +653,11 @@ function renderAdmin(){
           '<div class="eyebrow">Inventory</div><h3>Equipment Master</h3>' +
           '<p>Upload the latest Equipment Master .xlsx and publish updated inventory — parsed in your browser, no file upload.</p></div>' +
         '<div class="foot"><a class="open-btn" href="inventory.html?admin=import">Open importer</a></div></div>' +
+      '<div class="card"><div class="accent-top"></div>' +
+        '<div class="body"><div class="chip" aria-hidden="true"></div>' +
+          '<div class="eyebrow">Asset KPIs</div><h3>KPI reports</h3>' +
+          '<p>Import the utilization, PM / work-order or cost report .xlsx — parsed in your browser, one report family at a time.</p></div>' +
+        '<div class="foot"><a class="open-btn" href="kpis.html?admin=import">Open importer</a></div></div>' +
       '<div class="card proc"><div class="accent-top"></div>' +
         '<div class="body"><div class="chip" aria-hidden="true"></div>' +
           '<div class="eyebrow">Procurement</div><h3>New tracker</h3>' +

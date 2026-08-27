@@ -74,6 +74,28 @@ Worker). This adds the **`POST /inventory`** route, which **writes files to the 
 in a single atomic commit (GitHub Git Data API), deleting per-site files no longer
 present — the same result as the `build-data` Action.
 
+## 6. Enable browser KPI-report import (Asset KPIs → `/kpis`)
+
+The **Asset KPIs** page joins the Equipment Master with up to three report families —
+utilization / hour meter, maintenance / PM / work orders, and cost / rental / fuel.
+Admins can publish those reports from the browser the same way as the Equipment
+Master: the `.xlsx` is parsed client-side and only the extracted per-unit values are
+committed, by the **`POST /kpis`** route.
+
+1. **Needs the same `Contents: Read+write` token as §5** — no new secret; `/kpis` is
+   gated by the existing `ADMIN_KEY` (or any admin in `data/admins.json`).
+2. **Deploy the Worker code** that includes the `/kpis` route. Until it's deployed the
+   **Publish KPI data** button returns an error.
+3. **Test:** open **KPIs** → (signed in as admin) `kpis.html?admin=import`, drop a
+   report, confirm the detected family and row counts in the preview, **Publish**.
+   `main` gets an `Asset KPIs: <families> … [portal]` commit.
+
+`/kpis` merges into `data/kpis.json` **one family at a time**: the families in the
+payload replace their block on every unit, and the others are left untouched. That's
+what lets the `build-data` Action (which owns whatever sits in `source/`) and this
+route each publish different reports without clobbering the other — the merge mirrors
+`build/kpi_reports.py`, and `worker/tests/kpis.test.mjs` pins the behaviour.
+
 ## 7. Teams alerts on submitted requests (optional)
 
 Set one secret and every request submitted from **Assets → Request Change** also

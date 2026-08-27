@@ -35,3 +35,11 @@ jobs:
 
       - name: Worker Teams-alert tests
         run: node worker/tests/teams.test.mjs
+
+      - name: Worker asset-KPI publish tests
+        run: node worker/tests/kpis.test.mjs
+
+      # Guards the JS half of the KPI report adapters against the Python half
+      # (same shared case table as the pytest run above).
+      - name: KPI coercion parity (kpis.html vs build/kpi_reports.py)
+        run: node worker/tests/kpi_coerce.test.mjs

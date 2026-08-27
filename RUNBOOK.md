@@ -108,6 +108,59 @@ GitHub notifies you of new issues (watch the repo / check the **Issues** tab).
 
 ---
 
+## Asset KPIs (KPIs tab)
+The **Asset KPIs** page shows every unit on the jobsite with its utilization, PM
+status and cost side by side. It reads the Equipment Master **plus** up to three
+report families:
+
+| Family | Typical export | Drives |
+|--------|----------------|--------|
+| Utilization / hour meter | hour-meter, telematics, idle-vs-working hours | Hour meter, Util %, idle hours, idle-heavy units, hours this period |
+| Maintenance / PM / work orders | PM due list, open work orders, downtime | PM due (overdue / due soon), open WOs, down days |
+| Cost / rental / fuel | monthly rental or ownership cost, cost to date, fuel | Cost/mo, cost/hr, cost to date, idle cost per month |
+
+Nothing is required: with no reports imported the page still shows the fleet from
+the Equipment Master, and each family's columns and tiles appear only once its
+report lands. A unit is matched on **Unit #**, or on **Serial #** if the report
+carries only a serial.
+
+### Refreshing a report
+Two paths, same result — importing one family never disturbs the others.
+
+**Browser (no git access needed):**
+1. Sign in as admin (**Admin** tab), then open **KPIs** and add `?admin=import` to
+   the address (or use the Import panel link).
+2. Drop one or more `.xlsx` reports. Each file's family is detected from its
+   **column headers**, so the filename and column order don't matter. Files are
+   parsed on your device — the spreadsheet is never uploaded, only the extracted
+   per-unit values.
+3. Check the preview (family, rows, units, columns matched) → **Publish KPI data**.
+
+**Commit to `source/` (automatic):** drop the report `.xlsx` in `source/` alongside
+the Equipment Master. The **build-data** Action detects it and rebuilds
+`data/kpis.json` on the same run. (Reminder: the repo is public — trim the report
+to your site first, same as the Equipment Master.)
+
+### If a report isn't recognised
+The importer names the headers it found (the Action logs them as `skipped`). That
+usually means the export spells a column differently — send the header row to
+whoever maintains the portal; adding the real spelling to
+`build/kpi_reports.py` teaches **both** import paths at once.
+
+### What the numbers mean
+`data/kpis.json` stores only what the reports say. The page derives the rest, so
+nothing goes stale:
+- **Util %** — working ÷ (working + idle) hours; falls back to
+  (engine − idle) ÷ engine, or hours ÷ target, depending on what the report carries.
+- **Idle-heavy** — utilization at or below **40%**.
+- **PM overdue / due soon** — past its due date or due hours; "soon" is within
+  **14 days** or **50 hours**.
+- **Cost / hr** — the report's rate per hour, else monthly cost ÷ period hours.
+- **Idle cost / month** — monthly cost × the non-working share of hours.
+
+Every view is shareable (site, search, filters, sort and page live in the URL) and
+**Export CSV** downloads the filtered rows, including the raw report fields.
+
 ## Occasional maintenance
 - **Rotate the GitHub token before it expires.** When the fine-grained token lapses,
   submits fail with `github 404`. Regenerate it (Issues: Read and write on this repo)
@@ -126,4 +179,7 @@ GitHub notifies you of new issues (watch the repo / check the **Issues** tab).
 | Submit says "submit key was rejected" | The Worker's `SUBMIT_KEY` no longer matches the one in `inventory.html`. Most often it was wiped by a `wrangler deploy`: only `GH_REPO`/`ALLOWED_ORIGIN` live in `wrangler.toml`, so a plain-text `SUBMIT_KEY` set in the dashboard is dropped on deploy. Re-add it in Cloudflare (**Settings → Variables and Secrets**, then click **Deploy**), or `wrangler secret put SUBMIT_KEY` so it survives future deploys. Nothing is lost — nothing was saved. |
 | Submit says "server busy" | A 5xx/429 from the Worker (usually `GH_TOKEN` expired or lost Issues:write). Regenerate + update the secret; held requests retry themselves on the next load. |
 | A site you removed still shows | Hard-refresh; the build clears stale sites on each run, so it should drop after the next build. |
+| KPI columns missing on the Asset KPIs page | That family's report hasn't been imported (the coverage strip at the top says which are in). Import it, or check the **build-data** run for a `skipped` entry naming the file. |
+| A KPI report imported but matched few units | The report's Unit #s don't match the Equipment Master's (e.g. it's keyed by serial or by another site's units). The coverage strip counts what matched; "Elsewhere" counts report units not on this site. |
+| Publish KPI data says an error | The Worker needs the `/kpis` route deployed and `GH_TOKEN` with Contents: Read+write — see `worker/SETUP.md` §6. |
 | Teams cards stopped arriving (requests still land as Issues) | Only the alert is broken — nothing is lost. Run `wrangler tail` and submit a test request: a `teams webhook …` line gives the status. Usual causes: the Teams workflow was turned off/deleted, or `TEAMS_WEBHOOK_URL` is unset or stale. See `worker/SETUP.md` §7. |
