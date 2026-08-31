@@ -13,20 +13,26 @@
  */
 import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
+import "./_kpi_core.mjs";            // sets globalThis.KPI for the slice below
 
 const page = await readFile(new URL("../../kpis.html", import.meta.url), "utf8");
 
-/* The report spec the page embeds (status codes, down statuses, exclusions). */
-const specMatch = /const KPI_SPEC = (\{.*?\});/s.exec(page);
-assert.ok(specMatch, "KPI_SPEC not found in kpis.html");
-
-/* Everything from the thresholds through the derived-metric helpers. */
+/* The derivations still live on the KPI page — they are what that page is for —
+   while the spec and the day maths they read come from kpi-core.js. Everything
+   from the thresholds through the derived-metric helpers. */
 const from = page.indexOf("/* Thresholds and constants");
 const to = page.indexOf("/* ---------- data loading");
 assert.ok(from > 0 && to > from, "couldn't slice the derivation block out of kpis.html");
 
 const src = [
-  "const KPI_SPEC = " + specMatch[1] + ";",
+  // What kpi-core.js puts in scope for the page (classic scripts share one
+  // top-level scope), plus stand-ins for the browser bits the maths never calls.
+  "const KPI = globalThis.KPI;",
+  "const KPI_SPEC = KPI.SPEC;",
+  "const KPI_KINDS = KPI.KINDS;",
+  "const kindSpec = KPI.kindSpec;",
+  "const TODAY = KPI.TODAY, TODAY_DN = KPI.TODAY_DN, dnum = KPI.dnum, dstr = KPI.dstr;",
+  'const WORKER_URL = "";',
   "function nsGet(){ return null; } function nsSet(){} function nsDel(){}",
   "const document = { querySelector(){ return null; } };",
   page.slice(from, to),

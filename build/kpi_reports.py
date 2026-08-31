@@ -26,7 +26,7 @@ row is found by scanning the first rows (these exports put a title above it).
 Filenames only break ties. So an export can be dropped in as-is, and a column
 reordered upstream changes nothing.
 
-``SPEC`` below is pure data and is mirrored verbatim into ``kpis.html`` (between
+``SPEC`` below is pure data and is mirrored verbatim into ``kpi-core.js`` (between
 the ``KPI-REPORT-SPEC`` markers) so the browser importer and the Action build
 extract identical records; ``build/tests/test_kpi_spec_parity.py`` fails if the
 two drift. To teach both paths a new column spelling, add it to the right alias
@@ -269,7 +269,7 @@ def kind_spec(kind):
 
 
 # ---------------------------------------------------------------- coercion
-# Mirrored in kpis.html (kpiNum/kpiInt/kpiDate). The shared case table in
+# Mirrored in kpi-core.js (kpiNum/kpiInt/kpiDate). The shared case table in
 # build/tests/fixtures/kpi_coerce_cases.json is asserted against both ports.
 
 _NUM_STRIP = re.compile(r"[$,\s]")
@@ -621,7 +621,7 @@ def merge(existing, extracted):
 
 
 def spec_json():
-    """The spec as it is embedded in kpis.html (stable key order)."""
+    """The spec as it is embedded in kpi-core.js (stable key order)."""
     return json.dumps(SPEC, sort_keys=True, separators=(",", ":"))
 
 

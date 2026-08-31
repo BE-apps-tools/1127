@@ -86,10 +86,11 @@ per-unit values are committed, by the **`POST /kpis`** route.
 1. **Needs the same `Contents: Read+write` token as §5** — no new secret; `/kpis` is
    gated by the existing `ADMIN_KEY` (or any admin in `data/admins.json`).
 2. **Deploy the Worker code** that includes the `/kpis` route. Until it's deployed the
-   **Publish KPI data** button returns an error.
-3. **Test:** open **KPIs** → (signed in as admin) `kpis.html?admin=import`, drop a
-   report, confirm the detected family and row counts in the preview, **Publish**.
-   `main` gets an `Asset KPIs: <families> … [portal]` commit.
+   **Publish for everyone** button in the KPI builder returns an error.
+3. **Test:** open **Admin** → (signed in) **KPI builder** → **Open builder**, drop the
+   reports, confirm the recognised families and row counts on the cards, optionally
+   **Preview on the KPI page**, then **Publish for everyone**. `main` gets an
+   `Asset KPIs: <families> … [portal]` commit.
 
 `/kpis` merges into `data/kpis.json` **one family at a time**: the families in the
 payload replace their block on every unit, and the others are left untouched. That's

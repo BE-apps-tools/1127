@@ -1,5 +1,5 @@
 {
- "_comment": "Python's extraction of each fixture (build/kpi_reports.read_report). worker/tests/kpi_pipeline.test.mjs runs the browser pipeline in kpis.html over the same fixtures and asserts it produces exactly this. Regenerate deliberately with py build/tests/make_golden.py and review the diff \u2014 a change here is a change to what both import paths extract.",
+ "_comment": "Python's extraction of each fixture (build/kpi_reports.read_report). worker/tests/kpi_pipeline.test.mjs runs the browser pipeline in kpi-core.js over the same fixtures and asserts it produces exactly this. Regenerate deliberately with py build/tests/make_golden.py and review the diff \u2014 a change here is a change to what both import paths extract.",
  "fixtures": {
   "kpi_damage_mini.xlsx": {
    "report": {

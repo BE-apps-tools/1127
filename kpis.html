@@ -98,18 +98,6 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
   .prevbar .pb-t strong{color:var(--light-blue);}
   .prevbar .btn{flex:0 0 auto;}
 
-  /* ---------- Report coverage strip ---------- */
-  .cov{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-bottom:22px;}
-  .cov-item{background:var(--white);border:1px solid var(--light-gray);border-left:4px solid var(--energy-blue);
-    border-radius:var(--r-sm);padding:12px 14px;box-shadow:var(--shadow);}
-  .cov-item.off{border-left-color:var(--light-gray);}
-  .cov-item.warn{border-left-color:var(--alert);}
-  .cov-item.alert{border-left-color:var(--alert);border-color:var(--alert);}
-  .cov-item .k{font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.05em;color:var(--medium-gray);}
-  .cov-item .v{font-size:13px;font-weight:bold;color:var(--dark-blue);margin-top:2px;word-break:break-word;}
-  .cov-item.off .v{color:var(--medium-gray);}
-  .cov-item .m{font-size:11px;color:var(--medium-gray);margin-top:3px;}
-
   /* ---------- KPI tiles ---------- */
   .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;margin-bottom:22px;}
   .tile{background:var(--white);border:1px solid var(--light-gray);border-radius:var(--r);padding:16px 18px;
@@ -164,12 +152,13 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
 
   /* ---------- Status history timeline (per-unit detail) ---------- */
   .tl{margin:0;padding:0;list-style:none;}
-  .tl li{display:flex;gap:10px;align-items:flex-start;padding:5px 0;border-bottom:1px solid var(--bright-gray);font-size:12px;}
+  .tl li{display:flex;gap:10px;align-items:flex-start;padding:5px 0;border-bottom:1px solid var(--bright-gray);
+    font-size:12px;flex-wrap:wrap;}
   .tl li:last-child{border-bottom:none;}
   .tl .d{flex:0 0 62px;font-weight:bold;color:var(--dark-blue);font-variant-numeric:tabular-nums;}
   .tl .s{flex:0 0 auto;}
   .tl .len{flex:0 0 auto;color:var(--medium-gray);font-size:11px;white-space:nowrap;}
-  .tl .rm{flex:1 1 auto;color:var(--medium-gray);min-width:0;word-break:break-word;}
+  .tl .rm{flex:1 1 auto;color:var(--medium-gray);min-width:0;overflow-wrap:anywhere;}
   .tl li.dn{background:var(--bright-gray);}
 
   /* ---------- Toolbar / table ---------- */
@@ -216,12 +205,25 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
   .flag.soon{background:var(--light-blue);border-color:var(--energy-blue);color:var(--dark-blue);}
   .flag.ok{background:var(--white);border-color:var(--light-gray);color:var(--medium-gray);}
   .muted{color:var(--medium-gray);}
-  tr.detail-row td{background:var(--bright-gray);}
-  .detail-blocks{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px 22px;}
-  .detail-blocks h3{font-size:11px;letter-spacing:0.05em;margin-bottom:6px;}
-  .detail-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px 16px;}
-  .detail-grid div{font-size:12px;}
-  .detail-grid .k{color:var(--medium-gray);text-transform:uppercase;font-size:10px;letter-spacing:0.05em;font-weight:bold;}
+  /* ---------- Row detail ----------
+     The cell spans the whole table, which is wider than the visible scroller, so
+     the panel is pinned to the scroller's left edge and sized to what's actually
+     on screen (--detail-w, set on render). Every item gets min-width:0 and
+     overflow-wrap: without them a long uppercase label overflows its track and
+     collides with the next column instead of wrapping. */
+  tr.detail-row td{background:var(--bright-gray);padding:0;}
+  .det{position:sticky;left:0;width:var(--detail-w,100%);box-sizing:border-box;padding:16px 18px;}
+  .det-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px 26px;margin-bottom:16px;}
+  .det-g{min-width:0;}
+  .det-g h4,.det-lists h4{font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;font-size:10px;
+    letter-spacing:0.06em;color:var(--dark-blue);margin-bottom:7px;}
+  .det-kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:7px 16px;}
+  .det-kv>div{font-size:12px;min-width:0;overflow-wrap:anywhere;line-height:1.3;}
+  .det-kv .k{display:block;color:var(--medium-gray);text-transform:uppercase;font-size:9px;
+    letter-spacing:0.04em;font-weight:bold;margin-bottom:1px;}
+  .det-lists{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px 26px;}
+  .det-lists>div{min-width:0;}
+  .det-more{font-size:11px;color:var(--medium-gray);padding-top:5px;}
   .detail-src{font-size:10px;color:var(--medium-gray);text-transform:uppercase;letter-spacing:0.04em;margin-top:6px;}
 
   .btn{font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;font-size:12px;letter-spacing:0.04em;
@@ -239,8 +241,6 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
   .card-body{padding:20px;}
   .field{margin-bottom:16px;}
   .field label{display:block;font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:0.06em;color:var(--medium-gray);margin-bottom:6px;}
-  .hintbox{font-size:12px;color:var(--medium-gray);background:var(--bright-gray);border:1px solid var(--light-gray);border-radius:var(--r-sm);padding:10px 12px;margin-bottom:12px;}
-  .hintbox strong{color:var(--dark-blue);}
   .empty{padding:48px 20px;text-align:center;color:var(--medium-gray);background:var(--white);border:1px solid var(--light-gray);border-radius:var(--r);box-shadow:var(--shadow);}
   .empty .big{font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;color:var(--light-gray);font-size:18px;margin-bottom:6px;}
   .showing{margin-top:10px;font-size:11px;color:var(--medium-gray);}
@@ -375,30 +375,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
           status history, its damage ledger and the per-report detail.</p>
       </div>
 
-      <div class="card" id="importPanel" style="display:none;margin-bottom:22px;">
-        <div class="card-head"><h2>Import KPI reports</h2></div>
-        <div class="card-body">
-          <div class="hintbox">Drop one or more <strong>.xlsx</strong> reports — utilization / hour meter,
-            maintenance / PM / work orders, or cost / rental / fuel. Each file's family is detected from its
-            <strong>column headers</strong>, so filenames and column order don't matter. Files are parsed
-            entirely in your browser; only the extracted per-unit values are published. Importing one family
-            leaves the others untouched.</div>
-          <div class="field"><label for="kpiFiles">KPI report(s) (.xlsx)</label>
-            <input type="file" id="kpiFiles" accept=".xlsx" multiple></div>
-          <div id="kpiPreview"></div>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
-            <button class="btn secondary" id="kpiPreviewBtn" disabled>Preview on this page</button>
-            <button class="btn" id="kpiPublish" disabled>Publish KPI data</button>
-            <button class="btn secondary" id="kpiCancel">Cancel</button>
-          </div>
-          <div class="hintbox" style="margin:12px 0 0;">Preview applies the parsed values to this page
-            <strong>in your browser only</strong> — nothing is committed, and other people see no change.
-            Use it to check the numbers look right before publishing.</div>
-        </div>
-      </div>
-
       <div class="prevbar" id="prevBar" role="status"></div>
-      <section class="cov" id="coverage" aria-label="Report coverage"></section>
       <section class="tiles" id="tiles" aria-label="Site KPIs"></section>
       <section class="trends" id="trends" aria-label="Equipment trends"></section>
 
@@ -408,9 +385,17 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
           placeholder="Search Unit # / Serial # / description / assigned&hellip;"></div>
         <select id="fTrade"><option value="">All trades</option></select>
         <select id="fStatus"><option value="">All statuses</option></select>
+        <select id="fBilling" aria-label="Billing type">
+          <option value="">Hourly &amp; non-hourly</option>
+          <option value="Hourly">Hourly only</option>
+          <option value="Non Hourly">Non-hourly only</option>
+        </select>
+        <select id="fClass" aria-label="Equipment class"><option value="">All classes</option></select>
         <select id="fFocus" aria-label="Focus">
           <option value="">All units</option>
-          <option value="downnow">Down right now</option>
+          <option value="downnow">Down right now (DN or DS)</option>
+          <option value="dn">Down on site (DN)</option>
+          <option value="ds">In the shop (DS)</option>
           <option value="down7">Down over 7 days (12 mo)</option>
           <option value="repeat">Repeat offenders (3+ breakdowns)</option>
           <option value="anniv30">Rental renewal in 30 days</option>
@@ -424,7 +409,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
         <button class="btn small secondary" id="exportCsv">Export CSV</button>
       </div>
 
-      <div class="table-scroll">
+      <div class="table-scroll" id="tableScroll">
         <table>
           <thead><tr id="headRow"></tr></thead>
           <tbody id="kpiBody"></tbody>
@@ -452,45 +437,19 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
 
 <div class="toast" id="toast"></div>
 
+<script src="kpi-core.js"></script>
 <script>
 "use strict";
 
 let WORKER_URL = "https://asset-portal.site-asset-manager.workers.dev";
 
-/* ============================================================
-   Report spec — generated from build/kpi_reports.py SPEC.
-   The Action build (Python) and this browser importer must extract
-   identical records, so this block is a verbatim copy; the parity is
-   asserted by build/tests/test_kpi_spec_parity.py. Regenerate with:
-     py scripts/sync_kpi_spec.py
-   ============================================================ */
-/* KPI-REPORT-SPEC-START */
-const KPI_SPEC = {"downStatuses":["DN","DS"],"excludeFromAvailability":["MS","LG"],"headerScan":12,"kinds":[{"fields":{"billingType":{"aliases":["Billing Type"],"type":"str"},"getComponent":{"aliases":["GET"],"type":"num"},"hourlyBillingRate":{"aliases":["Hourly Billing Rate","Hourly Rate","Rate Per Hour"],"type":"num"},"monthlyBillingRate":{"aliases":["Monthly Billing Rate","Monthly Rate","Monthly Charge"],"type":"num"},"monthlyNonHourlyOwnership":{"aliases":["Monthly Non-Hourly Ownership","Monthly Non Hourly Ownership"],"type":"num"},"monthlyOwnership":{"aliases":["Monthly Ownership"],"type":"num"},"oilComponent":{"aliases":["Oil / Grease","Oil/Grease","Oil & Grease"],"type":"num"},"ownershipComponent":{"aliases":["Ownership Component","Ownership"],"type":"num"},"pmComponent":{"aliases":["Preventative Maintenance","Preventive Maintenance","PM"],"type":"num"},"projectNumber":{"aliases":["Project Number","Project","Job Number"],"type":"str"},"rateBegin":{"aliases":["Begin Date","Effective From"],"type":"date"},"rateEnd":{"aliases":["End Date","Effective To"],"type":"date"},"rateGroup":{"aliases":["Rate Group"],"type":"str"},"rateGroupDesc":{"aliases":["Rate Group Description","Rate Description"],"type":"str"},"repairComponent":{"aliases":["Corrective Repair","Repair"],"type":"num"},"tiresComponent":{"aliases":["Tires / U.C.","Tires / UC","Tires","Tires/U.C."],"type":"num"}},"hints":["rate","rates","equipment rates","charge","billing"],"kind":"rates","label":"Equipment rates (charge-out)","mode":"record","signals":["monthlyBillingRate","monthlyOwnership","rateGroup","monthlyNonHourlyOwnership","hourlyBillingRate"]},{"fields":{"acquiredDate":{"aliases":["Acquired Date","Acquisition Date","Start Date"],"type":"date"},"bareRentalRate":{"aliases":["Bare Rental Rate","Bare Rate"],"type":"num"},"billedThroughDate":{"aliases":["Billed Through Date","Billed Through","Anniversary Date","Next Billing Date"],"type":"date"},"billingType":{"aliases":["Billing Type"],"type":"str"},"contractDays":{"aliases":["Contract Days","Billing Cycle Days","Cycle Days"],"type":"int"},"eqStatus":{"aliases":["EQ St","EQ Status","Equipment Status"],"type":"str"},"hourlyRate":{"aliases":["Total Hourly Rate","Hourly Rental Rate"],"type":"num"},"monthlyNonHourlyRate":{"aliases":["Monthly Non-Hourly Rate","Monthly Non Hourly Rate"],"type":"num"},"po":{"aliases":["PO#","PO #","PO Number","Purchase Order"],"type":"str"},"totalNonHourlyRate":{"aliases":["Total Non-Hourly Rate","Total Non Hourly Rate","Total Monthly Rate"],"type":"num"},"vendor":{"aliases":["Vendor","Supplier","Rental Vendor","Lessor"],"type":"str"}},"hints":["anniversary","rental","rent","contract","vendor"],"kind":"rental","label":"Rental contracts (anniversary)","mode":"record","signals":["billedThroughDate","totalNonHourlyRate","bareRentalRate","monthlyNonHourlyRate","vendor","contractDays"]},{"asOfField":"date","backfillField":{"aliases":["Transfer Status","Status of Transfer"],"values":["Newly Acquired"]},"eventDateField":"date","eventStatusField":"status","fields":{"date":{"aliases":["Effective Date","Transfer Date","Date"],"type":"date"},"from":{"aliases":["Project Transferred From","Transferred From","From Project"],"type":"str"},"prev":{"aliases":["Previous Status","Prior Status","From Status"],"type":"str"},"remark":{"aliases":["Request Remark","Remark","Comment","Reason"],"type":"str"},"status":{"aliases":["Current Status","New Status","To Status"],"type":"str"}},"hints":["transfer","status","history","movement"],"kind":"transfers","label":"Transfer / status history","mode":"events","signals":["status","prev","date","from"],"unitFields":{"eqClass":{"aliases":["Major Equipment Class","Equipment Class","Class"],"type":"str"},"transferTrade":{"aliases":["Current Trade"],"type":"str"}}},{"asOfField":"date","fields":{"amount":{"aliases":["Actual Cost Amount","Cost Amount","Amount","Actual Cost"],"type":"num"},"caseNumber":{"aliases":["Incident Case Number","Case Number","Incident Number"],"type":"str"},"damageArea":{"aliases":["Damage Area Code","Damage Area"],"type":"str"},"date":{"aliases":["G/L Date","GL Date","Transaction Date","Posting Date"],"type":"date"},"doc":{"aliases":["Document Number","Document #","Doc Number"],"type":"str"},"docType":{"aliases":["Document Type","Doc Type"],"type":"str"},"payee":{"aliases":["Journal Entry Explanation","Payee","Paid To"],"type":"str"},"po":{"aliases":["PO #","PO#","PO Number"],"type":"str"},"remark":{"aliases":["Remark","Description of Work","Explanation"],"type":"str"}},"hints":["damage","expense","expenses","repair","incident"],"kind":"damage","label":"Damage expenses","lineAmountField":"amount","lineDateField":"date","lineDocField":"doc","mode":"ledger","signals":["amount","date","doc","damageArea","caseNumber"]},{"asOfField":"meterDate","fields":{"engineHours":{"aliases":["Engine Hours","Total Hours","Total Engine Hours","Run Hours"],"type":"num"},"idleHours":{"aliases":["Idle Hours","Idling Hours","Idle Time","Idle"],"type":"num"},"meterDate":{"aliases":["Meter Date","Reading Date","Meter Reading Date","As Of","As Of Date"],"type":"date"},"meterHours":{"aliases":["Hour Meter","Hour Meter Reading","Meter Reading","Current Meter Reading","Current Hours","Hours"],"type":"num"},"periodHours":{"aliases":["Period Hours","Hours This Period","Monthly Hours","Hours Used","Hours (Period)","Reported Hours"],"type":"num"},"targetHours":{"aliases":["Target Hours","Utilization Target","Target Utilization"],"type":"num"},"workHours":{"aliases":["Working Hours","Work Hours","Productive Hours","Operating Hours"],"type":"num"}},"hints":["utilization","utilisation","hour meter","hourmeter","zero hours","telematics","hours"],"kind":"utilization","label":"Utilization / hour meter","mode":"record","signals":["meterHours","engineHours","idleHours","workHours","periodHours"]}],"maxYear":2099,"serialAliases":["Serial Number","Serial #","Serial","Serial No","VIN"],"siteAliases":["Project Number","Project Transferred To","Location","Branch/Plant","Project","Job Number"],"staleAlertDays":3,"staleWarnDays":1,"statusLabels":{"AC":"Available but Consigned","AV":"Available","DN":"Down","DS":"Down - In Shop","LG":"Legal Hold","MS":"Missing/stolen","NR":"Not Ready","WK":"Working"},"unitAliases":["Unit Number","Unit #","Unit","Unit No","Unit Nbr","Equipment Number","Equipment #","Equipment","Equip Number","Equip #","Asset Number","Asset #"],"workingStatuses":["WK"]};
-/* KPI-REPORT-SPEC-END */
+/* KPI_SPEC, KPI_KINDS, kindSpec, kpiMerge, FIELD_LABELS and the day maths below
+   come from kpi-core.js, loaded above and shared with the admin KPI builder.
+   Classic scripts share one top-level scope, so they are simply in scope here —
+   re-declaring them would be a duplicate-const error, not a convenience alias.
+   This page reads a parsed bundle (published, or handed over by the builder for
+   preview); it no longer parses one itself. */
 
-const KPI_KINDS = KPI_SPEC.kinds.map(k => k.kind);
-const kindSpec = k => KPI_SPEC.kinds.find(x => x.kind === k);
-
-/* Field labels for the expanded per-unit detail and the CSV (display only). */
-const FIELD_LABELS = {
-  monthlyBillingRate:"Monthly billing rate", monthlyOwnership:"Monthly ownership",
-  monthlyNonHourlyOwnership:"Monthly non-hourly ownership", hourlyBillingRate:"Hourly billing rate",
-  billingType:"Billing type", rateGroup:"Rate group", rateGroupDesc:"Rate group description",
-  ownershipComponent:"Ownership / hr", pmComponent:"PM / hr", repairComponent:"Corrective repair / hr",
-  tiresComponent:"Tires & U.C. / hr", oilComponent:"Oil & grease / hr", getComponent:"GET / hr",
-  rateBegin:"Rate begins", rateEnd:"Rate ends", projectNumber:"Project",
-  vendor:"Vendor", po:"PO #", acquiredDate:"On rent since", billedThroughDate:"Billed through",
-  contractDays:"Billing cycle (days)", hourlyRate:"Hourly rental rate",
-  monthlyNonHourlyRate:"Monthly non-hourly rate", bareRentalRate:"Bare rental rate",
-  totalNonHourlyRate:"Total monthly rate", eqStatus:"Status on report", location:"Location",
-  date:"Effective date", status:"Status", prev:"Previous status", from:"Transferred from",
-  remark:"Remark", eqClass:"Equipment class", transferTrade:"Trade on transfer",
-  amount:"Amount", doc:"Document #", docType:"Document type", payee:"Payee",
-  damageArea:"Damage area", caseNumber:"Incident case #",
-  meterHours:"Hour meter", meterDate:"Meter date", engineHours:"Engine hours",
-  idleHours:"Idle hours", workHours:"Working hours", periodHours:"Period hours",
-  targetHours:"Target hours",
-};
 
 /* Thresholds and constants — the only tuned numbers on the page, kept together. */
 const TREND_MONTHS   = 12;   // trend charts and the rolling downtime window
@@ -513,9 +472,11 @@ const TRADES = ["Civil","Electrical","Foundation","Collection","Install","Mechan
 const TRADE_NONE = "__none__";
 
 const STATE = { site:"", assets:[], kpis:{reports:[],units:{}}, meta:null, siteIndex:[],
-  rows:[], sort:null, page:1, open:new Set(), admin:false, pending:null,
+  rows:[], sort:null, page:1, open:new Set(),
   // in-memory preview: `published` holds the real bundle while a preview is shown
   published:null, previewKinds:[] };
+// Where the admin KPI builder leaves a parsed bundle for this page to preview.
+const PREVIEW_KEY = "bac_kpi_preview";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
@@ -526,7 +487,6 @@ const SITE_KEY = "bac_portal_site";     // shared with the Assets page
 let toastT=null;
 function toast(m){ const t=$("#toast"); t.textContent=m; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"),3000); }
 function banner(kind,msg){ const b=$("#banner"); if(!kind){ b.style.display="none"; return; } b.className="banner "+kind; b.textContent=msg; b.style.display="block"; }
-function adminKey(){ return nsGet("bac_admin_key")||""; }
 
 /* ---------- formatting ---------- */
 const DASH = "—";
@@ -555,11 +515,7 @@ const MONTH_ABBR=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","N
 function fmtMonth(mk){ const p=mk.split("-"); return MONTH_ABBR[(+p[1])-1]+" "+p[0].slice(2); }
 const num = v => (typeof v==="number" && isFinite(v)) ? v : null;
 
-/* ---------- day math (UTC integers, so no timezone drift) ---------- */
-const TODAY = new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
-function dnum(iso){ const t=Date.parse(String(iso).slice(0,10)+"T00:00:00Z"); return isNaN(t)?null:Math.round(t/86400000); }
-function dstr(dn){ return new Date(dn*86400000).toISOString().slice(0,10); }
-const TODAY_DN = dnum(TODAY);
+/* ---------- day math (TODAY, TODAY_DN, dnum, dstr come from kpi-core.js) ---------- */
 function daysUntil(iso){ const d=dnum(iso); return d==null?null:(d-TODAY_DN); }
 function daysSince(iso){ const d=daysUntil(iso); return d==null?null:-d; }
 /* The last N month keys, oldest first, ending with the current month. */
@@ -741,6 +697,9 @@ function buildRows(){
       description:String(a.description||""), description2:String(a.description2||""),
       status:String(a.status||""), trade:String(a.trade||""), assigned:assignedOf(a),
       eqClass: tr ? String(tr.eqClass||"") : "",
+      // "Hourly" / "Non Hourly" — the rate report is authoritative, the rental
+      // report is the fallback for units it doesn't price.
+      billingType: String((rt&&rt.billingType) || (rn&&rn.billingType) || ""),
       // downtime (rolling window)
       downDays: st?st.downDays:null,
       downEvents: st?st.downEvents:null,
@@ -775,7 +734,7 @@ function buildRows(){
   });
   STATE.rows.forEach(r=>{ r.daysOnSite = r.arrived ? daysSince(r.arrived) : null; });
 }
-/* Which report families have data for the shown site — drives the coverage strip,
+/* Which report families have data for the shown site — drives the freshness banner,
    which tiles appear, and which table columns exist at all. */
 function activeKinds(){
   const on={};
@@ -802,9 +761,21 @@ function ageText(age){
   return age===1 ? "1 day old" : age+" days old";
 }
 /* One banner naming every report that is behind, so nobody reads a stale tile as
-   today's truth. */
+   today's truth. Per-report coverage detail lives in the admin KPI builder; what
+   has to reach a reader of this page is only the two ways a number can lie:
+   the report is stale, or it was run for a different jobsite. */
 function renderFreshness(){
   const on=activeKinds();
+  const wrong=KPI_SPEC.kinds.map(ks=>{
+    const rep=reportFor(ks.kind);
+    return (rep && rep.site && STATE.site && rep.site!==STATE.site)
+      ? { label:ks.label, site:rep.site } : null;
+  }).filter(Boolean);
+  if(wrong.length){
+    banner("err", "Run for another jobsite — reimport: "+
+      wrong.map(w=>w.label+" (site "+w.site+")").join(" · "));
+    return;
+  }
   const behind=KPI_SPEC.kinds.map(ks=>{
     const rep=reportFor(ks.kind);
     if(!rep || !on[ks.kind] || rep.preview) return null;   // freshly parsed is not stale
@@ -815,47 +786,6 @@ function renderFreshness(){
   const worst=behind.some(b=>b.level==="alert") ? "err" : "info";
   const list=behind.map(b=>b.label+" ("+ageText(b.age)+")").join(" · ");
   banner(worst, (worst==="err" ? "Out of date — rerun and import: " : "Not refreshed today: ")+list);
-}
-
-/* ---------- coverage strip ---------- */
-function renderCoverage(){
-  const box=$("#coverage"), on=activeKinds();
-  const items = KPI_SPEC.kinds.map(ks=>{
-    const rep=reportFor(ks.kind);
-    const matched=STATE.rows.filter(r=>r.kpi&&r.kpi[ks.kind]).length;
-    if(!rep){
-      return '<div class="cov-item off"><div class="k">'+esc(ks.label)+'</div>'+
-        '<div class="v">Not imported</div><div class="m">Its columns stay hidden until a report lands.</div></div>';
-    }
-    // A report stamped with another jobsite is the most likely import mistake.
-    const wrongSite = rep.site && STATE.site && rep.site!==STATE.site;
-    const st=staleness(rep);
-    const cls = (on[ks.kind] && !wrongSite) ? (rep.preview ? " warn" : (st.level?(" "+st.level):"")) : " off";
-    const ageTag = rep.preview
-      ? '<span class="flag soon">preview &middot; not published</span>'
-      : (st.level
-          ? '<span class="flag '+(st.level==="alert"?"bad":"soon")+'">'+esc(ageText(st.age))+'</span>'
-          : '<span class="flag ok">'+esc(ageText(st.age))+'</span>');
-    return '<div class="cov-item'+cls+'"><div class="k">'+esc(ks.label)+' '+ageTag+'</div>'+
-      '<div class="v">'+esc(rep.file||"imported")+'</div>'+
-      '<div class="m">'+(wrongSite
-        ? ('Stamped site '+esc(rep.site)+' — not this jobsite.')
-        : (matched+' of '+STATE.rows.length+' units on this site'+
-           (rep.asOf?(' &middot; as of '+esc(fmtDate(rep.asOf))):'')+
-           (rep.rows?(' &middot; '+rep.rows.toLocaleString()+(ks.mode==="events"?' events':' rows')):'')))+
-      '</div></div>';
-  });
-  const keys=Object.keys(STATE.kpis.units||{});
-  if(keys.length && STATE.rows.length){
-    const here=new Set();
-    STATE.rows.forEach(r=>{ here.add(r.unit); if(r.serial) here.add("SN:"+r.serial); });
-    const other=keys.filter(k=>!here.has(k)).length;
-    if(other){
-      items.push('<div class="cov-item off"><div class="k">Elsewhere</div><div class="v">'+other+' unit'+(other===1?"":"s")+'</div>'+
-        '<div class="m">In a report but not on this site — units that have since left, or another jobsite’s.</div></div>');
-    }
-  }
-  box.innerHTML=items.join("");
 }
 
 /* ---------- KPI tiles ---------- */
@@ -906,22 +836,15 @@ function renderTiles(){
       hourly.length+" hourly-billed unit"+(hourly.length===1?"":"s")+
       (maintShare!=null?(" · "+Math.round(maintShare)+"% maintenance"):""));
   } else {
-    html += tile("Monthly spend", DASH, "Import the Equipment Rates report");
+    html += tile("Monthly spend", DASH, "Drop the Equipment Rates report in the admin KPI builder");
   }
 
   if(on.rental){
     const rented=R.filter(r=>r.isRented);
     const rmo=sum(rented.map(r=>r.rentalMonthly));
-    const soon=rented.filter(r=>r.annivDays!=null&&r.annivDays>=0&&r.annivDays<=RENEW_SOON_DAYS);
-    const past=rented.filter(r=>r.annivDays!=null&&r.annivDays<0);
     html += tile("Rental commitment", fmtMoneyShort(rmo)+"/mo", rented.length+" unit"+(rented.length===1?"":"s")+" on vendor rental"+staleNote("rental"));
-    html += tile("Renewals in "+RENEW_SOON_DAYS+" days", String(soon.length),
-      soon.length?(fmtMoneyShort(sum(soon.map(r=>r.rentalMonthly)))+"/mo re-bills"):"Nothing due this cycle",
-      {meter:pctOf(soon.length), meterCls:"light"});
-    if(past.length) html += tile("Past billed-through", String(past.length),
-      "Off-rent or re-bill — "+fmtMoneyShort(sum(past.map(r=>r.rentalMonthly)))+"/mo", {alert:true});
   } else {
-    html += tile("Rental commitment", DASH, "Import the Anniversary Date report");
+    html += tile("Rental commitment", DASH, "Drop the Anniversary Date report in the admin KPI builder");
   }
 
   if(on.transfers){
@@ -935,9 +858,15 @@ function renderTiles(){
     const obs=sum(tracked.map(r=>r.st?r.st.observedDays:null));
     const avail=obs>0 ? 100*(obs-dd)/obs : null;
     const repeat=tracked.filter(r=>(r.downEvents||0)>=REPEAT_DOWNS);
+    const dnNow=downNow.filter(r=>r.curStatus==="DN"), dsNow=downNow.filter(r=>r.curStatus==="DS");
     html += tile("Down right now", String(downNow.length),
-      downNow.length?("Longest "+fmtNum(Math.max.apply(null,downNow.map(r=>r.daysInState||0)))+" days"):"Nothing down on site",
+      downNow.length?(dnNow.length+" on site · "+dsNow.length+" in shop"):"Nothing down on site",
       {meter:pctOf(downNow.length), meterCls:downNow.length?"warn":"light", alert:downNow.length>0});
+    // What the job is paying, this month, for units that cannot work today.
+    const burn=sum(downNow.map(r=>r.monthlyCost));
+    if(burn>0) html += tile("Spend on down units", fmtMoneyShort(burn)+"/mo",
+      "Charge-out still running on the "+downNow.length+" unit"+(downNow.length===1?"":"s")+" down now",
+      {alert:true});
     html += tile("Downtime days", fmtNum(dd), "Last "+TREND_MONTHS+" months · "+tracked.length+" units with history"+staleNote("transfers"));
     if(avail!=null) html += tile("Fleet availability", avail.toFixed(1)+"%",
       fmtNum(obs)+" unit-days tracked, last "+TREND_MONTHS+" months", {ring:avail});
@@ -946,7 +875,7 @@ function renderTiles(){
     if(repeat.length) html += tile("Repeat offenders", String(repeat.length),
       REPEAT_DOWNS+"+ breakdowns in "+TREND_MONTHS+" months", {alert:true});
   } else {
-    html += tile("Downtime days", DASH, "Import the Equipment Transfer report");
+    html += tile("Downtime days", DASH, "Drop the Equipment Transfer report in the admin KPI builder");
   }
 
   if(on.damage){
@@ -960,7 +889,7 @@ function renderTiles(){
       "Avg "+fmtMoneyShort(spend/incidents)+" per incident",
       {meter:pctOf(hit.length), meterCls:"warn"});
   } else {
-    html += tile("Damage spend", DASH, "Import the Damage Expenses report");
+    html += tile("Damage spend", DASH, "Drop the Damage Expenses report in the admin KPI builder");
   }
 
   if(on.transfers && on.rates){
@@ -1285,11 +1214,16 @@ function cell(r,c){
 function viewRows(){
   const q=$("#q").value.trim().toLowerCase();
   const tf=$("#fTrade").value, sf=$("#fStatus").value, ff=$("#fFocus").value;
+  const bf=$("#fBilling").value, cf=$("#fClass").value;
   let v=STATE.rows.slice();
+  if(bf) v=v.filter(r=>r.billingType===bf);
+  if(cf) v=v.filter(r=>r.eqClass===cf);
   if(tf===TRADE_NONE) v=v.filter(r=>!r.trade);
   else if(tf) v=v.filter(r=>r.trade===tf);
   if(sf) v=v.filter(r=>r.status===sf);
   if(ff==="downnow") v=v.filter(r=>r.isDown);
+  else if(ff==="dn") v=v.filter(r=>r.curStatus==="DN");
+  else if(ff==="ds") v=v.filter(r=>r.curStatus==="DS");
   else if(ff==="down7") v=v.filter(r=>(r.downDays||0)>LONG_DOWN_DAYS);
   else if(ff==="repeat") v=v.filter(r=>(r.downEvents||0)>=REPEAT_DOWNS);
   else if(ff==="anniv30") v=v.filter(r=>r.annivDays!=null&&r.annivDays>=0&&r.annivDays<=RENEW_SOON_DAYS);
@@ -1335,7 +1269,7 @@ function perPage(){ const el=$("#pgSize"), n=el?parseInt(el.value,10):PER_DEFAUL
 function pageCount(total){ return Math.max(1, Math.ceil(total/perPage())); }
 function gotoPage(p){ const t=viewRows().length, pc=pageCount(t);
   STATE.page=Math.min(Math.max(1,p),pc); renderTable(); syncUrl();
-  const el=$(".table-scroll"); if(el) el.scrollIntoView({block:"start"}); }
+  const el=$("#tableScroll"); if(el) el.scrollIntoView({block:"start"}); }
 function renderPager(total,pc){
   const box=$("#pager");
   if(total<=perPage() && pc<=1){ box.style.display="none"; return; }
@@ -1367,72 +1301,132 @@ function timelineHtml(r){
     '<div class="detail-src">From '+esc((reportFor("transfers")||{}).file||"the transfer report")+
     ' &middot; '+spans.length+' event'+(spans.length===1?"":"s")+'</div></div>';
 }
-function fmtField(kind, f, v){
-  const ks=kindSpec(kind), t=ks&&ks.fields[f]?ks.fields[f].type:"str";
-  if(t==="date") return fmtDate(v);
-  if(t==="num"||t==="int"){
-    if(/rate|cost|ownership|component/i.test(f) && Math.abs(v)>=100) return fmtMoney(v);
-    if(/rate|component/i.test(f)) return "$"+Number(v).toFixed(2);
-    return fmtNum(v, Number.isInteger(v)?0:1);
-  }
-  return String(v);
+/* ---------- row detail ----------
+   Grouped by what a reader is asking (what does it cost / how reliable is it /
+   what is it), not by which report the number came from — a scanner doesn't care
+   about provenance, and the source line at the bottom still says. Only fields
+   that carry information are shown: a rate component of $0.00 is noise. */
+const DET_MAX_LIST = 6;              // events / charge lines shown before "+N more"
+
+function kv(label, value){
+  return (value==null || value==="" || value===DASH) ? ""
+    : '<div><span class="k">'+esc(label)+'</span>'+esc(value)+'</div>';
 }
-/* The damage ledger, newest first: what was charged, when, to whom, and what
-   broke — the "why" behind the damage figure, same as the status history is for
-   downtime. */
+const pos = v => (typeof v==="number" && isFinite(v) && v!==0) ? v : null;
+
+function detCost(r){
+  const rt=r.rt||{}, rn=r.rn||{};
+  const comps=[["PM",rt.pmComponent],["Repair",rt.repairComponent],["Tires & U.C.",rt.tiresComponent],
+    ["Oil & grease",rt.oilComponent],["GET",rt.getComponent]]
+    .filter(c=>pos(c[1])!=null).map(c=>c[0]+" $"+Number(c[1]).toFixed(2)).join(" · ");
+  const cells=[
+    kv("Cost / mo", r.monthlyCost==null?"":fmtMoney(r.monthlyCost)),
+    kv("Cost / yr", r.yearlyCost==null?"":fmtMoney(r.yearlyCost)),
+    kv("Billing", rt.billingType||""),
+    kv("Rate / hr", pos(r.hourlyRate)!=null?("$"+r.hourlyRate.toFixed(2)):""),
+    kv("Maintenance / hr", pos(r.maintPerHour)!=null?("$"+r.maintPerHour.toFixed(2)):""),
+    kv("Rate group", rt.rateGroupDesc||""),
+    kv("Rate ends", rt.rateEnd?fmtDate(rt.rateEnd):""),
+    kv("Vendor", rn.vendor||""),
+    kv("Rental / mo", r.rentalMonthly==null?"":fmtMoney(r.rentalMonthly)),
+    kv("On rent since", rn.acquiredDate?fmtDate(rn.acquiredDate):""),
+    kv("Billed through", r.annivDate?fmtDate(r.annivDate):""),
+    kv("PO", rn.po||""),
+  ].join("");
+  if(!cells) return "";
+  return '<div class="det-g"><h4>Cost</h4><div class="det-kv">'+cells+
+    (comps?('<div style="grid-column:1/-1"><span class="k">Hourly rate includes</span>'+esc(comps)+'</div>'):'')+
+    '</div></div>';
+}
+function detReliability(r){
+  const cells=[
+    kv("Status now", r.curStatus?(r.curStatus+" · "+statusLabel(r.curStatus)):""),
+    kv("In this state", r.daysInState==null?"":(r.daysInState+" d")),
+    kv("Down days "+TREND_MONTHS+"mo", r.downDays==null?"":fmtNum(r.downDays)),
+    kv("Breakdowns", r.downEvents==null?"":String(r.downEvents)),
+    kv("Availability", r.availPct==null?"":fmtPct(r.availPct)),
+    kv("Avg repair", r.mttrDays==null?"":(fmtNum(r.mttrDays,1)+" d")),
+    kv("Cost while down", r.downCost==null?"":fmtMoney(r.downCost)),
+    kv("Damage "+TREND_MONTHS+"mo", r.damageCost==null?"":fmtMoney(r.damageCost)),
+    kv("Damage incidents", r.damageIncidents==null?"":String(r.damageIncidents)),
+    kv("Damage vs yr cost", r.damageShare==null?"":fmtPct(r.damageShare)),
+    kv("Hour meter", (r.ut&&num(r.ut.meterHours)!=null)?fmtNum(r.ut.meterHours):""),
+  ].join("");
+  if(!cells) return "";
+  return '<div class="det-g"><h4>Reliability &amp; damage</h4><div class="det-kv">'+cells+'</div></div>';
+}
+function detUnit(r){
+  const a=r.asset;
+  const cells=[
+    kv("Serial", r.serial),
+    kv("Class", r.eqClass),
+    kv("Mfg / Yr", [a.mfg,a.modelYear].filter(Boolean).join(" ")),
+    kv("Trade", r.trade),
+    kv("Assigned", r.assigned),
+    kv("On site since", r.arrived?(fmtDate(r.arrived)+(r.daysOnSite!=null?(" · "+r.daysOnSite+" d"):"")):""),
+    kv("Finance", a.financeMethod),
+    kv("Asset #", a.assetNumber),
+    kv("Location", a.location||a.locationCode),
+    kv("Remarks", a.remarks),
+  ].join("");
+  return '<div class="det-g"><h4>Unit</h4><div class="det-kv">'+cells+'</div></div>';
+}
+/* The status history is the whole point of the transfer report: when a unit went
+   down, for how long, and what the crew wrote about it. Newest first, capped. */
+function timelineHtml(r){
+  const spans=statusSpans(r.tr.events);
+  if(!spans.length) return "";
+  const shown=spans.slice().reverse();
+  const items=shown.slice(0,DET_MAX_LIST).map(s=>{
+    const down=DOWN_SET.has(s.st);
+    const len=Math.max(0,Math.min(s.b,TODAY_DN)-s.a);
+    const lbl=s.st?(s.st+" · "+statusLabel(s.st)):"Arrived on site";
+    return '<li class="'+(down?"dn":"")+'"><span class="d">'+esc(fmtDate(s.ev.date))+'</span>'+
+      '<span class="s"><span class="flag'+(down?" bad":"")+'">'+esc(lbl)+'</span></span>'+
+      '<span class="len">'+len+(s.closed?" d":" d, ongoing")+'</span>'+
+      '<span class="rm">'+esc(s.ev.remark||"")+'</span></li>';
+  }).join("");
+  const more=shown.length>DET_MAX_LIST
+    ? '<div class="det-more">+ '+(shown.length-DET_MAX_LIST)+' earlier event'+((shown.length-DET_MAX_LIST)===1?"":"s")+'</div>' : "";
+  return '<div><h4>Status history</h4><ul class="tl">'+items+'</ul>'+more+'</div>';
+}
+/* The damage ledger, newest first: what was charged, when, and what broke. */
 function damageHtml(r){
   const items=(r.dm.items||[]).slice().reverse();
   if(!items.length) return "";
   const total=items.reduce((s,i)=>s+(typeof i.amount==="number"?i.amount:0),0);
-  const rows=items.map(i=>'<li><span class="d">'+esc(fmtDate(i.date))+'</span>'+
+  const rows=items.slice(0,DET_MAX_LIST).map(i=>'<li><span class="d">'+esc(fmtDate(i.date))+'</span>'+
     '<span class="s"><span class="flag'+((i.amount||0)<0?"":" bad")+'">'+esc(fmtMoney(i.amount))+'</span></span>'+
-    (i.doc?'<span class="len">doc '+esc(i.doc)+'</span>':'')+
-    '<span class="rm">'+esc([i.remark, i.payee].filter(Boolean).join(" — "))+'</span></li>').join("");
-  const rep=reportFor("damage")||{};
-  return '<div><h3>Damage ledger &mdash; '+esc(fmtMoney(total))+'</h3><ul class="tl">'+rows+'</ul>'+
-    '<div class="detail-src">From '+esc(rep.file||"the damage report")+' &middot; '+items.length+
-    ' charge line'+(items.length===1?"":"s")+'</div></div>';
+    '<span class="rm">'+esc([i.remark,i.payee].filter(Boolean).join(" — "))+'</span></li>').join("");
+  const more=items.length>DET_MAX_LIST
+    ? '<div class="det-more">+ '+(items.length-DET_MAX_LIST)+' earlier charge'+((items.length-DET_MAX_LIST)===1?"":"s")+'</div>' : "";
+  return '<div><h4>Damage ledger &mdash; '+esc(fmtMoney(total))+'</h4>'+
+    '<ul class="tl">'+rows+'</ul>'+more+'</div>';
 }
 function detailBlocks(r){
-  const parts=[];
-  if(r.tr && r.tr.events && r.tr.events.length) parts.push(timelineHtml(r));
-  if(r.dm && r.dm.items && r.dm.items.length) parts.push(damageHtml(r));
-  KPI_SPEC.kinds.forEach(ks=>{
-    if(ks.mode==="events" || ks.mode==="ledger") return; // rendered as their own lists above
-    const blk=r.kpi?r.kpi[ks.kind]:null;
-    if(!blk) return;
-    const rep=reportFor(ks.kind);
-    const cells=Object.keys(ks.fields).filter(f=>blk[f]!=null&&blk[f]!=="")
-      .map(f=>'<div><div class="k">'+esc(FIELD_LABELS[f]||f)+'</div>'+esc(fmtField(ks.kind,f,blk[f]))+'</div>').join("");
-    parts.push('<div><h3>'+esc(ks.label)+'</h3><div class="detail-grid">'+cells+'</div>'+
-      (rep&&rep.file?('<div class="detail-src">From '+esc(rep.file)+(rep.asOf?(' &middot; as of '+esc(fmtDate(rep.asOf))):'')+'</div>'):'')+'</div>');
-  });
-  // Derived: the cross-report numbers, each with its inputs named.
-  const der=[];
-  if(r.downDays!=null) der.push('<div><div class="k">Down days ('+TREND_MONTHS+" mo)"+'</div>'+fmtNum(r.downDays)+'</div>');
-  if(r.availPct!=null) der.push('<div><div class="k">Availability</div>'+fmtPct(r.availPct)+'</div>');
-  if(r.mttrDays!=null) der.push('<div><div class="k">Avg repair time</div>'+fmtNum(r.mttrDays,1)+' d</div>');
-  if(r.yearlyCost!=null) der.push('<div><div class="k">Cost / year</div>'+fmtMoney(r.yearlyCost)+'</div>');
-  if(r.maintPerHour!=null) der.push('<div><div class="k">Maintenance / hr</div>$'+r.maintPerHour.toFixed(2)+'</div>');
-  if(r.downCost!=null) der.push('<div><div class="k">Cost while down</div>'+fmtMoney(r.downCost)+'</div>');
-  if(r.damageCost!=null) der.push('<div><div class="k">Damage ('+TREND_MONTHS+' mo)</div>'+fmtMoney(r.damageCost)+'</div>');
-  if(r.damageShare!=null) der.push('<div><div class="k">Damage vs yearly cost</div>'+fmtPct(r.damageShare)+'</div>');
-  if(r.annivDays!=null) der.push('<div><div class="k">Days to renewal</div>'+r.annivDays+'</div>');
-  if(der.length) parts.push('<div><h3>Derived</h3><div class="detail-grid">'+der.join("")+'</div>'+
-    '<div class="detail-src">Computed on this page from the reports above</div></div>');
-  const a=r.asset;
-  const em=[["Serial",r.serial],["Mfg / Yr",[a.mfg,a.modelYear].filter(Boolean).join(" ")],
-    ["Assigned",r.assigned],["Finance",a.financeMethod],["On site since",fmtDate(r.arrived)],
-    ["Acquired",fmtDate(a.acquiredDate)],["Location",a.location||a.locationCode],
-    ["Asset #",a.assetNumber],["Remarks",a.remarks]]
-    .filter(p=>p[1]).map(p=>'<div><div class="k">'+esc(p[0])+'</div>'+esc(p[1])+'</div>').join("");
-  parts.push('<div><h3>Equipment Master</h3><div class="detail-grid">'+em+'</div>'+
-    '<div class="detail-src">'+(STATE.meta&&STATE.meta.sourceVersion?('Master '+esc(STATE.meta.sourceVersion)):'Equipment Master')+'</div></div>');
-  if(!r.hasKpi) parts.unshift('<div class="hintbox" style="margin:0;">No report covers this unit yet '+
-    '(matched on Unit #'+(r.serial?" or Serial #":"")+').</div>');
-  return '<div class="detail-blocks">'+parts.join("")+'</div>';
+  const groups=[detCost(r), detReliability(r), detUnit(r)].filter(Boolean).join("");
+  const lists=[ (r.tr&&r.tr.events&&r.tr.events.length)?timelineHtml(r):"",
+                (r.dm&&r.dm.items&&r.dm.items.length)?damageHtml(r):"" ].filter(Boolean).join("");
+  // One provenance line instead of one per block.
+  const src=KPI_SPEC.kinds.filter(ks=>r.kpi&&r.kpi[ks.kind])
+    .map(ks=>(reportFor(ks.kind)||{}).file).filter(Boolean);
+  const master=(STATE.meta&&STATE.meta.sourceVersion)?("Master "+STATE.meta.sourceVersion):"Equipment Master";
+  const foot='<div class="det-more">From '+esc([master].concat(src).join(" · "))+
+    (r.hasKpi?"":" &middot; no report covers this unit yet")+'</div>';
+  return '<div class="det">'+
+    (groups?('<div class="det-groups">'+groups+'</div>'):'')+
+    (lists?('<div class="det-lists">'+lists+'</div>'):'')+ foot +'</div>';
+}
+/* The detail cell spans the full table width; pin its panel to the visible part.
+   Query by id, not by class: the chart "view as table" blocks are also
+   .table-scroll and come first in the DOM, so a class lookup sizes the panel to
+   a collapsed chart table and the detail runs off the right edge instead. */
+function syncDetailWidth(){
+  const el=$("#tableScroll");
+  if(el) el.style.setProperty("--detail-w", el.clientWidth+"px");
 }
 function renderTable(){
+  syncDetailWidth();
   const cols=columns();
   renderHead(cols);
   const v=viewRows(), total=v.length, pc=pageCount(total);
@@ -1473,6 +1467,17 @@ function fillFilters(){
   const seen=[...new Set(STATE.assets.map(a=>String(a.status||"")).filter(Boolean))].sort();
   $("#fStatus").innerHTML='<option value="">All statuses</option>'+
     seen.map(s=>'<option value="'+esc(s)+'">'+esc(s)+'</option>').join("");
+  // Equipment class comes from the transfer report and billing type from the rate
+  // and rental reports, so each list is whatever those cover — and each control
+  // hides itself entirely until its report lands, rather than offering a filter
+  // that can only ever return nothing.
+  const classes=[...new Set(STATE.rows.map(r=>r.eqClass).filter(Boolean))].sort();
+  const csel=$("#fClass");
+  csel.innerHTML='<option value="">All classes</option>'+
+    classes.map(c=>'<option value="'+esc(c)+'">'+esc(c)+'</option>').join("");
+  csel.style.display = classes.length ? "" : "none";
+  const billing=[...new Set(STATE.rows.map(r=>r.billingType).filter(Boolean))].sort();
+  $("#fBilling").style.display = billing.length ? "" : "none";
 }
 /* ---------- CSV ---------- */
 function csvCell(v){ const s=String(v==null?"":v); return /[",\n\r]/.test(s) ? ('"'+s.replace(/"/g,'""')+'"') : s; }
@@ -1481,14 +1486,14 @@ function exportCsv(){
   if(!v.length){ toast("Nothing to export"); return; }
   const on=activeKinds();
   const cols=[["Unit","unit"],["Serial","serial"],["Description","description"],["Description 2","description2"],
-    ["Status","status"],["Trade","trade"],["Assigned","assigned"],["On site since","arrived"],["Days on site","daysOnSite"]];
+    ["Status","status"],["Trade","trade"],["Billing type","billingType"],["Assigned","assigned"],["On site since","arrived"],["Days on site","daysOnSite"]];
   if(on.transfers) cols.push(["Equipment class","eqClass"],["Current status","curStatus"],
     ["Days in status","daysInState"],["Down days "+TREND_MONTHS+"mo","downDays"],["Breakdowns","downEvents"],
     ["Availability %","availPct"],["Avg repair days","mttrDays"],
     ["Last remark",r=>r.st?r.st.lastRemark:""]);
   if(on.rates) cols.push(["Monthly cost","monthlyCost"],["Yearly cost","yearlyCost"],
     ["Hourly rate","hourlyRate"],["Maintenance per hour","maintPerHour"],
-    ["Rate group",r=>r.rt?r.rt.rateGroupDesc:""],["Billing type",r=>r.rt?r.rt.billingType:""],
+    ["Rate group",r=>r.rt?r.rt.rateGroupDesc:""],
     ["Rate ends",r=>r.rt?r.rt.rateEnd:""]);
   if(on.transfers && on.rates) cols.push(["Cost while down","downCost"]);
   if(on.damage) cols.push(["Damage "+TREND_MONTHS+"mo","damageCost"],["Damage incidents","damageIncidents"],
@@ -1553,7 +1558,7 @@ async function copyValue(text,btn){
   if(btn){ btn.classList.add("done"); setTimeout(()=>btn.classList.remove("done"),900); }
 }
 function bindCopy(){
-  const scope=$(".table-scroll");
+  const scope=$("#tableScroll");
   scope.addEventListener("mouseover", e=>{ const c=e.target.closest("[data-copy]"); cpPark(scope.contains(c)?c:null); });
   scope.addEventListener("mouseleave", ()=>cpPark(null));
   document.addEventListener("keydown", e=>{
@@ -1569,348 +1574,10 @@ function bindCopy(){
 }
 
 /* ============================================================
-   Browser import — port of build/kpi_reports.py (spec-driven, so only
-   the coercion + detection code lives here; the header maps come from
-   KPI_SPEC above).
-   ============================================================ */
-function kpiDecodeXml(s){ return String(s).replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&#39;/g,"'"); }
-function kpiColIndex(ref){ const m=/^([A-Z]+)/.exec(ref); let n=0; for(const ch of m[1]) n=n*26+(ch.charCodeAt(0)-64); return n-1; }
-function kpiNormHeader(s){ return String(s==null?"":s).replace(/\s+/g," ").trim(); }
-/* Coercion — mirrors kpi_reports.coerce_num/coerce_int/coerce_date. The shared
-   case table in build/tests/fixtures/kpi_coerce_cases.json asserts both ports. */
-function kpiNum(v){
-  let s=String(v==null?"":v).trim();
-  if(!s) return null;
-  const neg=s.startsWith("(")&&s.endsWith(")");
-  if(neg) s=s.slice(1,-1);
-  s=s.replace(/[$,\s]/g,"").replace(/%+$/,"");
-  if(!s||!/^-?\d*\.?\d+$/.test(s)) return null;
-  const n=parseFloat(s);
-  if(n===0) return 0;
-  return neg?-n:n;
-}
-function kpiInt(v){ const n=kpiNum(v); return n==null?null:Math.trunc(n); }
-/* A date past maxYear is a data error, not a date — JDE ships a 2169
-   "billed through" as a no-end sentinel, and showing it as a real renewal would
-   park a bogus row at the top of every renewal filter. Mirrors
-   kpi_reports._guard_year. */
-function kpiGuardYear(iso){
-  const max=(KPI_SPEC && KPI_SPEC.maxYear) || 2099;
-  return (iso && +iso.slice(0,4) > max) ? "" : iso;
-}
-function kpiDate(v){
-  const s=String(v==null?"":v).trim();
-  if(!s) return "";
-  const iso=/^(\d{4})-(\d{2})-(\d{2})/.exec(s);
-  if(iso){ const d=new Date(Date.UTC(+iso[1],+iso[2]-1,+iso[3]));
-    return (d.getUTCFullYear()===+iso[1] && d.getUTCMonth()===+iso[2]-1 && d.getUTCDate()===+iso[3])
-      ? kpiGuardYear(d.toISOString().slice(0,10)) : ""; }
-  const us=/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/.exec(s);
-  if(us){ let yr=+us[3]; if(yr<100) yr+=2000;
-    const d=new Date(Date.UTC(yr,+us[1]-1,+us[2]));
-    return (d.getUTCFullYear()===yr && d.getUTCMonth()===+us[1]-1 && d.getUTCDate()===+us[2])
-      ? kpiGuardYear(d.toISOString().slice(0,10)) : ""; }
-  if(/^\d+(\.\d+)?$/.test(s)){
-    const n=Math.trunc(parseFloat(s)); if(n<=0) return "";
-    const d=new Date(Date.UTC(1899,11,30)+n*86400000);
-    return isNaN(d)?"":kpiGuardYear(d.toISOString().slice(0,10));
-  }
-  return "";
-}
-const KPI_COERCE={ num:kpiNum, int:kpiInt, date:kpiDate, str:v=>String(v==null?"":v).trim() };
-
-function kpiReadXlsx(buf){
-  const dv=new DataView(buf), u8=new Uint8Array(buf), dec=new TextDecoder();
-  let eocd=-1;
-  for(let i=buf.byteLength-22;i>=0;i--){ if(dv.getUint32(i,true)===0x06054b50){ eocd=i; break; } }
-  if(eocd<0) throw new Error("Not a valid .xlsx (no zip end record)");
-  const cdOff=dv.getUint32(eocd+16,true), cdCount=dv.getUint16(eocd+10,true);
-  const entries={}; let p=cdOff;
-  for(let n=0;n<cdCount;n++){
-    if(dv.getUint32(p,true)!==0x02014b50) break;
-    const method=dv.getUint16(p+10,true), compSize=dv.getUint32(p+20,true);
-    const nameLen=dv.getUint16(p+28,true), extraLen=dv.getUint16(p+30,true), cmtLen=dv.getUint16(p+32,true);
-    const localOff=dv.getUint32(p+42,true);
-    const name=dec.decode(u8.subarray(p+46,p+46+nameLen));
-    entries[name]={method,compSize,localOff}; p+=46+nameLen+extraLen+cmtLen;
-  }
-  async function get(name){
-    const e=entries[name]; if(!e) return null;
-    const lNameLen=dv.getUint16(e.localOff+26,true), lExtraLen=dv.getUint16(e.localOff+28,true);
-    const start=e.localOff+30+lNameLen+lExtraLen;
-    const comp=u8.subarray(start,start+e.compSize);
-    if(e.method===0) return dec.decode(comp);
-    if(e.method===8){
-      if(typeof DecompressionStream==="undefined") throw new Error("This browser can't read .xlsx (no DecompressionStream) — use Chrome/Edge or recent Safari.");
-      const ab=await new Response(new Blob([comp]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer();
-      return dec.decode(new Uint8Array(ab));
-    }
-    throw new Error("Unsupported compression in .xlsx (method "+e.method+")");
-  }
-  return { get };
-}
-function kpiParseShared(xml){
-  if(!xml) return []; const out=[];
-  for(const m of xml.matchAll(/<si>([\s\S]*?)<\/si>/g)){
-    let t=""; for(const tm of m[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)) t+=tm[1];
-    out.push(kpiDecodeXml(t));
-  }
-  return out;
-}
-function kpiSheetRows(xml, shared){
-  const rows=[];
-  // Rows may be self-closing (<row r="3"/>) or explicitly empty (<row …></row>).
-  for(const rm of String(xml||"").matchAll(/<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g)){
-    const inner=rm[2]||"";
-    const cells={}; let maxc=-1;
-    for(const cm of inner.matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)){
-      const attrs=cm[1]||"", body=cm[2]||"";
-      // Attribute order varies by writer: Excel emits r first, the real JDE
-      // export emits s, t, THEN r — so read them by name, never by position.
-      const ref=kpiAttr("<c"+attrs+">", "r");
-      if(!ref) continue;                       // no coordinate: same as the Python reader
-      const ci=kpiColIndex(ref);
-      if(ci>maxc) maxc=ci;
-      const ty=kpiAttr("<c"+attrs+">", "t");
-      let val="";
-      if(ty==="inlineStr"){
-        // Rich text splits one value across several runs — "Project" + "Number"
-        // in these headers — so concatenate every <t>, as the Python reader does.
-        for(const tm of body.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)) val+=kpiDecodeXml(tm[1]);
-      } else {
-        const vm=/<v[^>]*>([\s\S]*?)<\/v>/.exec(body);
-        if(vm) val = ty==="s" ? (shared[parseInt(vm[1],10)]||"") : kpiDecodeXml(vm[1]);
-      }
-      cells[ci]=val;
-    }
-    const arr=[]; for(let i=0;i<=maxc;i++) arr.push(cells[i]!==undefined?cells[i]:"");
-    rows.push(arr);
-  }
-  return rows;
-}
-/* Read one attribute out of a single XML tag. Attribute ORDER in OOXML is
-   arbitrary — the real JDE exports write Relationship as Type, Target, Id, while
-   Excel writes Id, Type, Target — so never match a pair of attributes with one
-   positional regex. (The Python side uses a real XML parser and was immune;
-   worker/tests/kpi_xlsx.test.mjs pins this port against both orders.) */
-function kpiAttr(tag, name){
-  const m=new RegExp("\\s" + name.replace(":", "\\:") + '="([^"]*)"').exec(tag);
-  return m ? m[1] : "";
-}
-function kpiRelMap(xml){
-  const map={};
-  for(const m of String(xml||"").matchAll(/<Relationship\b[^>]*>/g)){
-    const id=kpiAttr(m[0], "Id"), target=kpiAttr(m[0], "Target");
-    if(id) map[id]=target;
-  }
-  return map;
-}
-/* The r:id of the workbook's FIRST sheet. */
-function kpiSheetRelId(xml){
-  const m=/<sheet\s[^>]*>/.exec(String(xml||""));
-  return m ? kpiAttr(m[0], "r:id") : "";
-}
-async function kpiFirstSheetRows(file){
-  const zip=kpiReadXlsx(await file.arrayBuffer());
-  const wb=await zip.get("xl/workbook.xml");
-  const rels=await zip.get("xl/_rels/workbook.xml.rels");
-  const shared=kpiParseShared(await zip.get("xl/sharedStrings.xml"));
-  const relId=kpiSheetRelId(wb);
-  if(!relId) throw new Error("No sheet found in workbook");
-  let t=kpiRelMap(rels)[relId]||"";
-  if(!t) throw new Error("Could not resolve the first sheet ("+relId+") in the workbook");
-  if(t.startsWith("/")) t=t.slice(1);
-  if(!t.startsWith("xl/")) t="xl/"+t;
-  const sheet=await zip.get(t);
-  if(sheet==null) throw new Error("Sheet part not found in the .xlsx: "+t);
-  return kpiSheetRows(sheet, shared);
-}
-function kpiFind(norm, aliases){
-  for(const a of aliases){ const i=norm.indexOf(kpiNormHeader(a).toLowerCase()); if(i>=0) return i; }
-  return null;
-}
-function kpiMapHeaders(header, kind){
-  const ks=kindSpec(kind);
-  const norm=header.map(h=>kpiNormHeader(h).toLowerCase());
-  const cols={}, unitCols={};
-  Object.keys(ks.fields).forEach(t=>{ const i=kpiFind(norm, ks.fields[t].aliases); if(i!=null) cols[t]=i; });
-  Object.keys(ks.unitFields||{}).forEach(t=>{ const i=kpiFind(norm, ks.unitFields[t].aliases); if(i!=null) unitCols[t]=i; });
-  return { unit:kpiFind(norm, KPI_SPEC.unitAliases), serial:kpiFind(norm, KPI_SPEC.serialAliases),
-    site:kpiFind(norm, KPI_SPEC.siteAliases), cols, unitCols,
-    backfill: ks.backfillField ? kpiFind(norm, ks.backfillField.aliases) : null };
-}
-/* These exports carry a report title (and sometimes the project name) above the
-   header row, so find it by scoring the first rows on alias matches. Mirrors
-   kpi_reports.find_header. */
-function kpiFindHeader(rows){
-  const wanted=[KPI_SPEC.unitAliases, KPI_SPEC.serialAliases];
-  KPI_SPEC.kinds.forEach(ks=>{
-    Object.keys(ks.fields).forEach(t=>wanted.push(ks.fields[t].aliases));
-    Object.keys(ks.unitFields||{}).forEach(t=>wanted.push(ks.unitFields[t].aliases));
-  });
-  let best=0, bestScore=0;
-  rows.slice(0, KPI_SPEC.headerScan).forEach((row,i)=>{
-    const norm=row.map(h=>kpiNormHeader(h).toLowerCase());
-    if(!norm.some(Boolean)) return;
-    const score=wanted.filter(a=>kpiFind(norm,a)!=null).length;
-    if(score>bestScore){ best=i; bestScore=score; }
-  });
-  return best;
-}
-function kpiDetectKind(header, filename){
-  const base=String(filename||"").toLowerCase();
-  let best=null, bestScore=0;
-  KPI_SPEC.kinds.forEach(ks=>{
-    const m=kpiMapHeaders(header, ks.kind);
-    if(m.unit==null && m.serial==null) return;
-    const hits=ks.signals.filter(s=>s in m.cols).length;
-    if(!hits) return;
-    const score=hits*10+(ks.hints.some(h=>base.includes(h))?3:0);
-    if(score>bestScore){ best=ks.kind; bestScore=score; }
-  });
-  return best;
-}
-/* Mirrors kpi_reports.report_site: a project code in the title rows, else the
-   most common value of the report's own site column. */
-function kpiReportSite(rows, hi, siteCol){
-  for(let i=0;i<hi;i++){
-    for(const cell of rows[i]||[]){
-      const m=/\b(\d{9,13})\b/.exec(String(cell||""));
-      if(m) return m[1];
-    }
-  }
-  if(siteCol==null) return "";
-  const counts={};
-  for(let r=hi+1;r<rows.length;r++){
-    const v=String((rows[r]||[])[siteCol]||"").trim();
-    if(/^\d{9,13}$/.test(v)) counts[v]=(counts[v]||0)+1;
-  }
-  const keys=Object.keys(counts);
-  return keys.length ? keys.reduce((a,b)=>counts[b]>counts[a]?b:a) : "";
-}
-/* Mirrors kpi_reports._timeline — see there for why the initial-load blocks and
-   same-day duplicates are collapsed. */
-function kpiTimeline(events){
-  const byDate={};
-  events.forEach(e=>{ const d=e.date||""; if(d){ (byDate[d]=byDate[d]||[]).push(e); } });
-  return Object.keys(byDate).sort().map(d=>{
-    const group=byDate[d];
-    const snaps=group.filter(e=>e._backfill);
-    if(group.length>1 && snaps.length===group.length) return { date:d, status:"", arrival:true };
-    const pool=group.filter(e=>!e._backfill);
-    const keep=(pool.length?pool:group)[ (pool.length?pool:group).length-1 ];
-    const ev={ date:d, status:keep.status||"" };
-    ["prev","from","remark"].forEach(k=>{ if(keep[k]) ev[k]=keep[k]; });
-    if(keep._backfill) ev.arrival=true;
-    return ev;
-  });
-}
-function kpiExtract(rows, kind, filename){
-  if(!rows.length) throw new Error("Sheet is empty");
-  const hi=kpiFindHeader(rows);
-  const header=rows[hi].map(kpiNormHeader);
-  const m=kpiMapHeaders(header, kind);
-  if(m.unit==null && m.serial==null) throw new Error("No unit or serial column found. Headers: "+header.filter(Boolean).join(", ").slice(0,200));
-  const targets=Object.keys(m.cols);
-  if(!targets.length) throw new Error("No recognised "+kind+" columns. Headers: "+header.filter(Boolean).join(", ").slice(0,200));
-  const ks=kindSpec(kind);
-  const eventsMode = ks.mode==="events";
-  const ledgerMode = ks.mode==="ledger";
-  const bfValues = new Set(((ks.backfillField||{}).values)||[]);
-  const asOfField = ks.asOfField||"";
-  const units={}; const dates=[]; let rowCount=0;
-  for(let r=hi+1;r<rows.length;r++){
-    const arr=rows[r];
-    const at=i=>(i!=null&&i<arr.length)?arr[i]:"";
-    const unit=String(at(m.unit)||"").trim(), serial=String(at(m.serial)||"").trim();
-    const key=unit||(serial?("SN:"+serial):"");
-    if(!key) continue;
-    const rec={};
-    targets.forEach(t=>{
-      const val=KPI_COERCE[ks.fields[t].type](at(m.cols[t]));
-      if(val==null||val==="") return;
-      rec[t]=val;
-      if(t===asOfField) dates.push(val);
-    });
-    if(!Object.keys(rec).length) continue;
-    rowCount++;
-    const blk=units[key]||(units[key]={});
-    if(serial && !blk.serial) blk.serial=serial;
-    Object.keys(m.unitCols).forEach(t=>{
-      const val=KPI_COERCE[ks.unitFields[t].type](at(m.unitCols[t]));
-      if(val) blk[t]=val;                                  // newest row wins
-    });
-    if(eventsMode){
-      if(!rec[ks.eventDateField]) continue;                // an undated row is not an event
-      rec._backfill = m.backfill!=null && bfValues.has(String(at(m.backfill)||"").trim());
-      (blk._events=blk._events||[]).push(rec);
-    } else if(ledgerMode){
-      // A charge line needs a date and an amount; every aggregate is derived by
-      // the page from these lines, so nothing is pre-summed here.
-      if(!rec[ks.lineDateField] || rec[ks.lineAmountField]==null) continue;
-      (blk.items=blk.items||[]).push(rec);
-    } else {
-      Object.assign(blk, rec);
-    }
-  }
-  if(eventsMode){
-    let total=0;
-    Object.keys(units).forEach(key=>{
-      const tl=kpiTimeline(units[key]._events||[]);
-      delete units[key]._events;
-      if(!tl.length){ delete units[key]; return; }
-      units[key].events=tl; total+=tl.length;
-    });
-    rowCount=total;
-  } else if(ledgerMode){
-    let total=0;
-    Object.keys(units).forEach(key=>{
-      const items=units[key].items||[];
-      if(!items.length){ delete units[key]; return; }
-      items.sort((a,b)=> a[ks.lineDateField] < b[ks.lineDateField] ? -1
-        : (a[ks.lineDateField] > b[ks.lineDateField] ? 1 : 0));   // oldest first
-      total+=items.length;
-    });
-    rowCount=total;                                    // charge lines kept, not rows read
-  }
-  // "As of" is when the data was true: only a backward-looking field counts.
-  const past=dates.filter(d=>d<=TODAY).sort();
-  return { units, report:{ kind, label:ks.label, file:String(filename||""), rows:rowCount,
-    units:Object.keys(units).length, asOf:past.length?past[past.length-1]:"",
-    site:kpiReportSite(rows, hi, m.site), columns:targets.slice().sort() } };
-}
-/* ============================================================
    In-memory preview — apply parsed values to this page without publishing.
    ============================================================ */
-/* Mirrors build/kpi_reports.merge and the Worker's /kpis merge: the families in
-   `extracted` replace their block on every unit and leave the others untouched.
-   A preview that merged differently from the server would show numbers the
-   publish wouldn't produce, so worker/tests/kpi_merge.test.mjs pins the two
-   together. */
-function kpiMerge(bundle, extracted){
-  const src=(bundle&&bundle.units)||{};
-  const units={};
-  Object.keys(src).forEach(k=>{ units[k]=Object.assign({}, src[k]); });
-  let reports=(((bundle&&bundle.reports)||[]).filter(r=>r&&typeof r==="object")).slice();
-  extracted.forEach(ex=>{
-    const kind=ex.report.kind;
-    Object.keys(units).forEach(k=>{ const b=Object.assign({}, units[k]); delete b[kind]; units[k]=b; });
-    Object.keys(ex.units).forEach(key=>{
-      const blk=Object.assign({}, units[key]||{});
-      const rec=Object.assign({}, ex.units[key]);
-      const serial=rec.serial; delete rec.serial;
-      if(serial && !blk.serial) blk.serial=serial;
-      blk[kind]=rec;
-      units[key]=blk;
-    });
-    reports=reports.filter(r=>r.kind!==kind).concat([ex.report]);
-  });
-  Object.keys(units).forEach(k=>{ if(!KPI_KINDS.some(kk=>units[k][kk])) delete units[k]; });
-  reports.sort((a,b)=>KPI_KINDS.indexOf(a.kind)-KPI_KINDS.indexOf(b.kind));
-  return { builtAt:(bundle&&bundle.builtAt)||"", reports, units };
-}
 function rerenderAll(){
-  buildRows(); renderCoverage(); renderFreshness(); renderTiles(); renderTrends(); renderTable();
+  buildRows(); renderFreshness(); renderTiles(); renderTrends(); renderTable();
   renderPreviewBar();
 }
 function renderPreviewBar(){
@@ -1919,31 +1586,37 @@ function renderPreviewBar(){
   const names=kinds.map(k=>(kindSpec(k)||{}).label||k).join(", ");
   el.style.display="flex";
   el.innerHTML='<span class="pb-k">Preview</span>'+
-    '<span class="pb-t">Showing <strong>'+esc(names)+'</strong> from the file(s) you just parsed. '+
-    'Nothing is published — only you see this, and a reload clears it.</span>'+
+    '<span class="pb-t">Showing <strong>'+esc(names)+'</strong> from the file(s) parsed in the '+
+    'KPI builder. Nothing is published — only you see this, and a reload clears it.</span>'+
     '<button class="btn small secondary" id="prevDiscard" type="button">Discard</button>'+
-    '<button class="btn small" id="prevPublish" type="button">Publish for real</button>';
+    '<a class="btn small" href="admin.html#kpiBuilder">Back to the builder</a>';
   $("#prevDiscard").addEventListener("click", discardPreview);
-  $("#prevPublish").addEventListener("click", ()=>{
-    const panel=$("#importPanel"); panel.style.display="block"; panel.scrollIntoView({block:"center"});
-  });
 }
-function applyPreview(){
-  const p=STATE.pending;
-  if(!p || !p.extracted.length) return;
+/* The builder on admin.html parses the files and leaves the result here; this
+   page only renders it. Read once and delete: a reload has to fall back to the
+   published bundle, or a preview would quietly become the thing people trust. */
+function takeHandoff(){
+  let raw=null;
+  try{ raw=nsGet(PREVIEW_KEY); nsDel(PREVIEW_KEY); }catch(e){ return null; }
+  if(!raw) return null;
+  try{
+    const p=JSON.parse(raw);
+    return (p && Array.isArray(p.extracted) && p.extracted.length) ? p : null;
+  }catch(e){ return null; }
+}
+function applyPreview(extracted){
+  if(!extracted || !extracted.length) return;
   if(!STATE.published) STATE.published=STATE.kpis;          // keep the real bundle to go back to
   const now=new Date().toISOString().slice(0,19)+"Z";
   // Stamped as imported now and flagged preview, so the freshness net doesn't
-  // call freshly-parsed data stale and the coverage strip can label it.
-  const stamped=p.extracted.map(ex=>({ units:ex.units,
+  // call freshly-parsed data stale and the preview bar can label it.
+  const stamped=extracted.map(ex=>({ units:ex.units,
     report:Object.assign({}, ex.report, { importedAt:now, preview:true }) }));
   STATE.kpis=kpiMerge(STATE.published, stamped);
   STATE.previewKinds=stamped.map(e=>e.report.kind);
   STATE.open.clear();
   rerenderAll();
-  $("#importPanel").style.display="none";
   toast("Previewing "+STATE.previewKinds.length+" report(s) — nothing published");
-  window.scrollTo({ top:0, behavior:"smooth" });
 }
 function discardPreview(){
   if(!STATE.published) return;
@@ -1951,81 +1624,6 @@ function discardPreview(){
   STATE.open.clear();
   rerenderAll();
   toast("Preview discarded — showing published data");
-}
-
-/* ---------- import UI ---------- */
-async function onFiles(files){
-  const list=[...files];
-  if(!list.length){ STATE.pending=null; renderPreview(); return; }
-  const extracted=[], failed=[];
-  for(const f of list){
-    try{
-      const rows=await kpiFirstSheetRows(f);
-      // The header is not necessarily row 0 — these exports put a report title
-      // above it — so scan for it before detecting the family, exactly as
-      // kpi_reports.read_report does.
-      const hi=rows.length?kpiFindHeader(rows):0;
-      const header=rows.length?rows[hi].map(kpiNormHeader):[];
-      const kind=kpiDetectKind(header, f.name);
-      if(!kind){ failed.push({name:f.name, why:"Not a recognised KPI report. Headers: "+header.filter(Boolean).slice(0,8).join(", ")}); continue; }
-      extracted.push(kpiExtract(rows, kind, f.name));
-    }catch(e){ failed.push({name:f.name, why:e.message}); }
-  }
-  // One family per publish: a second file of the same kind would silently
-  // overwrite the first, so make the operator choose.
-  const kinds=extracted.map(e=>e.report.kind);
-  const dupe=kinds.find((k,i)=>kinds.indexOf(k)!==i);
-  if(dupe){
-    failed.push({name:"(multiple files)", why:"Two files both look like the "+dupe+" report — import them one at a time."});
-    STATE.pending={extracted:[], failed}; renderPreview(); return;
-  }
-  STATE.pending={extracted, failed};
-  renderPreview();
-}
-function renderPreview(){
-  const el=$("#kpiPreview"), p=STATE.pending;
-  if(!p){ el.innerHTML=""; $("#kpiPublish").disabled=true; $("#kpiPreviewBtn").disabled=true; return; }
-  let html="";
-  if(p.extracted.length){
-    html+='<div class="table-scroll" style="margin-bottom:12px;"><table><thead><tr>'+
-      '<th>File</th><th>Report</th><th>Rows</th><th>Units</th><th>Site</th><th>As of</th><th>Columns matched</th>'+
-      '</tr></thead><tbody>'+p.extracted.map(e=>{
-        const r=e.report;
-        const mismatch = r.site && STATE.site && r.site!==STATE.site;
-        return '<tr><td>'+esc(r.file)+'</td><td>'+esc(r.label)+'</td><td>'+r.rows.toLocaleString()+
-          (kindSpec(r.kind).mode==="events"?" events":"")+'</td><td>'+r.units+'</td>'+
-          '<td>'+(r.site?(mismatch?('<span class="flag bad">'+esc(r.site)+'</span>'):esc(r.site)):DASH)+'</td>'+
-          '<td>'+esc(r.asOf?fmtDate(r.asOf):DASH)+'</td><td>'+esc(r.columns.map(c=>FIELD_LABELS[c]||c).join(", "))+'</td></tr>';
-      }).join("")+'</tbody></table></div>';
-    const names=p.extracted.map(e=>'<strong>'+esc(e.report.label)+'</strong>');
-    const list=names.length>1 ? names.slice(0,-1).join(", ")+" and "+names[names.length-1] : names[0];
-    html+='<div class="hintbox">Publishing replaces '+list+
-      ' for every unit and leaves the other report families as they are.</div>';
-  }
-  p.failed.forEach(f=>{ html+='<div class="hintbox"><strong>'+esc(f.name)+'</strong> — '+esc(f.why)+'</div>'; });
-  if(!p.extracted.length && !p.failed.length) html='<div class="hintbox">Nothing parsed from those files.</div>';
-  el.innerHTML=html;
-  $("#kpiPublish").disabled = !p.extracted.length;
-  $("#kpiPreviewBtn").disabled = !p.extracted.length;
-}
-async function publishKpis(){
-  const p=STATE.pending; if(!p||!p.extracted.length) return;
-  $("#kpiPublish").disabled=true; toast("Publishing…");
-  try{
-    const r=await fetch(wbase()+"/kpis",{method:"POST",
-      headers:{"Content-Type":"application/json","x-admin-key":adminKey()},
-      body:JSON.stringify({extracted:p.extracted})});
-    const d=await r.json().catch(()=>({}));
-    if(!r.ok||!d.ok){ toast("Publish failed: "+((d&&d.error)||("HTTP "+r.status))); $("#kpiPublish").disabled=false; return; }
-    toast("Published "+(d.units||0)+" unit(s) — live in ~1–2 min");
-    STATE.pending=null; $("#kpiFiles").value=""; renderPreview();
-    $("#importPanel").style.display="none";
-    // The published data is the truth now; drop the preview overlay.
-    STATE.published=null; STATE.previewKinds=[];
-    await loadKpis(); rerenderAll();
-  }catch(e){
-    toast("Publish failed: "+e.message); $("#kpiPublish").disabled=false;
-  }
 }
 
 /* ---------- URL state (shareable views) ---------- */
@@ -2036,6 +1634,8 @@ function syncUrl(){
   const t=$("#fTrade").value; if(t) p.set("trade",t);
   const s=$("#fStatus").value; if(s) p.set("status",s);
   const f=$("#fFocus").value; if(f) p.set("focus",f);
+  const bt=$("#fBilling").value; if(bt) p.set("billing",bt);
+  const cl=$("#fClass").value; if(cl) p.set("class",cl);
   if(STATE.sort&&STATE.sort.key) p.set("sort",STATE.sort.key+":"+(STATE.sort.dir||"asc"));
   if(STATE.page>1) p.set("page",String(STATE.page));
   const qs=p.toString();
@@ -2044,8 +1644,10 @@ function syncUrl(){
 function readUrl(){
   const p=new URLSearchParams(location.search);
   const out={ site:p.get("site")||"", q:p.get("q")||"", trade:p.get("trade")||"",
-    status:p.get("status")||"", focus:p.get("focus")||"", page:parseInt(p.get("page")||"1",10)||1,
-    admin:p.get("admin")||"" };
+    status:p.get("status")||"", focus:p.get("focus")||"",
+    billing:p.get("billing")||"", cls:p.get("class")||"",
+    page:parseInt(p.get("page")||"1",10)||1,
+  };
   const s=p.get("sort");
   if(s){ const [k,d]=s.split(":"); if(k) out.sort={key:k, dir:d==="desc"?"desc":"asc"}; }
   return out;
@@ -2055,18 +1657,18 @@ async function selectSite(code,{push=true}={}){
   if(code) cacheSet(SITE_KEY,String(code)); else nsDel(SITE_KEY);
   $("#siteSelect").value=code;
   await loadSite(code);
-  fillFilters();
   buildRows();
+  fillFilters();
   const s=STATE.siteIndex.find(x=>x.code===code);
   $("#count").textContent = code ? ((s?s.name+" · ":"")+STATE.rows.length+" units") : "";
-  renderCoverage(); renderFreshness(); renderTiles(); renderTrends(); renderTable();
+  renderFreshness(); renderTiles(); renderTrends(); renderTable();
   if(push) syncUrl();
 }
 function bind(){
   $("#siteSelect").addEventListener("change", e=>selectSite(e.target.value));
   let qT=null;
   $("#q").addEventListener("input", ()=>{ clearTimeout(qT); qT=setTimeout(()=>{ STATE.page=1; renderTable(); syncUrl(); },160); });
-  ["#fTrade","#fStatus","#fFocus"].forEach(sel=>$(sel).addEventListener("change", ()=>{ STATE.page=1; renderTable(); syncUrl(); }));
+  ["#fTrade","#fStatus","#fFocus","#fBilling","#fClass"].forEach(sel=>$(sel).addEventListener("change", ()=>{ STATE.page=1; renderTable(); syncUrl(); }));
   $("#exportCsv").addEventListener("click", exportCsv);
   $("#pgSize").addEventListener("change", ()=>{ STATE.page=1; renderTable(); syncUrl(); });
   $("#pgFirst").addEventListener("click", ()=>gotoPage(1));
@@ -2087,20 +1689,13 @@ function bind(){
     const key = btn ? btn.dataset.toggle : (row ? row.dataset.key : null);
     if(key) toggleDetail(key);
   });
-  $("#kpiFiles").addEventListener("change", e=>onFiles(e.target.files));
-  $("#kpiPreviewBtn").addEventListener("click", applyPreview);
-  $("#kpiPublish").addEventListener("click", publishKpis);
-  $("#kpiCancel").addEventListener("click", ()=>{
-    $("#importPanel").style.display="none"; STATE.pending=null; $("#kpiFiles").value=""; renderPreview();
-  });
   bindCopy();
+  window.addEventListener("resize", syncDetailWidth);
 }
 async function init(){
   bind();
-  STATE.admin=!!adminKey();
   await Promise.all([loadMeta(), loadSiteIndex(), loadKpis()]);
   const u=readUrl();
-  if(STATE.admin && (u.admin==="import" || u.admin==="1")) $("#importPanel").style.display="block";
   if(u.q) $("#q").value=u.q;
   if(u.trade) $("#fTrade").value=u.trade;      // set again after fillFilters below
   if(u.focus) $("#fFocus").value=u.focus;
@@ -2113,9 +1708,15 @@ async function init(){
   // Filters that depend on the loaded site's option lists.
   if(u.trade){ $("#fTrade").value=u.trade; }
   if(u.status){ $("#fStatus").value=u.status; }
+  if(u.billing){ $("#fBilling").value=u.billing; }
+  if(u.cls){ $("#fClass").value=u.cls; }
   if(u.page>1) STATE.page=u.page;
   renderTable();
   syncUrl();
+  // A bundle handed over by the builder overlays the published one, in this
+  // browser only. Last, so a failure here still leaves a working page.
+  const h=takeHandoff();
+  if(h) applyPreview(h.extracted);
 }
 init();
 </script>

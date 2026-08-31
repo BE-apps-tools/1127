@@ -1,7 +1,7 @@
 /**
  * Coercion-parity tests for the KPI report adapters.
  *
- * kpis.html re-implements build/kpi_reports.py's coerce_num/coerce_int/coerce_date
+ * kpi-core.js re-implements build/kpi_reports.py's coerce_num/coerce_int/coerce_date
  * so the browser importer and the Action build turn the same spreadsheet cell into
  * the same JSON value. The case table is shared: build/tests/test_build_kpis.py
  * asserts the Python side against it, this asserts the JS side, so changing one
@@ -14,21 +14,11 @@
  */
 import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
+import { KPI } from "./_kpi_core.mjs";
 
-const page = await readFile(new URL("../../kpis.html", import.meta.url), "utf8");
 const cases = JSON.parse(await readFile(new URL("../../build/tests/fixtures/kpi_coerce_cases.json", import.meta.url), "utf8"));
 
-const specMatch = /const KPI_SPEC = (\{.*?\});/s.exec(page);
-assert.ok(specMatch, "KPI_SPEC not found in kpis.html");
-const start = page.indexOf("function kpiNum(");
-const endMark = "const KPI_COERCE=";
-const end = page.indexOf(endMark);
-assert.ok(start > 0 && end > start, "couldn't find the coercion block in kpis.html");
-// kpiDate reads maxYear off the spec, so the spec comes along for the ride.
-const src = "const KPI_SPEC = " + specMatch[1] + ";\n"
-  + page.slice(start, end) + "\nexport { kpiNum, kpiInt, kpiDate };\n";
-const { kpiNum, kpiInt, kpiDate } = await import(
-  "data:text/javascript;base64," + Buffer.from(src).toString("base64"));
+const { num: kpiNum, int: kpiInt, date: kpiDate } = KPI;
 
 let n = 0;
 for (const [raw, want] of cases.num){

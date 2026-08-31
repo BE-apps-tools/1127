@@ -1,5 +1,5 @@
 /**
- * End-to-end parity for the browser import pipeline in kpis.html.
+ * End-to-end parity for the browser import pipeline in kpi-core.js.
  *
  * The unit tests cover the pieces; this runs the whole chain the way the page
  * does — read the .xlsx, find the header row, detect the family, extract — over
@@ -21,24 +21,13 @@
  */
 import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
+import { KPI } from "./_kpi_core.mjs";
 
-const page = await readFile(new URL("../../kpis.html", import.meta.url), "utf8");
 const golden = JSON.parse(await readFile(
   new URL("../../build/tests/fixtures/kpi_expected.json", import.meta.url), "utf8"));
 
-/* Lift the whole import pipeline: from the XML helpers through kpiExtract. */
-const specMatch = /const KPI_SPEC = (\{.*?\});/s.exec(page);
-const from = page.indexOf("function kpiDecodeXml(s){");
-const to = page.indexOf("/* ============================================================\n   In-memory preview");
-assert.ok(specMatch && from > 0 && to > from, "couldn't slice the import pipeline out of kpis.html");
-const src = [
-  "const KPI_SPEC = " + specMatch[1] + ";",
-  "const kindSpec = k => KPI_SPEC.kinds.find(x => x.kind === k);",
-  'const TODAY = new Date().toISOString().slice(0,10);',
-  page.slice(from, to),
-  "export { kpiFirstSheetRows, kpiFindHeader, kpiDetectKind, kpiExtract, kpiNormHeader };",
-].join("\n");
-const M = await import("data:text/javascript;base64," + Buffer.from(src).toString("base64"));
+const M = { kpiFirstSheetRows: KPI.firstSheetRows, kpiFindHeader: KPI.findHeader,
+  kpiDetectKind: KPI.detectKind, kpiExtract: KPI.extract, kpiNormHeader: KPI.normHeader };
 
 /** The page's own flow: parse a file, find its header, detect the family, extract. */
 async function importFile(name){
@@ -84,4 +73,4 @@ for (const [name, want] of Object.entries(golden.fixtures)){
   checks += 2;
 }
 
-console.log(`kpi import pipeline (kpis.html vs Python golden): ${checks} assertions OK over ${Object.keys(golden.fixtures).length} fixtures`);
+console.log(`kpi import pipeline (kpi-core.js vs Python golden): ${checks} assertions OK over ${Object.keys(golden.fixtures).length} fixtures`);

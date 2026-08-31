@@ -1,10 +1,11 @@
-"""The KPI report spec must be identical in Python and in kpis.html.
+"""The KPI report spec must be identical in Python and in kpi-core.js.
 
 The Action build (build/kpi_reports.py) and the in-browser importer both extract
 records from the same spreadsheets and write to the same data/kpis.json, so a
 header alias added on one side only would silently produce two different
-datasets. The page embeds a verbatim copy of SPEC between the KPI-REPORT-SPEC
-markers; `py scripts/sync_kpi_spec.py` regenerates it.
+datasets. kpi-core.js — the engine the admin KPI builder and the KPI page share —
+embeds a verbatim copy of SPEC between the KPI-REPORT-SPEC markers;
+`py scripts/sync_kpi_spec.py` regenerates it.
 """
 import json
 import os
@@ -13,26 +14,26 @@ import re
 from build.kpi_reports import SPEC
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-PAGE = os.path.join(ROOT, "kpis.html")
+CORE = os.path.join(ROOT, "kpi-core.js")
 BLOCK_RE = re.compile(
     r"/\* KPI-REPORT-SPEC-START \*/\s*const KPI_SPEC = (\{.*?\});\s*/\* KPI-REPORT-SPEC-END \*/",
     re.DOTALL)
 
 
-def page_src():
-    with open(PAGE, encoding="utf-8") as f:
+def core_src():
+    with open(CORE, encoding="utf-8") as f:
         return f.read()
 
 
 def embedded_spec():
-    m = BLOCK_RE.search(page_src())
-    assert m, "no KPI-REPORT-SPEC block in kpis.html — run py scripts/sync_kpi_spec.py"
+    m = BLOCK_RE.search(core_src())
+    assert m, "no KPI-REPORT-SPEC block in kpi-core.js — run py scripts/sync_kpi_spec.py"
     return json.loads(m.group(1))
 
 
 def test_embedded_spec_matches_python():
     assert embedded_spec() == json.loads(json.dumps(SPEC)), \
-        "kpis.html is out of date — run py scripts/sync_kpi_spec.py"
+        "kpi-core.js is out of date — run py scripts/sync_kpi_spec.py"
 
 
 def test_field_types_are_supported_by_both_ports():
@@ -60,12 +61,11 @@ def test_aliases_are_unique_within_a_kind():
                 seen[key] = target
 
 
-def test_page_labels_every_field():
+def test_core_labels_every_field():
     # A field with no entry in FIELD_LABELS would render as a raw camelCase key
-    # in the per-unit detail panel and the CSV header.
-    src = page_src()
-    m = re.search(r"const FIELD_LABELS = \{(.*?)\n\};", src, re.DOTALL)
-    assert m, "FIELD_LABELS not found in kpis.html"
+    # in the builder's "matched" line, the per-unit detail panel and the CSV header.
+    m = re.search(r"const FIELD_LABELS = \{(.*?)\n\};", core_src(), re.DOTALL)
+    assert m, "FIELD_LABELS not found in kpi-core.js"
     labelled = set(re.findall(r"(\w+)\s*:", m.group(1)))
     for ks in SPEC["kinds"]:
         for target in list(ks["fields"]) + list(ks.get("unitFields", {})):

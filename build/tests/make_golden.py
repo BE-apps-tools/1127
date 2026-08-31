@@ -4,7 +4,7 @@ It holds Python's extraction of each KPI fixture. Two tests hold both import
 paths to it:
 
   * ``test_build_kpis.py::test_matches_the_golden`` — the Python adapters
-  * ``worker/tests/kpi_pipeline.test.mjs`` — the browser pipeline in kpis.html
+  * ``worker/tests/kpi_pipeline.test.mjs`` — the browser pipeline in kpi-core.js
 
 so a change to either port that alters what gets extracted fails until the
 golden is regenerated deliberately and the diff reviewed. That diff is the
@@ -24,7 +24,7 @@ FIXTURES = ["kpi_rates_mini.xlsx", "kpi_rental_mini.xlsx", "kpi_transfers_mini.x
             "kpi_damage_mini.xlsx", "kpi_util_mini.xlsx"]
 COMMENT = (
     "Python's extraction of each fixture (build/kpi_reports.read_report). "
-    "worker/tests/kpi_pipeline.test.mjs runs the browser pipeline in kpis.html over the same "
+    "worker/tests/kpi_pipeline.test.mjs runs the browser pipeline in kpi-core.js over the same "
     "fixtures and asserts it produces exactly this. Regenerate deliberately with "
     "py build/tests/make_golden.py and review the diff — a change here is a change to what "
     "both import paths extract."

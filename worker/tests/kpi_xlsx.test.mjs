@@ -1,28 +1,22 @@
 /**
- * Regression tests for the .xlsx part resolution in kpis.html.
+ * Regression tests for the .xlsx part resolution in kpi-core.js.
  *
  * XML attribute order is arbitrary in OOXML, and it differs by writer:
  *   Excel      <Relationship Id="rId1" Type="…" Target="worksheets/sheet1.xml"/>
  *   the real
  *   JDE export <Relationship Type="…" Target="worksheets/sheet1.xml" Id="rId6"/>
  *
- * The page originally matched Id and Target with one positional regex, so it
+ * The port originally matched Id and Target with one positional regex, so it
  * resolved the sheet path to "" on every real export and read zero rows — while
  * the Python side, which uses a real XML parser, handled them fine. Only feeding
  * the actual files through a browser caught it. These cases pin both orders.
  *
  *   node worker/tests/kpi_xlsx.test.mjs
  */
-import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
+import { KPI } from "./_kpi_core.mjs";
 
-const page = await readFile(new URL("../../kpis.html", import.meta.url), "utf8");
-const from = page.indexOf("function kpiAttr(tag, name){");
-const to = page.indexOf("async function kpiFirstSheetRows(file){");
-assert.ok(from > 0 && to > from, "couldn't slice the part-resolution helpers out of kpis.html");
-const { kpiAttr, kpiRelMap, kpiSheetRelId } = await import(
-  "data:text/javascript;base64," + Buffer.from(
-    page.slice(from, to) + "\nexport { kpiAttr, kpiRelMap, kpiSheetRelId };\n").toString("base64"));
+const { attr: kpiAttr, relMap: kpiRelMap, sheetRelId: kpiSheetRelId } = KPI;
 
 let n = 0;
 const eq = (a, b, m) => { assert.equal(a, b, m); n++; };

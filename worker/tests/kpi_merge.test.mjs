@@ -1,7 +1,7 @@
 /**
  * Merge parity: the in-page preview vs the Worker's real publish.
  *
- * `kpiMerge` in kpis.html applies parsed reports to the page in memory so an
+ * `KPI.merge` in kpi-core.js applies parsed reports to the KPI page in memory so an
  * admin can check the numbers before publishing. If it merged differently from
  * the Worker, the preview would show figures the publish wouldn't produce —
  * which is worse than having no preview at all.
@@ -14,23 +14,12 @@
  */
 import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
+import { KPI } from "./_kpi_core.mjs";
 
-const page = await readFile(new URL("../../kpis.html", import.meta.url), "utf8");
 const src = await readFile(new URL("../src/index.js", import.meta.url), "utf8");
 const worker = (await import("data:text/javascript;base64," + Buffer.from(src).toString("base64"))).default;
 
-/* Lift kpiMerge (and the kind list it orders by) out of the page. */
-const specMatch = /const KPI_SPEC = (\{.*?\});/s.exec(page);
-const from = page.indexOf("function kpiMerge(bundle, extracted){");
-const to = page.indexOf("function rerenderAll()");
-assert.ok(specMatch && from > 0 && to > from, "couldn't slice kpiMerge out of kpis.html");
-const mod = await import("data:text/javascript;base64," + Buffer.from([
-  "const KPI_SPEC = " + specMatch[1] + ";",
-  "const KPI_KINDS = KPI_SPEC.kinds.map(k => k.kind);",
-  page.slice(from, to),
-  "export { kpiMerge, KPI_KINDS };",
-].join("\n")).toString("base64"));
-const { kpiMerge } = mod;
+const { merge: kpiMerge } = KPI;
 
 const ENV = { GH_TOKEN: "t", GH_REPO: "o/r", ADMIN_KEY: "ak" };
 const b64 = s => Buffer.from(s, "utf8").toString("base64");

@@ -130,15 +130,19 @@ only a serial.
 Two paths, same result — importing one report never disturbs the others.
 
 **Browser (no git access needed):**
-1. Sign in as admin (**Admin** tab), then open **KPIs** and add `?admin=import` to
-   the address (or use the **KPI reports** card on the Admin tab).
-2. Drop one or more `.xlsx` reports. Each file's family is detected from its
+1. Sign in as admin on the **Admin** tab, then open the **KPI builder** card.
+2. Drop all the `.xlsx` reports at once. Each file's family is recognised from its
    **column headers**, so the filename, the column order, and even a report title
    above the header row don't matter. Files are parsed on your device — the
    spreadsheet is never uploaded, only the extracted per-unit values.
-3. Check the preview (family, rows/events, units, site, columns matched) →
-   **Publish KPI data**. If the **Site** column is flagged, that export is stamped
-   with a different jobsite — stop and check you exported the right one.
+3. Read the cards: one per family, with the file, rows/events, units, jobsite and
+   the columns it matched. A family you didn't drop says **not dropped** — whatever
+   is already live stays. If two files are stamped with different jobsites the
+   builder refuses to publish: rerun the exports for one site.
+4. Optionally **Preview on the KPI page** — the real tiles and charts, applied in
+   your browser only, nothing committed and nobody else affected. A reload drops it.
+5. **Publish for everyone**. `main` gets an `Asset KPIs: …` commit and the page
+   picks it up in about a minute.
 
 **Commit to `source/` (automatic):** drop the report `.xlsx` in `source/` alongside
 the Equipment Master. The **build-data** Action detects it and rebuilds
@@ -327,5 +331,5 @@ Every view is shareable (site, search, filters, sort and page live in the URL) a
 | A KPI report imported but matched few units | The report's Unit #s don't match the Equipment Master's (e.g. it covers another site, or is keyed by serial). The coverage strip counts what matched and flags a report stamped with a different site; "Elsewhere" counts report units not on this jobsite. |
 | Downtime looks too high for a unit | Open its row and read the status history. A long span usually means the unit was left in `DN`/`DS` in JDE after it was fixed — the fix is in JDE, and the next export corrects the number. |
 | A unit shows no downtime but you know it broke | The transfer report only covers status changes it recorded; a unit with no history shows "—" rather than 0. The coverage strip says how many units have history. |
-| Publish KPI data says an error | The Worker needs the `/kpis` route deployed and `GH_TOKEN` with Contents: Read+write — see `worker/SETUP.md` §6. |
+| **Publish for everyone** in the KPI builder errors | The Worker needs the `/kpis` route deployed and `GH_TOKEN` with Contents: Read+write — see `worker/SETUP.md` §6. |
 | Teams cards stopped arriving (requests still land as Issues) | Only the alert is broken — nothing is lost. Run `wrangler tail` and submit a test request: a `teams webhook …` line gives the status. Usual causes: the Teams workflow was turned off/deleted, or `TEAMS_WEBHOOK_URL` is unset or stale. See `worker/SETUP.md` §7. |
