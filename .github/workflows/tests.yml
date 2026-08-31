@@ -48,3 +48,19 @@ jobs:
       # exercised straight out of kpis.html.
       - name: KPI downtime maths (kpis.html)
         run: node worker/tests/kpi_downtime.test.mjs
+
+      # The in-page preview must merge exactly as the real publish does, or it
+      # would show numbers the publish wouldn't produce.
+      - name: KPI merge parity (page preview vs worker publish)
+        run: node worker/tests/kpi_merge.test.mjs
+
+      # .xlsx part resolution: OOXML attribute order varies by writer, and the
+      # real exports put Target before Id / r last. Positional regexes silently
+      # read zero rows.
+      - name: KPI xlsx part resolution (kpis.html)
+        run: node worker/tests/kpi_xlsx.test.mjs
+
+      # The whole browser import chain over the same fixtures as Python, held to
+      # the committed golden — the end-to-end guard for port divergence.
+      - name: KPI import pipeline parity (kpis.html vs Python golden)
+        run: node worker/tests/kpi_pipeline.test.mjs

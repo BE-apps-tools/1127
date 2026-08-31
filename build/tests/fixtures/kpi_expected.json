@@ -1,0 +1,305 @@
+{
+ "_comment": "Python's extraction of each fixture (build/kpi_reports.read_report). worker/tests/kpi_pipeline.test.mjs runs the browser pipeline in kpis.html over the same fixtures and asserts it produces exactly this. Regenerate deliberately with py build/tests/make_golden.py and review the diff \u2014 a change here is a change to what both import paths extract.",
+ "fixtures": {
+  "kpi_rates_mini.xlsx": {
+   "report": {
+    "asOf": "",
+    "columns": [
+     "billingType",
+     "getComponent",
+     "hourlyBillingRate",
+     "monthlyBillingRate",
+     "monthlyNonHourlyOwnership",
+     "monthlyOwnership",
+     "oilComponent",
+     "ownershipComponent",
+     "pmComponent",
+     "projectNumber",
+     "rateBegin",
+     "rateEnd",
+     "rateGroup",
+     "rateGroupDesc",
+     "repairComponent",
+     "tiresComponent"
+    ],
+    "file": "kpi_rates_mini.xlsx",
+    "kind": "rates",
+    "label": "Equipment rates (charge-out)",
+    "rows": 3,
+    "site": "",
+    "units": 3
+   },
+   "units": {
+    "U1": {
+     "billingType": "Hourly",
+     "getComponent": 1.0,
+     "hourlyBillingRate": 51.61,
+     "monthlyBillingRate": 7392.0,
+     "monthlyNonHourlyOwnership": 0.0,
+     "monthlyOwnership": 7392.0,
+     "oilComponent": 3.86,
+     "ownershipComponent": 42.0,
+     "pmComponent": 0.66,
+     "projectNumber": "SITE1",
+     "rateBegin": "2026-01-01",
+     "rateEnd": "2027-04-30",
+     "rateGroup": "364",
+     "rateGroupDesc": "Whl Ldr LT 2 cu yards",
+     "repairComponent": 2.59,
+     "tiresComponent": 1.5
+    },
+    "U2": {
+     "billingType": "Non Hourly",
+     "hourlyBillingRate": 0.0,
+     "monthlyBillingRate": 1250.0,
+     "monthlyNonHourlyOwnership": 1250.0,
+     "monthlyOwnership": 0.0,
+     "projectNumber": "SITE1",
+     "rateBegin": "2026-01-01",
+     "rateEnd": "2027-04-30",
+     "rateGroup": "512",
+     "rateGroupDesc": "Jobcost Eq w/ mo rent"
+    },
+    "U9": {
+     "billingType": "Non Hourly",
+     "hourlyBillingRate": 0.0,
+     "monthlyBillingRate": 45.0,
+     "monthlyNonHourlyOwnership": 45.0,
+     "monthlyOwnership": 0.0,
+     "projectNumber": "SITE1",
+     "rateGroup": "900",
+     "rateGroupDesc": "Portable Radio - Small"
+    }
+   }
+  },
+  "kpi_rental_mini.xlsx": {
+   "report": {
+    "asOf": "",
+    "columns": [
+     "acquiredDate",
+     "bareRentalRate",
+     "billedThroughDate",
+     "billingType",
+     "contractDays",
+     "eqStatus",
+     "hourlyRate",
+     "monthlyNonHourlyRate",
+     "po",
+     "totalNonHourlyRate",
+     "vendor"
+    ],
+    "file": "kpi_rental_mini.xlsx",
+    "kind": "rental",
+    "label": "Rental contracts (anniversary)",
+    "rows": 3,
+    "site": "",
+    "units": 3
+   },
+   "units": {
+    "U1": {
+     "acquiredDate": "2025-08-04",
+     "bareRentalRate": 0.0,
+     "billedThroughDate": "2027-08-01",
+     "billingType": "Hourly",
+     "contractDays": 30,
+     "eqStatus": "WK",
+     "hourlyRate": 36.35,
+     "monthlyNonHourlyRate": 0.0,
+     "po": "52120606",
+     "serial": "S1",
+     "totalNonHourlyRate": 0.0,
+     "vendor": "Acme Equipment Co"
+    },
+    "U2": {
+     "acquiredDate": "2025-03-19",
+     "bareRentalRate": 1190.0,
+     "billedThroughDate": "2025-12-09",
+     "billingType": "Non Hourly",
+     "contractDays": 28,
+     "eqStatus": "WK",
+     "hourlyRate": 0.0,
+     "monthlyNonHourlyRate": 125.0,
+     "po": "52115182",
+     "serial": "S2",
+     "totalNonHourlyRate": 1315.0,
+     "vendor": "Northern Rentals LLC"
+    },
+    "U3": {
+     "acquiredDate": "2025-08-31",
+     "bareRentalRate": 0.0,
+     "billingType": "Non Hourly",
+     "contractDays": 30,
+     "eqStatus": "DN",
+     "hourlyRate": 0.0,
+     "monthlyNonHourlyRate": -150.0,
+     "po": "52130000",
+     "serial": "S3",
+     "totalNonHourlyRate": -150.0,
+     "vendor": "Acme Equipment Co"
+    }
+   }
+  },
+  "kpi_transfers_mini.xlsx": {
+   "report": {
+    "asOf": "2025-11-14",
+    "columns": [
+     "date",
+     "from",
+     "prev",
+     "remark",
+     "status"
+    ],
+    "file": "kpi_transfers_mini.xlsx",
+    "kind": "transfers",
+    "label": "Transfer / status history",
+    "rows": 10,
+    "site": "",
+    "units": 5
+   },
+   "units": {
+    "U1": {
+     "eqClass": "Excavator",
+     "events": [
+      {
+       "arrival": true,
+       "date": "2025-08-31",
+       "remark": "arrived on site",
+       "status": "WK"
+      },
+      {
+       "date": "2025-09-10",
+       "from": "SITE1",
+       "prev": "WK",
+       "remark": "hydraulic leak",
+       "status": "DN"
+      },
+      {
+       "date": "2025-09-20",
+       "from": "SITE1",
+       "prev": "DN",
+       "remark": "repaired 10 days later",
+       "status": "WK"
+      },
+      {
+       "date": "2025-09-30",
+       "from": "SITE1",
+       "prev": "WK",
+       "remark": "to the shop",
+       "status": "DS"
+      },
+      {
+       "date": "2025-10-04",
+       "from": "SITE1",
+       "prev": "DS",
+       "remark": "back from the shop",
+       "status": "WK"
+      }
+     ],
+     "serial": "S1",
+     "transferTrade": "CIVIL"
+    },
+    "U2": {
+     "eqClass": "Generator",
+     "events": [
+      {
+       "arrival": true,
+       "date": "2025-05-23",
+       "status": ""
+      }
+     ],
+     "serial": "S2"
+    },
+    "U3": {
+     "eqClass": "Survey",
+     "events": [
+      {
+       "date": "2025-10-20",
+       "from": "SITE2",
+       "prev": "AV",
+       "remark": "moved from Beta Wind",
+       "status": "WK"
+      },
+      {
+       "date": "2025-10-30",
+       "from": "SITE1",
+       "prev": "WK",
+       "remark": "dropped, needs calibration",
+       "status": "DN"
+      }
+     ],
+     "serial": "S3",
+     "transferTrade": "COMMISSG"
+    },
+    "U4": {
+     "eqClass": "Trailers - Haul",
+     "events": [
+      {
+       "date": "2025-11-09",
+       "from": "SITE1",
+       "prev": "DN",
+       "remark": "tire changed same day",
+       "status": "WK"
+      }
+     ],
+     "serial": "S4"
+    },
+    "U5": {
+     "eqClass": "Office Equipment",
+     "events": [
+      {
+       "date": "2025-11-14",
+       "from": "SITE1",
+       "prev": "WK",
+       "remark": "not returned",
+       "status": "MS"
+      }
+     ],
+     "serial": "S5"
+    }
+   }
+  },
+  "kpi_util_mini.xlsx": {
+   "report": {
+    "asOf": "2025-12-09",
+    "columns": [
+     "idleHours",
+     "meterDate",
+     "meterHours",
+     "periodHours",
+     "workHours"
+    ],
+    "file": "kpi_util_mini.xlsx",
+    "kind": "utilization",
+    "label": "Utilization / hour meter",
+    "rows": 3,
+    "site": "",
+    "units": 3
+   },
+   "units": {
+    "SN:S3": {
+     "idleHours": 20.0,
+     "meterHours": 120.0,
+     "periodHours": 120.0,
+     "serial": "S3",
+     "workHours": 100.0
+    },
+    "U1": {
+     "idleHours": 300.0,
+     "meterDate": "2025-12-09",
+     "meterHours": 5200.0,
+     "periodHours": 1200.0,
+     "serial": "S1",
+     "workHours": 900.0
+    },
+    "U2": {
+     "idleHours": 500.0,
+     "meterDate": "2025-12-09",
+     "meterHours": 800.0,
+     "periodHours": 600.0,
+     "serial": "S2",
+     "workHours": 100.0
+    }
+   }
+  }
+ }
+}

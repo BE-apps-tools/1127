@@ -207,6 +207,22 @@ def test_site_is_blank_when_nothing_names_one():
     assert K.report_site(rows, 0, None) == ""
 
 
+# ------------------------------------------------------------------ golden
+def test_matches_the_golden():
+    """The committed golden is what BOTH import paths must produce.
+
+    worker/tests/kpi_pipeline.test.mjs holds the browser pipeline to the same
+    file, so a change to either port that alters extraction fails until the
+    golden is regenerated (py build/tests/make_golden.py) and its diff reviewed.
+    """
+    from build.tests.make_golden import build as build_golden
+    fx, fresh = build_golden()
+    with open(os.path.join(fx, "kpi_expected.json"), encoding="utf-8") as f:
+        committed = json.load(f)
+    assert fresh["fixtures"] == committed["fixtures"], \
+        "extraction changed — rerun py build/tests/make_golden.py and review the diff"
+
+
 # ------------------------------------------------------------------ merge
 def test_merge_replaces_only_the_supplied_family():
     b = K.merge({}, [K.read_report(RATES), K.read_report(RENTAL), K.read_report(TRANSFERS)])

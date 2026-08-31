@@ -1,5 +1,5 @@
 {
-  "_comment": "Shared coercion cases for the two ports of the KPI report adapters: build/kpi_reports.py (coerce_num/coerce_int/coerce_date) and kpis.html (kpiNum/kpiInt/kpiDate). Asserted by build/tests/test_build_kpis.py and worker/tests/kpi_coerce.test.mjs, so a change to one port without the other fails CI.",
+  "_comment": "Shared coercion cases for the two ports of the KPI report adapters: build/kpi_reports.py (coerce_num/coerce_int/coerce_date) and kpis.html (kpiNum/kpiInt/kpiDate). Asserted by build/tests/test_build_kpis.py and worker/tests/kpi_coerce.test.mjs, so a change to one port without the other fails CI. Includes the absurd-year sentinel cases: JDE ships a 2169 'billed through' meaning 'no end', which must never become a real date.",
   "num": [
     ["", null],
     ["   ", null],
@@ -42,6 +42,12 @@
     ["0", ""],
     ["-5", ""],
     ["2026-13-01", ""],
-    ["2/30/2026", ""]
+    ["2/30/2026", ""],
+    ["98000", ""],
+    ["2169-03-24", ""],
+    ["2168-04-23", ""],
+    ["3/24/2169", ""],
+    ["2099-12-31", "2099-12-31"],
+    ["2100-01-01", ""]
   ]
 }

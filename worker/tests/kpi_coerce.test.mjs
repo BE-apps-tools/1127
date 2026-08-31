@@ -18,11 +18,15 @@ import assert from "node:assert/strict";
 const page = await readFile(new URL("../../kpis.html", import.meta.url), "utf8");
 const cases = JSON.parse(await readFile(new URL("../../build/tests/fixtures/kpi_coerce_cases.json", import.meta.url), "utf8"));
 
+const specMatch = /const KPI_SPEC = (\{.*?\});/s.exec(page);
+assert.ok(specMatch, "KPI_SPEC not found in kpis.html");
 const start = page.indexOf("function kpiNum(");
 const endMark = "const KPI_COERCE=";
 const end = page.indexOf(endMark);
 assert.ok(start > 0 && end > start, "couldn't find the coercion block in kpis.html");
-const src = page.slice(start, end) + "\nexport { kpiNum, kpiInt, kpiDate };\n";
+// kpiDate reads maxYear off the spec, so the spec comes along for the ride.
+const src = "const KPI_SPEC = " + specMatch[1] + ";\n"
+  + page.slice(start, end) + "\nexport { kpiNum, kpiInt, kpiDate };\n";
 const { kpiNum, kpiInt, kpiDate } = await import(
   "data:text/javascript;base64," + Buffer.from(src).toString("base64"));
 

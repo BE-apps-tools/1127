@@ -89,6 +89,15 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
   .intro .rule{width:64px;height:4px;background:var(--energy-blue);border-radius:2px;margin:10px 0 12px;}
   .intro p{font-size:14px;color:var(--medium-gray);max-width:900px;}
 
+  /* ---------- Unpublished-preview bar ---------- */
+  .prevbar{display:none;align-items:center;gap:14px;flex-wrap:wrap;background:var(--dark-blue);color:var(--white);
+    border-left:5px solid var(--alert);border-radius:var(--r-sm);padding:12px 16px;margin-bottom:18px;box-shadow:var(--shadow);}
+  .prevbar .pb-k{font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;font-size:11px;
+    letter-spacing:0.06em;color:var(--alert);flex:0 0 auto;}
+  .prevbar .pb-t{font-size:12px;flex:1 1 260px;min-width:0;}
+  .prevbar .pb-t strong{color:var(--light-blue);}
+  .prevbar .btn{flex:0 0 auto;}
+
   /* ---------- Report coverage strip ---------- */
   .cov{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-bottom:22px;}
   .cov-item{background:var(--white);border:1px solid var(--light-gray);border-left:4px solid var(--energy-blue);
@@ -377,12 +386,17 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
             <input type="file" id="kpiFiles" accept=".xlsx" multiple></div>
           <div id="kpiPreview"></div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
+            <button class="btn secondary" id="kpiPreview" disabled>Preview on this page</button>
             <button class="btn" id="kpiPublish" disabled>Publish KPI data</button>
             <button class="btn secondary" id="kpiCancel">Cancel</button>
           </div>
+          <div class="hintbox" style="margin:12px 0 0;">Preview applies the parsed values to this page
+            <strong>in your browser only</strong> — nothing is committed, and other people see no change.
+            Use it to check the numbers look right before publishing.</div>
         </div>
       </div>
 
+      <div class="prevbar" id="prevBar" role="status"></div>
       <section class="cov" id="coverage" aria-label="Report coverage"></section>
       <section class="tiles" id="tiles" aria-label="Site KPIs"></section>
       <section class="trends" id="trends" aria-label="Equipment trends"></section>
@@ -493,7 +507,9 @@ const TRADES = ["Civil","Electrical","Foundation","Collection","Install","Mechan
 const TRADE_NONE = "__none__";
 
 const STATE = { site:"", assets:[], kpis:{reports:[],units:{}}, meta:null, siteIndex:[],
-  rows:[], sort:null, page:1, open:new Set(), admin:false, pending:null };
+  rows:[], sort:null, page:1, open:new Set(), admin:false, pending:null,
+  // in-memory preview: `published` holds the real bundle while a preview is shown
+  published:null, previewKinds:[] };
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
@@ -747,7 +763,7 @@ function renderFreshness(){
   const on=activeKinds();
   const behind=KPI_SPEC.kinds.map(ks=>{
     const rep=reportFor(ks.kind);
-    if(!rep || !on[ks.kind]) return null;
+    if(!rep || !on[ks.kind] || rep.preview) return null;   // freshly parsed is not stale
     const st=staleness(rep);
     return st.level ? { label:ks.label, age:st.age, level:st.level } : null;
   }).filter(Boolean);
@@ -770,10 +786,12 @@ function renderCoverage(){
     // A report stamped with another jobsite is the most likely import mistake.
     const wrongSite = rep.site && STATE.site && rep.site!==STATE.site;
     const st=staleness(rep);
-    const cls = (on[ks.kind] && !wrongSite) ? (st.level?(" "+st.level):"") : " off";
-    const ageTag = st.level
-      ? '<span class="flag '+(st.level==="alert"?"bad":"soon")+'">'+esc(ageText(st.age))+'</span>'
-      : '<span class="flag ok">'+esc(ageText(st.age))+'</span>';
+    const cls = (on[ks.kind] && !wrongSite) ? (rep.preview ? " warn" : (st.level?(" "+st.level):"")) : " off";
+    const ageTag = rep.preview
+      ? '<span class="flag soon">preview &middot; not published</span>'
+      : (st.level
+          ? '<span class="flag '+(st.level==="alert"?"bad":"soon")+'">'+esc(ageText(st.age))+'</span>'
+          : '<span class="flag ok">'+esc(ageText(st.age))+'</span>');
     return '<div class="cov-item'+cls+'"><div class="k">'+esc(ks.label)+' '+ageTag+'</div>'+
       '<div class="v">'+esc(rep.file||"imported")+'</div>'+
       '<div class="m">'+(wrongSite
@@ -1438,20 +1456,30 @@ function kpiNum(v){
   return neg?-n:n;
 }
 function kpiInt(v){ const n=kpiNum(v); return n==null?null:Math.trunc(n); }
+/* A date past maxYear is a data error, not a date — JDE ships a 2169
+   "billed through" as a no-end sentinel, and showing it as a real renewal would
+   park a bogus row at the top of every renewal filter. Mirrors
+   kpi_reports._guard_year. */
+function kpiGuardYear(iso){
+  const max=(KPI_SPEC && KPI_SPEC.maxYear) || 2099;
+  return (iso && +iso.slice(0,4) > max) ? "" : iso;
+}
 function kpiDate(v){
   const s=String(v==null?"":v).trim();
   if(!s) return "";
   const iso=/^(\d{4})-(\d{2})-(\d{2})/.exec(s);
   if(iso){ const d=new Date(Date.UTC(+iso[1],+iso[2]-1,+iso[3]));
-    return (d.getUTCFullYear()===+iso[1] && d.getUTCMonth()===+iso[2]-1 && d.getUTCDate()===+iso[3]) ? d.toISOString().slice(0,10) : ""; }
+    return (d.getUTCFullYear()===+iso[1] && d.getUTCMonth()===+iso[2]-1 && d.getUTCDate()===+iso[3])
+      ? kpiGuardYear(d.toISOString().slice(0,10)) : ""; }
   const us=/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/.exec(s);
   if(us){ let yr=+us[3]; if(yr<100) yr+=2000;
     const d=new Date(Date.UTC(yr,+us[1]-1,+us[2]));
-    return (d.getUTCFullYear()===yr && d.getUTCMonth()===+us[1]-1 && d.getUTCDate()===+us[2]) ? d.toISOString().slice(0,10) : ""; }
+    return (d.getUTCFullYear()===yr && d.getUTCMonth()===+us[1]-1 && d.getUTCDate()===+us[2])
+      ? kpiGuardYear(d.toISOString().slice(0,10)) : ""; }
   if(/^\d+(\.\d+)?$/.test(s)){
     const n=Math.trunc(parseFloat(s)); if(n<=0) return "";
     const d=new Date(Date.UTC(1899,11,30)+n*86400000);
-    return isNaN(d)?"":d.toISOString().slice(0,10);
+    return isNaN(d)?"":kpiGuardYear(d.toISOString().slice(0,10));
   }
   return "";
 }
@@ -1497,14 +1525,28 @@ function kpiParseShared(xml){
 }
 function kpiSheetRows(xml, shared){
   const rows=[];
-  for(const rm of xml.matchAll(/<row[^>]*>([\s\S]*?)<\/row>/g)){
+  // Rows may be self-closing (<row r="3"/>) or explicitly empty (<row …></row>).
+  for(const rm of String(xml||"").matchAll(/<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g)){
+    const inner=rm[2]||"";
     const cells={}; let maxc=-1;
-    for(const cm of rm[1].matchAll(/<c\s+r="([A-Z]+\d+)"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)){
-      const ci=kpiColIndex(cm[1]), attrs=cm[2]||"", inner=cm[3]||"";
+    for(const cm of inner.matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)){
+      const attrs=cm[1]||"", body=cm[2]||"";
+      // Attribute order varies by writer: Excel emits r first, the real JDE
+      // export emits s, t, THEN r — so read them by name, never by position.
+      const ref=kpiAttr("<c"+attrs+">", "r");
+      if(!ref) continue;                       // no coordinate: same as the Python reader
+      const ci=kpiColIndex(ref);
       if(ci>maxc) maxc=ci;
-      const tm=/t="([^"]+)"/.exec(attrs); const ty=tm?tm[1]:""; let val="";
-      if(ty==="inlineStr"){ const im=/<t[^>]*>([\s\S]*?)<\/t>/.exec(inner); val=im?kpiDecodeXml(im[1]):""; }
-      else { const vm=/<v>([\s\S]*?)<\/v>/.exec(inner); if(vm){ val = ty==="s" ? (shared[parseInt(vm[1],10)]||"") : kpiDecodeXml(vm[1]); } }
+      const ty=kpiAttr("<c"+attrs+">", "t");
+      let val="";
+      if(ty==="inlineStr"){
+        // Rich text splits one value across several runs — "Project" + "Number"
+        // in these headers — so concatenate every <t>, as the Python reader does.
+        for(const tm of body.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)) val+=kpiDecodeXml(tm[1]);
+      } else {
+        const vm=/<v[^>]*>([\s\S]*?)<\/v>/.exec(body);
+        if(vm) val = ty==="s" ? (shared[parseInt(vm[1],10)]||"") : kpiDecodeXml(vm[1]);
+      }
       cells[ci]=val;
     }
     const arr=[]; for(let i=0;i<=maxc;i++) arr.push(cells[i]!==undefined?cells[i]:"");
@@ -1512,17 +1554,42 @@ function kpiSheetRows(xml, shared){
   }
   return rows;
 }
+/* Read one attribute out of a single XML tag. Attribute ORDER in OOXML is
+   arbitrary — the real JDE exports write Relationship as Type, Target, Id, while
+   Excel writes Id, Type, Target — so never match a pair of attributes with one
+   positional regex. (The Python side uses a real XML parser and was immune;
+   worker/tests/kpi_xlsx.test.mjs pins this port against both orders.) */
+function kpiAttr(tag, name){
+  const m=new RegExp("\\s" + name.replace(":", "\\:") + '="([^"]*)"').exec(tag);
+  return m ? m[1] : "";
+}
+function kpiRelMap(xml){
+  const map={};
+  for(const m of String(xml||"").matchAll(/<Relationship\b[^>]*>/g)){
+    const id=kpiAttr(m[0], "Id"), target=kpiAttr(m[0], "Target");
+    if(id) map[id]=target;
+  }
+  return map;
+}
+/* The r:id of the workbook's FIRST sheet. */
+function kpiSheetRelId(xml){
+  const m=/<sheet\s[^>]*>/.exec(String(xml||""));
+  return m ? kpiAttr(m[0], "r:id") : "";
+}
 async function kpiFirstSheetRows(file){
   const zip=kpiReadXlsx(await file.arrayBuffer());
   const wb=await zip.get("xl/workbook.xml");
   const rels=await zip.get("xl/_rels/workbook.xml.rels");
   const shared=kpiParseShared(await zip.get("xl/sharedStrings.xml"));
-  const relMap={};
-  for(const m of rels.matchAll(/<Relationship\s+[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"/g)) relMap[m[1]]=m[2];
-  const sm=/<sheet\s+[^>]*r:id="([^"]+)"/.exec(wb);
-  if(!sm) throw new Error("No sheet found in workbook");
-  let t=relMap[sm[1]]||""; if(t && !t.startsWith("xl/")) t="xl/"+t;
-  return kpiSheetRows(await zip.get(t)||"", shared);
+  const relId=kpiSheetRelId(wb);
+  if(!relId) throw new Error("No sheet found in workbook");
+  let t=kpiRelMap(rels)[relId]||"";
+  if(!t) throw new Error("Could not resolve the first sheet ("+relId+") in the workbook");
+  if(t.startsWith("/")) t=t.slice(1);
+  if(!t.startsWith("xl/")) t="xl/"+t;
+  const sheet=await zip.get(t);
+  if(sheet==null) throw new Error("Sheet part not found in the .xlsx: "+t);
+  return kpiSheetRows(sheet, shared);
 }
 function kpiFind(norm, aliases){
   for(const a of aliases){ const i=norm.indexOf(kpiNormHeader(a).toLowerCase()); if(i>=0) return i; }
@@ -1662,6 +1729,80 @@ function kpiExtract(rows, kind, filename){
     units:Object.keys(units).length, asOf:past.length?past[past.length-1]:"",
     site:kpiReportSite(rows, hi, m.site), columns:targets.slice().sort() } };
 }
+/* ============================================================
+   In-memory preview — apply parsed values to this page without publishing.
+   ============================================================ */
+/* Mirrors build/kpi_reports.merge and the Worker's /kpis merge: the families in
+   `extracted` replace their block on every unit and leave the others untouched.
+   A preview that merged differently from the server would show numbers the
+   publish wouldn't produce, so worker/tests/kpi_merge.test.mjs pins the two
+   together. */
+function kpiMerge(bundle, extracted){
+  const src=(bundle&&bundle.units)||{};
+  const units={};
+  Object.keys(src).forEach(k=>{ units[k]=Object.assign({}, src[k]); });
+  let reports=(((bundle&&bundle.reports)||[]).filter(r=>r&&typeof r==="object")).slice();
+  extracted.forEach(ex=>{
+    const kind=ex.report.kind;
+    Object.keys(units).forEach(k=>{ const b=Object.assign({}, units[k]); delete b[kind]; units[k]=b; });
+    Object.keys(ex.units).forEach(key=>{
+      const blk=Object.assign({}, units[key]||{});
+      const rec=Object.assign({}, ex.units[key]);
+      const serial=rec.serial; delete rec.serial;
+      if(serial && !blk.serial) blk.serial=serial;
+      blk[kind]=rec;
+      units[key]=blk;
+    });
+    reports=reports.filter(r=>r.kind!==kind).concat([ex.report]);
+  });
+  Object.keys(units).forEach(k=>{ if(!KPI_KINDS.some(kk=>units[k][kk])) delete units[k]; });
+  reports.sort((a,b)=>KPI_KINDS.indexOf(a.kind)-KPI_KINDS.indexOf(b.kind));
+  return { builtAt:(bundle&&bundle.builtAt)||"", reports, units };
+}
+function rerenderAll(){
+  buildRows(); renderCoverage(); renderFreshness(); renderTiles(); renderTrends(); renderTable();
+  renderPreviewBar();
+}
+function renderPreviewBar(){
+  const el=$("#prevBar"), kinds=STATE.previewKinds||[];
+  if(!kinds.length){ el.style.display="none"; el.innerHTML=""; return; }
+  const names=kinds.map(k=>(kindSpec(k)||{}).label||k).join(", ");
+  el.style.display="flex";
+  el.innerHTML='<span class="pb-k">Preview</span>'+
+    '<span class="pb-t">Showing <strong>'+esc(names)+'</strong> from the file(s) you just parsed. '+
+    'Nothing is published — only you see this, and a reload clears it.</span>'+
+    '<button class="btn small secondary" id="prevDiscard" type="button">Discard</button>'+
+    '<button class="btn small" id="prevPublish" type="button">Publish for real</button>';
+  $("#prevDiscard").addEventListener("click", discardPreview);
+  $("#prevPublish").addEventListener("click", ()=>{
+    const panel=$("#importPanel"); panel.style.display="block"; panel.scrollIntoView({block:"center"});
+  });
+}
+function applyPreview(){
+  const p=STATE.pending;
+  if(!p || !p.extracted.length) return;
+  if(!STATE.published) STATE.published=STATE.kpis;          // keep the real bundle to go back to
+  const now=new Date().toISOString().slice(0,19)+"Z";
+  // Stamped as imported now and flagged preview, so the freshness net doesn't
+  // call freshly-parsed data stale and the coverage strip can label it.
+  const stamped=p.extracted.map(ex=>({ units:ex.units,
+    report:Object.assign({}, ex.report, { importedAt:now, preview:true }) }));
+  STATE.kpis=kpiMerge(STATE.published, stamped);
+  STATE.previewKinds=stamped.map(e=>e.report.kind);
+  STATE.open.clear();
+  rerenderAll();
+  $("#importPanel").style.display="none";
+  toast("Previewing "+STATE.previewKinds.length+" report(s) — nothing published");
+  window.scrollTo({ top:0, behavior:"smooth" });
+}
+function discardPreview(){
+  if(!STATE.published) return;
+  STATE.kpis=STATE.published; STATE.published=null; STATE.previewKinds=[];
+  STATE.open.clear();
+  rerenderAll();
+  toast("Preview discarded — showing published data");
+}
+
 /* ---------- import UI ---------- */
 async function onFiles(files){
   const list=[...files];
@@ -1670,7 +1811,11 @@ async function onFiles(files){
   for(const f of list){
     try{
       const rows=await kpiFirstSheetRows(f);
-      const header=rows.length?rows[0].map(kpiNormHeader):[];
+      // The header is not necessarily row 0 — these exports put a report title
+      // above it — so scan for it before detecting the family, exactly as
+      // kpi_reports.read_report does.
+      const hi=rows.length?kpiFindHeader(rows):0;
+      const header=rows.length?rows[hi].map(kpiNormHeader):[];
       const kind=kpiDetectKind(header, f.name);
       if(!kind){ failed.push({name:f.name, why:"Not a recognised KPI report. Headers: "+header.filter(Boolean).slice(0,8).join(", ")}); continue; }
       extracted.push(kpiExtract(rows, kind, f.name));
@@ -1689,7 +1834,7 @@ async function onFiles(files){
 }
 function renderPreview(){
   const el=$("#kpiPreview"), p=STATE.pending;
-  if(!p){ el.innerHTML=""; $("#kpiPublish").disabled=true; return; }
+  if(!p){ el.innerHTML=""; $("#kpiPublish").disabled=true; $("#kpiPreview").disabled=true; return; }
   let html="";
   if(p.extracted.length){
     html+='<div class="table-scroll" style="margin-bottom:12px;"><table><thead><tr>'+
@@ -1711,6 +1856,7 @@ function renderPreview(){
   if(!p.extracted.length && !p.failed.length) html='<div class="hintbox">Nothing parsed from those files.</div>';
   el.innerHTML=html;
   $("#kpiPublish").disabled = !p.extracted.length;
+  $("#kpiPreview").disabled = !p.extracted.length;
 }
 async function publishKpis(){
   const p=STATE.pending; if(!p||!p.extracted.length) return;
@@ -1724,7 +1870,9 @@ async function publishKpis(){
     toast("Published "+(d.units||0)+" unit(s) — live in ~1–2 min");
     STATE.pending=null; $("#kpiFiles").value=""; renderPreview();
     $("#importPanel").style.display="none";
-    await loadKpis(); buildRows(); renderCoverage(); renderFreshness(); renderTiles(); renderTrends(); renderTable();
+    // The published data is the truth now; drop the preview overlay.
+    STATE.published=null; STATE.previewKinds=[];
+    await loadKpis(); rerenderAll();
   }catch(e){
     toast("Publish failed: "+e.message); $("#kpiPublish").disabled=false;
   }
@@ -1790,6 +1938,7 @@ function bind(){
     if(key) toggleDetail(key);
   });
   $("#kpiFiles").addEventListener("change", e=>onFiles(e.target.files));
+  $("#kpiPreview").addEventListener("click", applyPreview);
   $("#kpiPublish").addEventListener("click", publishKpis);
   $("#kpiCancel").addEventListener("click", ()=>{
     $("#importPanel").style.display="none"; STATE.pending=null; $("#kpiFiles").value=""; renderPreview();
