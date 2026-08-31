@@ -247,10 +247,15 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
   .kb-btn{font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;font-size:12px;letter-spacing:0.04em;
     padding:11px 16px;border:1px solid var(--dark-blue);background:var(--dark-blue);color:var(--white);
     border-radius:var(--r-sm);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;min-height:42px;}
-  .kb-btn:hover{background:var(--energy-blue);border-color:var(--energy-blue);}
+  /* Hover is scoped away from :disabled, and the disabled state only dims. It
+     must not repaint the background: .kb-btn:disabled and .kb-btn.secondary have
+     equal specificity, so a background here won the cascade and painted
+     dark-blue behind the secondary variant's dark-blue label — an invisible
+     button caption, which is the state both secondary buttons start in. */
+  .kb-btn:hover:not(:disabled){background:var(--energy-blue);border-color:var(--energy-blue);}
   .kb-btn.secondary{background:var(--white);color:var(--dark-blue);}
-  .kb-btn.secondary:hover{background:var(--light-blue);}
-  .kb-btn:disabled{opacity:0.5;cursor:default;background:var(--dark-blue);border-color:var(--dark-blue);}
+  .kb-btn.secondary:hover:not(:disabled){background:var(--light-blue);}
+  .kb-btn:disabled{opacity:0.45;cursor:default;}
   .kb-msg{font-size:12.5px;color:var(--medium-gray);margin-top:14px;}
   .kb-msg strong{color:var(--dark-blue);}
   .kb[hidden]{display:none;}
