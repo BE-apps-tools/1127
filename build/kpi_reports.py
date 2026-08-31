@@ -13,6 +13,10 @@ Four report families feed the Asset KPIs page on top of the Equipment Master:
                      every status change (``Previous Status`` -> ``Current Status``)
                      with its effective date. Drives downtime, MTTR, availability,
                      repeat offenders, arrivals and equipment class.
+  * ``damage``       Damage Expenses — a **cost ledger**: one row per charge line,
+                     many per unit, with the G/L date, amount and what broke.
+                     Drives damage spend, incidents, damage-by-month and damage
+                     as a share of what the unit costs to run.
   * ``utilization``  hour-meter / idle-vs-working hours, for the weekly
                      under-utilization export.
 
@@ -188,6 +192,39 @@ SPEC = {
                 "Transfer Status", "Status of Transfer"], "values": ["Newly Acquired"]},
             "eventDateField": "date",
             "eventStatusField": "status",
+            "asOfField": "date",
+        },
+        {
+            "kind": "damage",
+            "label": "Damage expenses",
+            "mode": "ledger",
+            "hints": ["damage", "expense", "expenses", "repair", "incident"],
+            "signals": ["amount", "date", "doc", "damageArea", "caseNumber"],
+            # Each line of the ledger. Deliberately NOT extracted: Transaction
+            # Originator holds employee usernames, and tying named individuals to
+            # damage costs has no KPI value and the repo is public.
+            "fields": {
+                "date": {"type": "date", "aliases": [
+                    "G/L Date", "GL Date", "Transaction Date", "Posting Date"]},
+                "amount": {"type": "num", "aliases": [
+                    "Actual Cost Amount", "Cost Amount", "Amount", "Actual Cost"]},
+                "doc": {"type": "str", "aliases": [
+                    "Document Number", "Document #", "Doc Number"]},
+                "docType": {"type": "str", "aliases": ["Document Type", "Doc Type"]},
+                "payee": {"type": "str", "aliases": [
+                    "Journal Entry Explanation", "Payee", "Paid To"]},
+                "remark": {"type": "str", "aliases": [
+                    "Remark", "Description of Work", "Explanation"]},
+                "po": {"type": "str", "aliases": ["PO #", "PO#", "PO Number"]},
+                # Empty in the exports seen so far, but this is what they are for:
+                # mapped so they light up the moment JDE starts populating them.
+                "damageArea": {"type": "str", "aliases": ["Damage Area Code", "Damage Area"]},
+                "caseNumber": {"type": "str", "aliases": [
+                    "Incident Case Number", "Case Number", "Incident Number"]},
+            },
+            "lineDateField": "date",
+            "lineAmountField": "amount",
+            "lineDocField": "doc",
             "asOfField": "date",
         },
         {
@@ -460,7 +497,9 @@ def extract(rows, kind, filename=""):
         raise ValueError("No recognised " + kind + " columns. Headers: "
                          + ", ".join(h for h in header if h)[:200])
     ks = kind_spec(kind)
-    events_mode = ks.get("mode") == "events"
+    mode = ks.get("mode", "record")
+    events_mode = mode == "events"
+    ledger_mode = mode == "ledger"
     bf_values = set((ks.get("backfillField") or {}).get("values", []))
     as_of_field = ks.get("asOfField")
     units, dates, row_count = {}, [], 0
@@ -497,6 +536,13 @@ def extract(rows, kind, filename=""):
             rec["_backfill"] = (m["backfill"] is not None
                                 and str(cell(m["backfill"]) or "").strip() in bf_values)
             blk.setdefault("_events", []).append(rec)
+        elif ledger_mode:
+            # A charge line needs a date and an amount to be worth anything; every
+            # aggregate (total, incidents, by-month) is derived by the page from
+            # these lines, so nothing is pre-summed here.
+            if not rec.get(ks["lineDateField"]) or rec.get(ks["lineAmountField"]) is None:
+                continue
+            blk.setdefault("items", []).append(rec)
         else:
             # Last row wins on duplicate units (exports list the newest last),
             # but never blank out a field an earlier row filled.
@@ -512,6 +558,16 @@ def extract(rows, kind, filename=""):
             blk["events"] = tl
             total += len(tl)
         row_count = total                              # report the timeline, not raw rows
+    elif ledger_mode:
+        total = 0
+        for key, blk in list(units.items()):
+            items = blk.get("items") or []
+            if not items:
+                del units[key]
+                continue
+            items.sort(key=lambda i: i[ks["lineDateField"]])   # oldest first
+            total += len(items)
+        row_count = total                              # charge lines kept, not rows read
 
     # "As of" is when the data was true. Only a backward-looking field counts
     # (`asOfField`) — these exports also carry future rate-end and billed-through

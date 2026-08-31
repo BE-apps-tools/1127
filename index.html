@@ -286,8 +286,8 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
             <span class="eyebrow">Assets &middot; Excel reports</span>
             <h3>Asset KPIs</h3>
             <p>Unit-by-unit detail for everything on the jobsite — downtime and repair time,
-              monthly and yearly spend, rental renewals and what the job pays while a unit sits
-              broken — joined from the Equipment Master and the JDE equipment reports.</p>
+              monthly and yearly spend, damage costs, rental renewals and what the job pays while
+              a unit sits broken — joined from the Equipment Master and the JDE equipment reports.</p>
             <span class="meta" id="navKpiMeta"></span>
           </span>
           <span class="foot"><span class="open-btn">Open</span></span>
@@ -418,7 +418,7 @@ async function loadKpiCardMeta(total){
   const units=(k&&k.units)?Object.keys(k.units).length:0;
   const base=total?(total.toLocaleString()+" units"):"";
   if(!reports.length){ el.textContent=[base,"no KPI reports imported yet"].filter(Boolean).join(" · "); return; }
-  const names={rates:"Rates", rental:"Rental", transfers:"Downtime", utilization:"Utilization"};
+  const names={rates:"Rates", rental:"Rental", transfers:"Downtime", damage:"Damage", utilization:"Utilization"};
   el.textContent=[base, reports.map(r=>names[r.kind]||r.kind).join(" · "),
     units?(units+" with report data"):""].filter(Boolean).join(" · ");
 }

@@ -118,6 +118,7 @@ Master **plus** these JDE reports:
 | **Equipment Rates** | one row per unit: charge-out rate, rate group, hourly rate and its cost components | Monthly spend, yearly spend, avg $/hr, maintenance share of the hourly rate, run-rate trend |
 | **Anniversary Date** | vendor rental contracts: vendor, PO, rate, billed-through date, contract days | Rental commitment/month, renewals due in 30 days, units past billed-through, off-rent candidates |
 | **Equipment Transfer** | the **status event log** — every `Previous → Current` status change with its effective date | Downtime days, breakdowns, fleet availability, avg repair time (MTTR), repeat offenders, who's down right now, downtime-by-month trend |
+| **Damage Expenses** | a **cost ledger** — one row per charge line, many per unit, with the G/L date, amount and what broke | Damage spend, incidents, damage-by-month trend, damage as a share of a unit's yearly charge-out, the per-unit damage ledger |
 | *(optional)* utilization / hour meter | the weekly hours or "zero hours" export | Hour meter, idle vs working hours |
 
 Nothing is required: with no reports imported the page still lists the fleet from
@@ -144,9 +145,14 @@ the Equipment Master. The **build-data** Action detects it and rebuilds
 `data/kpis.json` on the same run.
 
 > **The repo is public.** Whatever lands in `data/kpis.json` is publicly readable —
-> that includes vendor names, PO numbers and rates once those reports are imported.
-> Decide that's acceptable (or make the repo private) before importing the rate and
-> rental reports.
+> that includes vendor names, PO numbers, rates and damage charges once those
+> reports are imported. Decide that's acceptable (or make the repo private) before
+> importing the rate, rental and damage reports.
+>
+> One field is withheld on purpose: the damage report's **Transaction Originator**
+> (employee usernames) is never extracted. It drives no KPI, and tying named
+> individuals to damage costs in a public file is not something to do by accident.
+> If you ever want it, it is one alias line — but decide that deliberately.
 
 ### How downtime is measured
 From the transfer history, not a downtime column — the page rebuilds each unit's
@@ -171,6 +177,23 @@ status timeline and adds up the time it spent in a down status:
 Click any row for its full **status history**: every change with the date, the
 status, how long it lasted, and the remark the crew wrote ("metal in fuel tank",
 "DS went to Vermeer"). That's the "why" behind every downtime number.
+
+### Reading the damage numbers
+- The tiles and columns total **only units on this jobsite, over the last 12
+  months**. The export usually covers more than that: units that have since left
+  carry their own damage, and the page counts them under "Elsewhere" in the
+  coverage strip rather than in the site totals. So the page's figure is normally
+  *smaller* than the sum of the spreadsheet — that's the scoping, not a gap.
+- **Incidents** are distinct document numbers, so several charge lines from one
+  invoice (part, paint, labour) count as one incident, not three.
+- A **credit** (a returned part, shown in the export as `(314.10)`) stays negative
+  and reduces the total, as accounting intends.
+- **Damage vs yearly cost** puts a unit's damage next to what it costs to have on
+  the job for a year — the number that says whether it's worth keeping.
+- Open any row for its **damage ledger**: every charge with its date, amount,
+  payee and the remark ("operator bent gooseneck receiver"). Read it alongside the
+  status history directly above it and you get the whole story — a unit down 29
+  days at a body shop, with the matching front-end damage charge.
 
 ### Reading the trends
 - **Downtime by month** — days down per month, split *on site* vs *in shop*. The

@@ -1,6 +1,72 @@
 {
  "_comment": "Python's extraction of each fixture (build/kpi_reports.read_report). worker/tests/kpi_pipeline.test.mjs runs the browser pipeline in kpis.html over the same fixtures and asserts it produces exactly this. Regenerate deliberately with py build/tests/make_golden.py and review the diff \u2014 a change here is a change to what both import paths extract.",
  "fixtures": {
+  "kpi_damage_mini.xlsx": {
+   "report": {
+    "asOf": "2025-11-09",
+    "columns": [
+     "amount",
+     "caseNumber",
+     "damageArea",
+     "date",
+     "doc",
+     "docType",
+     "payee",
+     "po",
+     "remark"
+    ],
+    "file": "kpi_damage_mini.xlsx",
+    "kind": "damage",
+    "label": "Damage expenses",
+    "rows": 4,
+    "site": "",
+    "units": 2
+   },
+   "units": {
+    "U1": {
+     "items": [
+      {
+       "amount": 1250.0,
+       "date": "2025-08-31",
+       "doc": "275649",
+       "docType": "PV",
+       "payee": "Acme Fleet Service LLC",
+       "po": "52112198",
+       "remark": "bent boom pin"
+      },
+      {
+       "amount": 400.0,
+       "date": "2025-08-31",
+       "doc": "275649",
+       "docType": "PV",
+       "payee": "Acme Fleet Service LLC",
+       "po": "52112198",
+       "remark": "Labor"
+      },
+      {
+       "amount": 612.5,
+       "date": "2025-10-30",
+       "doc": "295529",
+       "docType": "JE",
+       "payee": "PNC",
+       "remark": "windshield"
+      }
+     ]
+    },
+    "U2": {
+     "items": [
+      {
+       "amount": -314.1,
+       "date": "2025-11-04",
+       "doc": "295530",
+       "docType": "PV",
+       "payee": "Acme Fleet Service LLC",
+       "remark": "returned part"
+      }
+     ]
+    }
+   }
+  },
   "kpi_rates_mini.xlsx": {
    "report": {
     "asOf": "",

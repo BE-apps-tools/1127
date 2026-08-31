@@ -20,8 +20,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from build.kpi_reports import read_report  # noqa: E402
 
-FIXTURES = ["kpi_rates_mini.xlsx", "kpi_rental_mini.xlsx",
-            "kpi_transfers_mini.xlsx", "kpi_util_mini.xlsx"]
+FIXTURES = ["kpi_rates_mini.xlsx", "kpi_rental_mini.xlsx", "kpi_transfers_mini.xlsx",
+            "kpi_damage_mini.xlsx", "kpi_util_mini.xlsx"]
 COMMENT = (
     "Python's extraction of each fixture (build/kpi_reports.read_report). "
     "worker/tests/kpi_pipeline.test.mjs runs the browser pipeline in kpis.html over the same "

@@ -18,6 +18,7 @@ FX = os.path.join(os.path.dirname(__file__), "fixtures")
 RATES = os.path.join(FX, "kpi_rates_mini.xlsx")
 RENTAL = os.path.join(FX, "kpi_rental_mini.xlsx")
 TRANSFERS = os.path.join(FX, "kpi_transfers_mini.xlsx")
+DAMAGE = os.path.join(FX, "kpi_damage_mini.xlsx")
 UTIL = os.path.join(FX, "kpi_util_mini.xlsx")
 EM = os.path.join(FX, "mini.xlsx")
 CASES = json.load(open(os.path.join(FX, "kpi_coerce_cases.json"), encoding="utf-8"))
@@ -92,6 +93,7 @@ def test_detect_kind_by_headers():
     assert K.detect_kind(header_of(RENTAL), RENTAL) == "rental"
     assert K.detect_kind(header_of(TRANSFERS), TRANSFERS) == "transfers"
     assert K.detect_kind(header_of(UTIL), UTIL) == "utilization"
+    assert K.detect_kind(header_of(DAMAGE), DAMAGE) == "damage"
 
 
 def test_rates_and_rental_are_not_confused():
@@ -187,6 +189,54 @@ def test_open_and_closed_down_spans_are_both_kept():
     ev = events_of(TRANSFERS, "U3")
     assert ev[-1]["status"] == "DN"
     assert len(ev) == 2
+
+
+# ------------------------------------------------------------------ damage ledger
+def test_extract_damage_keeps_every_charge_line():
+    ex = K.read_report(DAMAGE)
+    u = ex["units"]
+    assert sorted(u) == ["U1", "U2"]
+    items = u["U1"]["items"]
+    assert len(items) == 3, "two lines on one document plus a second incident"
+    assert [i["date"] for i in items] == sorted(i["date"] for i in items), "oldest first"
+    assert sum(i["amount"] for i in items) == 2262.5      # 1,250.00 + $400.00 + 612.5
+    assert {i["doc"] for i in items} == {"275649", "295529"}
+    assert items[0]["payee"] == "Acme Fleet Service LLC"
+    assert items[0]["remark"] == "bent boom pin"
+
+
+def test_damage_credits_stay_negative():
+    # A returned part is a credit; dropping or flipping it would overstate spend.
+    u = K.read_report(DAMAGE)["units"]
+    assert u["U2"]["items"][0]["amount"] == -314.10
+
+
+def test_damage_lines_need_a_date_and_an_amount():
+    u = K.read_report(DAMAGE)["units"]
+    assert "U3" not in u, "an undated line is not a charge"
+    assert "U4" not in u, "a line with no amount is not a charge"
+
+
+def test_damage_report_counts_charge_lines_not_rows_read():
+    r = K.read_report(DAMAGE)["report"]
+    assert r["rows"] == 4, "6 rows read, 4 usable charge lines"
+    assert r["units"] == 2
+    assert r["asOf"], "the newest G/L date is a real as-of"
+
+
+def test_damage_never_extracts_the_employee_username():
+    # Transaction Originator holds employee usernames. Tying named individuals to
+    # damage costs has no KPI value and this repo is public.
+    blob = json.dumps(K.read_report(DAMAGE)["units"])
+    assert "JDOE" not in blob
+    assert "originator" not in blob.lower()
+
+
+def test_nothing_is_pre_summed_in_the_ledger():
+    # The page derives total/incidents/by-month from the lines, so a stored total
+    # could go stale against a window change.
+    u = K.read_report(DAMAGE)["units"]
+    assert set(u["U1"]) == {"items"}
 
 
 # ------------------------------------------------------------------ site stamp

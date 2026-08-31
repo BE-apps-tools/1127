@@ -736,7 +736,8 @@ async function postAdmins(req, env, h){
 /* ============================ asset KPI reports ============================
  * POST /kpis — ADMIN: merge browser-parsed KPI report blocks into data/kpis.json.
  * Families: `rates` (Equipment Rates), `rental` (Anniversary Date), `transfers`
- * (Equipment Transfer status history — an events array per unit), `utilization`.
+ * (Equipment Transfer status history — an events array per unit), `damage`
+ * (Damage Expenses — a cost-ledger `items` array per unit), `utilization`.
  * Body: { extracted: [ { report:{kind,label,file,rows,units,asOf,columns}, units:{key:{field:value}} } ] }
  *
  * Mirrors build/kpi_reports.py `merge`: each supplied family REPLACES that
@@ -745,7 +746,7 @@ async function postAdmins(req, env, h){
  * different reports without clobbering the other. The spreadsheets are parsed in
  * the browser and never uploaded — only the extracted values arrive here.
  * Requires GH_TOKEN with Contents: Read+write. */
-const KPI_KINDS = ["rates", "rental", "transfers", "utilization"];
+const KPI_KINDS = ["rates", "rental", "transfers", "damage", "utilization"];
 const KPI_KEY_RE = /^(SN:)?[\x20-\x7E]{1,60}$/;     // unit # or "SN:<serial>", printable ASCII
 const KPI_FIELD_RE = /^[A-Za-z][A-Za-z0-9]{0,30}$/;
 const KPI_MAX_UNITS = 20000;                        // a jobsite fleet is hundreds; this is a runaway guard
@@ -753,34 +754,41 @@ const KPI_MAX_FIELDS = 24;
 const KPI_MAX_EVENTS = 500;                         // status events kept per unit
 const KPI_MAX_STR = 140;
 
-/* One status event from the transfer history: small, flat, all-string/boolean. */
-function kpiCleanEvent(e){
+/* One dated row of a per-unit array: a status event, or a ledger charge line.
+ * Small, flat, dated; strings trimmed, numbers finite, everything else dropped. */
+const KPI_ROW_STRINGS = ["status", "prev", "from", "remark",      // transfer events
+                         "doc", "docType", "payee", "po", "damageArea", "caseNumber"];
+function kpiCleanRow(e, kind){
   if (!e || typeof e !== "object" || Array.isArray(e)) return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(e.date || ""))) return null;   // undated is not an event
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(e.date || ""))) return null;   // undated is not a row
   const out = { date: String(e.date) };
-  for (const k of ["status", "prev", "from", "remark"]){
+  for (const k of KPI_ROW_STRINGS){
     if (typeof e[k] === "string" && e[k]) out[k] = e[k].slice(0, KPI_MAX_STR);
   }
-  if (typeof e.status !== "string") out.status = "";
-  else if (!("status" in out)) out.status = "";                          // '' = state unknown
-  if (e.arrival === true) out.arrival = true;
+  if (typeof e.amount === "number" && Number.isFinite(e.amount)) out.amount = e.amount;
+  if (kind === "transfers"){
+    if (typeof out.status !== "string") out.status = "";                  // '' = state unknown
+    if (e.arrival === true) out.arrival = true;
+  }
+  // A ledger line with no amount carries no cost, so it is not a charge.
+  if (kind === "damage" && !("amount" in out)) return null;
   return out;
 }
 
 /* Keep only well-formed values: a number, a trimmed string, or the `events`
  * array of the transfer history. Anything else is dropped rather than trusted. */
-function kpiCleanBlock(rec){
+function kpiCleanBlock(rec, kind){
   const out = {};
   let n = 0;
   for (const [k, v] of Object.entries(rec || {})){
     if (n >= KPI_MAX_FIELDS) break;
     if (!KPI_FIELD_RE.test(k)) continue;
-    if (k === "events"){
+    if (k === "events" || k === "items"){
       if (!Array.isArray(v)) continue;
-      const events = v.slice(0, KPI_MAX_EVENTS).map(kpiCleanEvent).filter(Boolean);
-      if (!events.length) continue;
-      events.sort((a, b) => a.date < b.date ? -1 : (a.date > b.date ? 1 : 0));  // timeline order
-      out[k] = events; n++;
+      const rows = v.slice(0, KPI_MAX_EVENTS).map(e => kpiCleanRow(e, kind)).filter(Boolean);
+      if (!rows.length) continue;
+      rows.sort((a, b) => a.date < b.date ? -1 : (a.date > b.date ? 1 : 0));  // oldest first
+      out[k] = rows; n++;
     } else if (typeof v === "number"){
       if (!Number.isFinite(v)) continue;
       out[k] = v; n++;
@@ -816,7 +824,7 @@ async function postKpis(req, env, h){
       if (!KPI_KEY_RE.test(k)) return json({ error: "bad unit key" }, 400, h);
       const rec = ex.units[k];
       if (!rec || typeof rec !== "object" || Array.isArray(rec)) return json({ error: "bad unit record" }, 400, h);
-      const blk = kpiCleanBlock(rec);
+      const blk = kpiCleanBlock(rec, rep.kind);
       if (Object.keys(blk).length) units[k] = blk;
     }
     if (!Object.keys(units).length) return json({ error: "no usable values: " + rep.kind }, 400, h);

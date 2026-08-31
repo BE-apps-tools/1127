@@ -73,8 +73,22 @@ def test_page_labels_every_field():
 
 
 def test_modes_are_known():
+    # record = one row per unit; events = a status timeline; ledger = cost lines.
+    # Both ports switch on this, so an unknown mode would silently extract nothing.
     for ks in SPEC["kinds"]:
-        assert ks.get("mode") in ("record", "events"), (ks["kind"], ks.get("mode"))
+        assert ks.get("mode") in ("record", "events", "ledger"), (ks["kind"], ks.get("mode"))
+
+
+def test_ledger_families_declare_their_line_fields():
+    for ks in SPEC["kinds"]:
+        if ks.get("mode") != "ledger":
+            continue
+        for key in ("lineDateField", "lineAmountField", "lineDocField"):
+            assert ks.get(key) in ks["fields"], (ks["kind"], key)
+        assert ks["fields"][ks["lineAmountField"]]["type"] == "num", \
+            ks["kind"] + ": the amount must be numeric to be summable"
+        assert ks["fields"][ks["lineDateField"]]["type"] == "date", \
+            ks["kind"] + ": the line date must be a date to bucket by month"
 
 
 def test_event_families_declare_their_timeline_fields():

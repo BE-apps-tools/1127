@@ -79,10 +79,13 @@ def test_an_unparseable_timestamp_is_flagged_not_ignored():
 
 
 def test_every_spec_family_appears_exactly_once():
+    # Derived from the spec so that adding a report family doesn't fail this —
+    # what matters is that the check reports each family once and misses none.
+    from build.kpi_reports import KINDS
     st = F.assess(bundle(), TODAY)
     kinds = [r["kind"] for r in st["reports"]]
-    assert len(kinds) == len(set(kinds))
-    assert set(kinds) == {"rates", "rental", "transfers", "utilization"}
+    assert len(kinds) == len(set(kinds)), "a family reported twice"
+    assert set(kinds) == set(KINDS), "every family the spec knows about must be checked"
 
 
 # ------------------------------------------------------------------ wording
