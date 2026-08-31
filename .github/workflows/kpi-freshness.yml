@@ -1,0 +1,45 @@
+name: kpi-freshness
+
+# The three JDE exports (Equipment Rates, Anniversary Date, Equipment Transfer)
+# are run independently, so any one can be forgotten while the others stay
+# current — which would leave the portal presenting a stale figure as fact.
+#
+# This runs once a day, works out how long since each report was last imported,
+# and when something is behind: e-mails the owner (if SMTP secrets are set) and
+# keeps ONE GitHub Issue in sync (opened / updated / auto-closed). It never fails
+# the build — a stale report is a business fact, not a broken pipeline.
+
+on:
+  schedule:
+    - cron: "0 13 * * *"      # 13:00 UTC — ~08:00 CT, before the morning meeting
+  workflow_dispatch:           # run it on demand to test the wiring
+
+permissions:
+  contents: read
+  issues: write                # the freshness issue
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check report freshness
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PORTAL_URL: https://be-apps-tools.github.io/1127/kpis.html
+          # Optional: set these repo secrets to get the summary by e-mail as well
+          # as on the Issue. Unset, the Issue is the whole trail (GitHub still
+          # e-mails whoever watches the repo).
+          MAIL_SERVER: ${{ secrets.MAIL_SERVER }}
+          MAIL_PORT: ${{ secrets.MAIL_PORT }}
+          MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+        run: python -m build.freshness

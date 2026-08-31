@@ -826,6 +826,9 @@ async function postKpis(req, env, h){
         file: String(rep.file || "").slice(0, 160),
         rows: Number(rep.rows) || 0, units: Object.keys(units).length,
         asOf: /^\d{4}-\d{2}-\d{2}$/.test(String(rep.asOf || "")) ? rep.asOf : "",
+        // Server-stamped, never taken from the client: this is what the daily
+        // freshness check reads to tell a forgotten report from a fresh one.
+        importedAt: new Date().toISOString().slice(0, 19) + "Z",
         // The jobsite the export stamped itself with, so the page can flag a
         // report imported against the wrong site.
         site: /^\d{9,13}$/.test(String(rep.site || "")) ? String(rep.site) : "",

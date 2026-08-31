@@ -1,0 +1,71 @@
+name: kpi-pull
+
+# Daily, unattended refresh of the Asset KPI data.
+#
+# The reports land in one SharePoint/OneDrive folder (put there by a JDE schedule,
+# a Power Automate flow off the report e-mail, or by hand). This pulls whatever is
+# newest, rebuilds data/kpis.json and commits ONLY the JSON — the spreadsheets
+# never enter the repo, which matters because it is public.
+#
+# Until the Graph secrets are set this is inert: it prints what is missing and
+# exits green, so nothing goes red every night while IT provisions the app
+# registration. See RUNBOOK.md "Automating the reports".
+
+on:
+  schedule:
+    - cron: "0 11 * * *"      # 11:00 UTC — ~06:00 CT, ahead of the freshness check
+  workflow_dispatch:
+
+permissions:
+  contents: write             # commits the rebuilt data/kpis.json
+
+concurrency:
+  group: kpi-pull            # never two builds racing on the same file
+  cancel-in-progress: false
+
+jobs:
+  pull:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Pull the report exports from SharePoint
+        id: pull
+        env:
+          GRAPH_TENANT_ID: ${{ secrets.GRAPH_TENANT_ID }}
+          GRAPH_CLIENT_ID: ${{ secrets.GRAPH_CLIENT_ID }}
+          GRAPH_CLIENT_SECRET: ${{ secrets.GRAPH_CLIENT_SECRET }}
+          GRAPH_DRIVE_ID: ${{ secrets.GRAPH_DRIVE_ID }}
+          GRAPH_FOLDER_PATH: ${{ vars.GRAPH_FOLDER_PATH || 'KPI Reports' }}
+          KPI_SOURCE_DIR: ${{ runner.temp }}/kpi-reports
+        run: python -m build.pull_reports
+
+      - name: Rebuild data/kpis.json from what was pulled
+        if: steps.pull.outputs.count
+        env:
+          BUILD_TS_SOURCE: pull
+        run: |
+          export BUILD_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          python -m build.build_kpis "${{ steps.pull.outputs.dir }}" data
+
+      - name: Commit the refreshed KPI data
+        if: steps.pull.outputs.count
+        run: |
+          git config user.name "portal-bot"
+          git config user.email "portal-bot@users.noreply.github.com"
+          git add data/kpis.json
+          if git diff --cached --quiet; then
+            echo "No KPI data changes."
+          else
+            git commit -m "chore(data): refresh asset KPIs from ${{ steps.pull.outputs.count }} report(s) [auto]"
+            # The daily Equipment Master build may have pushed while we worked.
+            for i in 1 2 3 4; do
+              git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && git push && exit 0
+              echo "push failed, retrying ($i)"; sleep $((2**i))
+            done
+            exit 1
+          fi

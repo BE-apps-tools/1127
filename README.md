@@ -37,9 +37,23 @@ change requests — which become auto-reconciling GitHub Issues.
 | `build/` | Python xlsx→JSON build + tests (stdlib only) |
 | `build/kpi_reports.py` | KPI report adapters (header aliases per report family) |
 | `.github/workflows/build-data.yml` | Daily build + reconcile Action |
+| `.github/workflows/kpi-pull.yml` | Daily unattended pull of the KPI reports (SharePoint → Graph → `data/kpis.json`) |
+| `.github/workflows/kpi-freshness.yml` | Daily check that no report has gone stale (e-mail + one auto-closing Issue) |
+| `build/freshness.py` | The freshness assessment + alerting |
+| `build/pull_reports.py` | Microsoft Graph pull of the report exports |
 | `worker/` | Cloudflare Worker (request submit + open-requests read) |
 | `scripts/brandcheck.py` | Blattner brand gate for `index.html` |
 | `scripts/sync_kpi_spec.py` | Mirrors the KPI report spec into `kpis.html` |
+
+## Keeping the reports current
+
+The three exports are run independently, so a missed one would leave a stale
+figure looking current. Each report is stamped with when it was imported; the page
+flags anything not refreshed today (banner, coverage strip, and the tiles that
+report feeds), and **`kpi-freshness`** checks daily, e-mailing and keeping one
+auto-closing Issue. **`kpi-pull`** removes the manual step altogether once the
+Graph secrets are set — it is inert until then. Setup and the JDE/Power Automate
+asks are in [`RUNBOOK.md`](RUNBOOK.md#automating-the-reports-so-a-forgotten-run-cant-dirty-the-data).
 
 ## Adding a KPI report
 

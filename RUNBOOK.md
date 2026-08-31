@@ -179,6 +179,99 @@ status, how long it lasted, and the remark the crew wrote ("metal in fuel tank",
   month. It counts only units still on site today, so earlier months exclude units
   that have since left; treat the curve as fleet growth, not accounting history.
 
+### Automating the reports (so a forgotten run can't dirty the data)
+The three exports are run independently, so any one can be missed while the others
+stay current. Two independent things guard against that: **automation** so nobody
+has to remember, and a **freshness net** so a gap is loud rather than silent. The
+net works even if none of the automation is ever set up — start there.
+
+#### Layer 1 — the freshness net (already on, nothing to configure)
+- Every report is stamped with when it was last imported.
+- The KPI page shows each report's age, flags anything not refreshed today, and
+  puts a banner at the top naming what is behind. Tiles fed by a stale report
+  carry its age in their own subtitle, so a stale figure is never presented as
+  today's truth.
+- **`kpi-freshness`** runs daily (13:00 UTC ≈ 08:00 CT). If anything is behind it
+  keeps a single GitHub Issue up to date — opened, revised, and **auto-closed**
+  once every report is current again — so there is one trail, not a pile of
+  duplicates. Thresholds: flagged after **1 day**, escalated after **3**.
+- **To get it by e-mail**, add these repo secrets (Settings → Secrets and
+  variables → Actions). Without them the Issue is the whole trail — and GitHub
+  already e-mails whoever watches the repo.
+
+  | Secret | Example |
+  |---|---|
+  | `MAIL_TO` | `ruben.ruiz@blattnerenergy.com` |
+  | `MAIL_SERVER` | `smtp.office365.com` |
+  | `MAIL_PORT` | `587` |
+  | `MAIL_USERNAME` / `MAIL_PASSWORD` | a mailbox that may relay, with an app password |
+  | `MAIL_FROM` | *(optional; defaults to the username)* |
+
+  Ask IT for an SMTP relay or app password — Microsoft 365 blocks basic SMTP auth
+  by default. Test it any time with **Actions → kpi-freshness → Run workflow**.
+
+#### Layer 2 — schedule the exports in JDE (removes the human step at the source)
+This is the only part outside the portal, and it is an IT/ERP ask:
+
+> Please schedule these three JDE report versions to run daily and deliver the
+> Excel output to *(a shared mailbox, or a SharePoint/Teams folder)*:
+> **Equipment Rates**, **Anniversary Date**, **Equipment Transfer** — same
+> versions/data selection we run by hand today, scoped to Branch/Plant
+> `36620001127`.
+
+JDE's Scheduler can run a UBE on a recurrence and export to a CSV/Excel output
+that Report Director or an email distribution list can deliver. Once they arrive
+on a schedule, layer 3 picks them up with no clicks at all.
+
+#### Layer 3 — land them in one folder (Power Automate, ~5 minutes, no code)
+The reports arrive by e-mail today, so:
+
+1. Power Automate → **Create → Automated cloud flow** → trigger **"When a new
+   email arrives (V3)"**.
+2. Filter it: **From** = whoever/whatever sends the report, **Has attachment** =
+   Yes, **Include attachments** = Yes. Add a condition on the attachment name if
+   one mailbox carries several reports.
+3. Action **SharePoint → Create file** into one folder, e.g.
+   `Site Portal / KPI Reports`, with **File name** =
+   `Equipment Rates.xlsx` (a fixed name per report, so each day overwrites rather
+   than piling up) and **File content** = the attachment content.
+4. Repeat the flow per report — or use one flow with a switch on the subject.
+
+Standard connectors only; no premium tier and no GitHub token in Power Automate.
+
+#### Layer 4 — pull and rebuild, unattended (`kpi-pull`)
+**`kpi-pull`** runs daily (11:00 UTC ≈ 06:00 CT, before the freshness check),
+fetches every `.xlsx` from that folder over Microsoft Graph, rebuilds
+`data/kpis.json` and commits **only the JSON** — the spreadsheets never enter the
+repo, which matters because it is public.
+
+It is **inert until configured**: with no secrets it logs what is missing and
+exits green, so nothing goes red nightly while you wait on IT. To switch it on,
+ask for an Entra app registration with application permission **`Sites.Selected`**
+(granted read on that one site) and add:
+
+| Secret | What it is |
+|---|---|
+| `GRAPH_TENANT_ID` | the Blattner/Quanta tenant GUID |
+| `GRAPH_CLIENT_ID` | the app registration's client ID |
+| `GRAPH_CLIENT_SECRET` | its client secret |
+| `GRAPH_DRIVE_ID` | the document library holding the folder |
+| *(variable)* `GRAPH_FOLDER_PATH` | folder name, default `KPI Reports` |
+
+Find `GRAPH_DRIVE_ID` with
+`GET https://graph.microsoft.com/v1.0/sites/{site-id}/drives` in Graph Explorer.
+Test with **Actions → kpi-pull → Run workflow**.
+
+#### What each layer protects against
+| Failure | Caught by |
+|---|---|
+| You forget to run a report | Layer 2 (it runs itself), else layer 1 tells you within a day |
+| JDE's schedule silently stops | Layer 1 — no new file means the age keeps climbing |
+| Power Automate flow breaks | Layer 1, same way |
+| A report is imported for the wrong jobsite | The coverage strip flags the site stamp on import |
+| A report lands but is empty/garbled | The importer refuses it and names the headers it found |
+| Someone reads a stale number as current | The page's age flags and banner |
+
 ### If a report isn't recognised
 The importer names the headers it found (the Action logs them under `skipped`).
 That usually means the export spells a column differently — send the header row to

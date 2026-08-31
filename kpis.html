@@ -94,6 +94,8 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
   .cov-item{background:var(--white);border:1px solid var(--light-gray);border-left:4px solid var(--energy-blue);
     border-radius:var(--r-sm);padding:12px 14px;box-shadow:var(--shadow);}
   .cov-item.off{border-left-color:var(--light-gray);}
+  .cov-item.warn{border-left-color:var(--alert);}
+  .cov-item.alert{border-left-color:var(--alert);border-color:var(--alert);}
   .cov-item .k{font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.05em;color:var(--medium-gray);}
   .cov-item .v{font-size:13px;font-weight:bold;color:var(--dark-blue);margin-top:2px;word-break:break-word;}
   .cov-item.off .v{color:var(--medium-gray);}
@@ -324,7 +326,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
 </g>
 </svg></a>
     <a class="rail-item" href="index.html"><span class="rail-ic ic-hub"></span><span class="rail-lbl">Dashboard</span></a>
-    <a class="rail-item" href="inventory.html"><span class="rail-ic ic-assets"></span><span class="rail-lbl">Assets</span></a>
+    <a class="rail-item" href="inventory.html" title="Equipment Tracking"><span class="rail-ic ic-assets"></span><span class="rail-lbl">Equipment Tracking</span></a>
     <a class="rail-item active" href="kpis.html"><span class="rail-ic ic-kpi"></span><span class="rail-lbl">KPIs</span></a>
     <a id="railDeliveries" class="rail-item" href="deliveries.html"><span class="rail-ic ic-deliv"></span><span class="rail-lbl">Deliveries</span></a>
     <a id="railReceiving" class="rail-item" href="deliveries.html?view=receiving" style="display:none"><span class="rail-ic ic-recv"></span><span class="rail-lbl">Receiving</span></a>
@@ -446,7 +448,7 @@ let WORKER_URL = "https://asset-portal.site-asset-manager.workers.dev";
      py scripts/sync_kpi_spec.py
    ============================================================ */
 /* KPI-REPORT-SPEC-START */
-const KPI_SPEC = {"downStatuses":["DN","DS"],"excludeFromAvailability":["MS","LG"],"headerScan":12,"kinds":[{"fields":{"billingType":{"aliases":["Billing Type"],"type":"str"},"getComponent":{"aliases":["GET"],"type":"num"},"hourlyBillingRate":{"aliases":["Hourly Billing Rate","Hourly Rate","Rate Per Hour"],"type":"num"},"monthlyBillingRate":{"aliases":["Monthly Billing Rate","Monthly Rate","Monthly Charge"],"type":"num"},"monthlyNonHourlyOwnership":{"aliases":["Monthly Non-Hourly Ownership","Monthly Non Hourly Ownership"],"type":"num"},"monthlyOwnership":{"aliases":["Monthly Ownership"],"type":"num"},"oilComponent":{"aliases":["Oil / Grease","Oil/Grease","Oil & Grease"],"type":"num"},"ownershipComponent":{"aliases":["Ownership Component","Ownership"],"type":"num"},"pmComponent":{"aliases":["Preventative Maintenance","Preventive Maintenance","PM"],"type":"num"},"projectNumber":{"aliases":["Project Number","Project","Job Number"],"type":"str"},"rateBegin":{"aliases":["Begin Date","Effective From"],"type":"date"},"rateEnd":{"aliases":["End Date","Effective To"],"type":"date"},"rateGroup":{"aliases":["Rate Group"],"type":"str"},"rateGroupDesc":{"aliases":["Rate Group Description","Rate Description"],"type":"str"},"repairComponent":{"aliases":["Corrective Repair","Repair"],"type":"num"},"tiresComponent":{"aliases":["Tires / U.C.","Tires / UC","Tires","Tires/U.C."],"type":"num"}},"hints":["rate","rates","equipment rates","charge","billing"],"kind":"rates","label":"Equipment rates (charge-out)","mode":"record","signals":["monthlyBillingRate","monthlyOwnership","rateGroup","monthlyNonHourlyOwnership","hourlyBillingRate"]},{"fields":{"acquiredDate":{"aliases":["Acquired Date","Acquisition Date","Start Date"],"type":"date"},"bareRentalRate":{"aliases":["Bare Rental Rate","Bare Rate"],"type":"num"},"billedThroughDate":{"aliases":["Billed Through Date","Billed Through","Anniversary Date","Next Billing Date"],"type":"date"},"billingType":{"aliases":["Billing Type"],"type":"str"},"contractDays":{"aliases":["Contract Days","Billing Cycle Days","Cycle Days"],"type":"int"},"eqStatus":{"aliases":["EQ St","EQ Status","Equipment Status"],"type":"str"},"hourlyRate":{"aliases":["Total Hourly Rate","Hourly Rental Rate"],"type":"num"},"monthlyNonHourlyRate":{"aliases":["Monthly Non-Hourly Rate","Monthly Non Hourly Rate"],"type":"num"},"po":{"aliases":["PO#","PO #","PO Number","Purchase Order"],"type":"str"},"totalNonHourlyRate":{"aliases":["Total Non-Hourly Rate","Total Non Hourly Rate","Total Monthly Rate"],"type":"num"},"vendor":{"aliases":["Vendor","Supplier","Rental Vendor","Lessor"],"type":"str"}},"hints":["anniversary","rental","rent","contract","vendor"],"kind":"rental","label":"Rental contracts (anniversary)","mode":"record","signals":["billedThroughDate","totalNonHourlyRate","bareRentalRate","monthlyNonHourlyRate","vendor","contractDays"]},{"asOfField":"date","backfillField":{"aliases":["Transfer Status","Status of Transfer"],"values":["Newly Acquired"]},"eventDateField":"date","eventStatusField":"status","fields":{"date":{"aliases":["Effective Date","Transfer Date","Date"],"type":"date"},"from":{"aliases":["Project Transferred From","Transferred From","From Project"],"type":"str"},"prev":{"aliases":["Previous Status","Prior Status","From Status"],"type":"str"},"remark":{"aliases":["Request Remark","Remark","Comment","Reason"],"type":"str"},"status":{"aliases":["Current Status","New Status","To Status"],"type":"str"}},"hints":["transfer","status","history","movement"],"kind":"transfers","label":"Transfer / status history","mode":"events","signals":["status","prev","date","from"],"unitFields":{"eqClass":{"aliases":["Major Equipment Class","Equipment Class","Class"],"type":"str"},"transferTrade":{"aliases":["Current Trade"],"type":"str"}}},{"asOfField":"meterDate","fields":{"engineHours":{"aliases":["Engine Hours","Total Hours","Total Engine Hours","Run Hours"],"type":"num"},"idleHours":{"aliases":["Idle Hours","Idling Hours","Idle Time","Idle"],"type":"num"},"meterDate":{"aliases":["Meter Date","Reading Date","Meter Reading Date","As Of","As Of Date"],"type":"date"},"meterHours":{"aliases":["Hour Meter","Hour Meter Reading","Meter Reading","Current Meter Reading","Current Hours","Hours"],"type":"num"},"periodHours":{"aliases":["Period Hours","Hours This Period","Monthly Hours","Hours Used","Hours (Period)","Reported Hours"],"type":"num"},"targetHours":{"aliases":["Target Hours","Utilization Target","Target Utilization"],"type":"num"},"workHours":{"aliases":["Working Hours","Work Hours","Productive Hours","Operating Hours"],"type":"num"}},"hints":["utilization","utilisation","hour meter","hourmeter","zero hours","telematics","hours"],"kind":"utilization","label":"Utilization / hour meter","mode":"record","signals":["meterHours","engineHours","idleHours","workHours","periodHours"]}],"maxYear":2099,"serialAliases":["Serial Number","Serial #","Serial","Serial No","VIN"],"siteAliases":["Project Number","Project Transferred To","Location","Branch/Plant","Project","Job Number"],"statusLabels":{"AC":"Available but Consigned","AV":"Available","DN":"Down","DS":"Down - In Shop","LG":"Legal Hold","MS":"Missing/stolen","NR":"Not Ready","WK":"Working"},"unitAliases":["Unit Number","Unit #","Unit","Unit No","Unit Nbr","Equipment Number","Equipment #","Equipment","Equip Number","Equip #","Asset Number","Asset #"],"workingStatuses":["WK"]};
+const KPI_SPEC = {"downStatuses":["DN","DS"],"excludeFromAvailability":["MS","LG"],"headerScan":12,"kinds":[{"fields":{"billingType":{"aliases":["Billing Type"],"type":"str"},"getComponent":{"aliases":["GET"],"type":"num"},"hourlyBillingRate":{"aliases":["Hourly Billing Rate","Hourly Rate","Rate Per Hour"],"type":"num"},"monthlyBillingRate":{"aliases":["Monthly Billing Rate","Monthly Rate","Monthly Charge"],"type":"num"},"monthlyNonHourlyOwnership":{"aliases":["Monthly Non-Hourly Ownership","Monthly Non Hourly Ownership"],"type":"num"},"monthlyOwnership":{"aliases":["Monthly Ownership"],"type":"num"},"oilComponent":{"aliases":["Oil / Grease","Oil/Grease","Oil & Grease"],"type":"num"},"ownershipComponent":{"aliases":["Ownership Component","Ownership"],"type":"num"},"pmComponent":{"aliases":["Preventative Maintenance","Preventive Maintenance","PM"],"type":"num"},"projectNumber":{"aliases":["Project Number","Project","Job Number"],"type":"str"},"rateBegin":{"aliases":["Begin Date","Effective From"],"type":"date"},"rateEnd":{"aliases":["End Date","Effective To"],"type":"date"},"rateGroup":{"aliases":["Rate Group"],"type":"str"},"rateGroupDesc":{"aliases":["Rate Group Description","Rate Description"],"type":"str"},"repairComponent":{"aliases":["Corrective Repair","Repair"],"type":"num"},"tiresComponent":{"aliases":["Tires / U.C.","Tires / UC","Tires","Tires/U.C."],"type":"num"}},"hints":["rate","rates","equipment rates","charge","billing"],"kind":"rates","label":"Equipment rates (charge-out)","mode":"record","signals":["monthlyBillingRate","monthlyOwnership","rateGroup","monthlyNonHourlyOwnership","hourlyBillingRate"]},{"fields":{"acquiredDate":{"aliases":["Acquired Date","Acquisition Date","Start Date"],"type":"date"},"bareRentalRate":{"aliases":["Bare Rental Rate","Bare Rate"],"type":"num"},"billedThroughDate":{"aliases":["Billed Through Date","Billed Through","Anniversary Date","Next Billing Date"],"type":"date"},"billingType":{"aliases":["Billing Type"],"type":"str"},"contractDays":{"aliases":["Contract Days","Billing Cycle Days","Cycle Days"],"type":"int"},"eqStatus":{"aliases":["EQ St","EQ Status","Equipment Status"],"type":"str"},"hourlyRate":{"aliases":["Total Hourly Rate","Hourly Rental Rate"],"type":"num"},"monthlyNonHourlyRate":{"aliases":["Monthly Non-Hourly Rate","Monthly Non Hourly Rate"],"type":"num"},"po":{"aliases":["PO#","PO #","PO Number","Purchase Order"],"type":"str"},"totalNonHourlyRate":{"aliases":["Total Non-Hourly Rate","Total Non Hourly Rate","Total Monthly Rate"],"type":"num"},"vendor":{"aliases":["Vendor","Supplier","Rental Vendor","Lessor"],"type":"str"}},"hints":["anniversary","rental","rent","contract","vendor"],"kind":"rental","label":"Rental contracts (anniversary)","mode":"record","signals":["billedThroughDate","totalNonHourlyRate","bareRentalRate","monthlyNonHourlyRate","vendor","contractDays"]},{"asOfField":"date","backfillField":{"aliases":["Transfer Status","Status of Transfer"],"values":["Newly Acquired"]},"eventDateField":"date","eventStatusField":"status","fields":{"date":{"aliases":["Effective Date","Transfer Date","Date"],"type":"date"},"from":{"aliases":["Project Transferred From","Transferred From","From Project"],"type":"str"},"prev":{"aliases":["Previous Status","Prior Status","From Status"],"type":"str"},"remark":{"aliases":["Request Remark","Remark","Comment","Reason"],"type":"str"},"status":{"aliases":["Current Status","New Status","To Status"],"type":"str"}},"hints":["transfer","status","history","movement"],"kind":"transfers","label":"Transfer / status history","mode":"events","signals":["status","prev","date","from"],"unitFields":{"eqClass":{"aliases":["Major Equipment Class","Equipment Class","Class"],"type":"str"},"transferTrade":{"aliases":["Current Trade"],"type":"str"}}},{"asOfField":"meterDate","fields":{"engineHours":{"aliases":["Engine Hours","Total Hours","Total Engine Hours","Run Hours"],"type":"num"},"idleHours":{"aliases":["Idle Hours","Idling Hours","Idle Time","Idle"],"type":"num"},"meterDate":{"aliases":["Meter Date","Reading Date","Meter Reading Date","As Of","As Of Date"],"type":"date"},"meterHours":{"aliases":["Hour Meter","Hour Meter Reading","Meter Reading","Current Meter Reading","Current Hours","Hours"],"type":"num"},"periodHours":{"aliases":["Period Hours","Hours This Period","Monthly Hours","Hours Used","Hours (Period)","Reported Hours"],"type":"num"},"targetHours":{"aliases":["Target Hours","Utilization Target","Target Utilization"],"type":"num"},"workHours":{"aliases":["Working Hours","Work Hours","Productive Hours","Operating Hours"],"type":"num"}},"hints":["utilization","utilisation","hour meter","hourmeter","zero hours","telematics","hours"],"kind":"utilization","label":"Utilization / hour meter","mode":"record","signals":["meterHours","engineHours","idleHours","workHours","periodHours"]}],"maxYear":2099,"serialAliases":["Serial Number","Serial #","Serial","Serial No","VIN"],"siteAliases":["Project Number","Project Transferred To","Location","Branch/Plant","Project","Job Number"],"staleAlertDays":3,"staleWarnDays":1,"statusLabels":{"AC":"Available but Consigned","AV":"Available","DN":"Down","DS":"Down - In Shop","LG":"Legal Hold","MS":"Missing/stolen","NR":"Not Ready","WK":"Working"},"unitAliases":["Unit Number","Unit #","Unit","Unit No","Unit Nbr","Equipment Number","Equipment #","Equipment","Equip Number","Equip #","Asset Number","Asset #"],"workingStatuses":["WK"]};
 /* KPI-REPORT-SPEC-END */
 
 const KPI_KINDS = KPI_SPEC.kinds.map(k => k.kind);
@@ -476,6 +478,8 @@ const TREND_MONTHS   = 12;   // trend charts and the rolling downtime window
 const LONG_DOWN_DAYS = 7;    // "down over a week" in the focus filter
 const REPEAT_DOWNS   = 3;    // breakdowns in the window that make a repeat offender
 const RENEW_SOON_DAYS = 30;  // rental renewal horizon
+const STALE_WARN = KPI_SPEC.staleWarnDays || 1;   // show a report's age from here
+const STALE_ALERT = KPI_SPEC.staleAlertDays || 3; // and call it out loudly from here
 const DAYS_PER_MONTH = 30.44;// month length used to turn a monthly rate into a daily one
 
 const DOWN_SET = new Set(KPI_SPEC.downStatuses || []);
@@ -719,6 +723,39 @@ function activeKinds(){
   return on;
 }
 function reportFor(kind){ return (STATE.kpis.reports||[]).find(r=>r.kind===kind)||null; }
+/* How long since this report was last refreshed. The three exports are run
+   independently, so one can be forgotten while the others stay current — and a
+   stale number presented as fact is worse than a missing one. */
+function reportAge(rep){
+  if(!rep) return null;
+  const d=dnum(String(rep.importedAt||"").slice(0,10));
+  return d==null ? null : Math.max(0, TODAY_DN-d);
+}
+function staleness(rep){
+  const age=reportAge(rep);
+  if(age==null) return { age:null, level:"" };
+  return { age, level: age>=STALE_ALERT ? "alert" : (age>=STALE_WARN ? "warn" : "") };
+}
+function ageText(age){
+  if(age==null) return "age unknown";
+  if(age===0) return "refreshed today";
+  return age===1 ? "1 day old" : age+" days old";
+}
+/* One banner naming every report that is behind, so nobody reads a stale tile as
+   today's truth. */
+function renderFreshness(){
+  const on=activeKinds();
+  const behind=KPI_SPEC.kinds.map(ks=>{
+    const rep=reportFor(ks.kind);
+    if(!rep || !on[ks.kind]) return null;
+    const st=staleness(rep);
+    return st.level ? { label:ks.label, age:st.age, level:st.level } : null;
+  }).filter(Boolean);
+  if(!behind.length){ banner(null); return; }
+  const worst=behind.some(b=>b.level==="alert") ? "err" : "info";
+  const list=behind.map(b=>b.label+" ("+ageText(b.age)+")").join(" · ");
+  banner(worst, (worst==="err" ? "Out of date — rerun and import: " : "Not refreshed today: ")+list);
+}
 
 /* ---------- coverage strip ---------- */
 function renderCoverage(){
@@ -732,8 +769,12 @@ function renderCoverage(){
     }
     // A report stamped with another jobsite is the most likely import mistake.
     const wrongSite = rep.site && STATE.site && rep.site!==STATE.site;
-    const cls = (on[ks.kind] && !wrongSite) ? "" : " off";
-    return '<div class="cov-item'+cls+'"><div class="k">'+esc(ks.label)+'</div>'+
+    const st=staleness(rep);
+    const cls = (on[ks.kind] && !wrongSite) ? (st.level?(" "+st.level):"") : " off";
+    const ageTag = st.level
+      ? '<span class="flag '+(st.level==="alert"?"bad":"soon")+'">'+esc(ageText(st.age))+'</span>'
+      : '<span class="flag ok">'+esc(ageText(st.age))+'</span>';
+    return '<div class="cov-item'+cls+'"><div class="k">'+esc(ks.label)+' '+ageTag+'</div>'+
       '<div class="v">'+esc(rep.file||"imported")+'</div>'+
       '<div class="m">'+(wrongSite
         ? ('Stamped site '+esc(rep.site)+' — not this jobsite.')
@@ -764,6 +805,12 @@ function ringSvg(pct){
       'stroke-dasharray="125.66" stroke-dashoffset="125.66" transform="rotate(-90 24 24)"></circle>'+
     '</svg><div class="ring-val">'+p+'%</div></div>';
 }
+/* A tile fed by a stale report says so in its own subtitle — the number stays
+   visible, but never unqualified. */
+function staleNote(kind){
+  const st=staleness(reportFor(kind));
+  return st.level ? (" · " + ageText(st.age)) : "";
+}
 function tile(lbl,val,sub,opt){
   const o=opt||{};
   return '<div class="tile">'+(o.ring!=null?ringSvg(o.ring):"")+'<div class="grow">'+
@@ -791,8 +838,8 @@ function renderTiles(){
     const avgHr=hourly.length?sum(hourly.map(r=>r.hourlyRate))/hourly.length:null;
     const maint=R.filter(r=>r.maintPerHour!=null&&r.maintPerHour>0);
     const maintShare=(avgHr&&maint.length)?100*(sum(maint.map(r=>r.maintPerHour))/maint.length)/avgHr:null;
-    html += tile("Monthly spend", fmtMoneyShort(mo), rated.length+" of "+n+" units rated");
-    html += tile("Yearly spend", fmtMoneyShort(mo*12), "At the current monthly run-rate");
+    html += tile("Monthly spend", fmtMoneyShort(mo), rated.length+" of "+n+" units rated"+staleNote("rates"));
+    html += tile("Yearly spend", fmtMoneyShort(mo*12), "At the current monthly run-rate"+staleNote("rates"));
     if(avgHr!=null) html += tile("Avg hourly rate", "$"+avgHr.toFixed(2),
       hourly.length+" hourly-billed unit"+(hourly.length===1?"":"s")+
       (maintShare!=null?(" · "+Math.round(maintShare)+"% maintenance"):""));
@@ -805,7 +852,7 @@ function renderTiles(){
     const rmo=sum(rented.map(r=>r.rentalMonthly));
     const soon=rented.filter(r=>r.annivDays!=null&&r.annivDays>=0&&r.annivDays<=RENEW_SOON_DAYS);
     const past=rented.filter(r=>r.annivDays!=null&&r.annivDays<0);
-    html += tile("Rental commitment", fmtMoneyShort(rmo)+"/mo", rented.length+" unit"+(rented.length===1?"":"s")+" on vendor rental");
+    html += tile("Rental commitment", fmtMoneyShort(rmo)+"/mo", rented.length+" unit"+(rented.length===1?"":"s")+" on vendor rental"+staleNote("rental"));
     html += tile("Renewals in "+RENEW_SOON_DAYS+" days", String(soon.length),
       soon.length?(fmtMoneyShort(sum(soon.map(r=>r.rentalMonthly)))+"/mo re-bills"):"Nothing due this cycle",
       {meter:pctOf(soon.length), meterCls:"light"});
@@ -829,7 +876,7 @@ function renderTiles(){
     html += tile("Down right now", String(downNow.length),
       downNow.length?("Longest "+fmtNum(Math.max.apply(null,downNow.map(r=>r.daysInState||0)))+" days"):"Nothing down on site",
       {meter:pctOf(downNow.length), meterCls:downNow.length?"warn":"light", alert:downNow.length>0});
-    html += tile("Downtime days", fmtNum(dd), "Last "+TREND_MONTHS+" months · "+tracked.length+" units with history");
+    html += tile("Downtime days", fmtNum(dd), "Last "+TREND_MONTHS+" months · "+tracked.length+" units with history"+staleNote("transfers"));
     if(avail!=null) html += tile("Fleet availability", avail.toFixed(1)+"%",
       fmtNum(obs)+" unit-days tracked, last "+TREND_MONTHS+" months", {ring:avail});
     if(mttrs.length) html += tile("Avg repair time", fmtNum(sum(mttrs)/mttrs.length,1)+" d",
@@ -1677,7 +1724,7 @@ async function publishKpis(){
     toast("Published "+(d.units||0)+" unit(s) — live in ~1–2 min");
     STATE.pending=null; $("#kpiFiles").value=""; renderPreview();
     $("#importPanel").style.display="none";
-    await loadKpis(); buildRows(); renderCoverage(); renderTiles(); renderTrends(); renderTable();
+    await loadKpis(); buildRows(); renderCoverage(); renderFreshness(); renderTiles(); renderTrends(); renderTable();
   }catch(e){
     toast("Publish failed: "+e.message); $("#kpiPublish").disabled=false;
   }
@@ -1714,7 +1761,7 @@ async function selectSite(code,{push=true}={}){
   buildRows();
   const s=STATE.siteIndex.find(x=>x.code===code);
   $("#count").textContent = code ? ((s?s.name+" · ":"")+STATE.rows.length+" units") : "";
-  renderCoverage(); renderTiles(); renderTrends(); renderTable();
+  renderCoverage(); renderFreshness(); renderTiles(); renderTrends(); renderTable();
   if(push) syncUrl();
 }
 function bind(){

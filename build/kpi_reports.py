@@ -61,12 +61,21 @@ HEADER_SCAN = 12
 # carries a 2169 "billed through"). Kept out of the JSON rather than shown.
 MAX_YEAR = 2099
 
+# These reports are run independently, so any one of them can be forgotten while
+# the others stay current — which would leave the page presenting a stale number
+# as fact. WARN shows the report's age on the page; ALERT is when the daily
+# freshness check emails about it.
+STALE_WARN_DAYS = 1
+STALE_ALERT_DAYS = 3
+
 SPEC = {
     "unitAliases": UNIT_ALIASES,
     "serialAliases": SERIAL_ALIASES,
     "siteAliases": SITE_ALIASES,
     "headerScan": HEADER_SCAN,
     "maxYear": MAX_YEAR,
+    "staleWarnDays": STALE_WARN_DAYS,
+    "staleAlertDays": STALE_ALERT_DAYS,
     # Equipment status codes, as the Equipment Master spells them out. DOWN is
     # what downtime is measured over; UNAVAILABLE is not working but not broken,
     # so it is excluded from availability rather than counted as downtime.
@@ -512,6 +521,10 @@ def extract(rows, kind, filename=""):
     report = {
         "kind": kind, "label": ks["label"], "file": os.path.basename(filename or ""),
         "rows": row_count, "units": len(units),
+        # When this report was last pulled in. `asOf` is what the DATA says; this is
+        # what says whether anyone has run the export lately — the difference the
+        # daily freshness check acts on.
+        "importedAt": os.environ.get("BUILD_TS", "") or (date.today().isoformat() + "T00:00:00Z"),
         "asOf": max(past) if past else "",
         "site": report_site(rows, hi, m["site"]),
         "columns": sorted(m["cols"].keys()),
