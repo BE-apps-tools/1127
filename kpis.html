@@ -120,6 +120,47 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
   svg.chart.ring{width:58px;height:58px;display:block;}
   .ring-fg{transition:stroke-dashoffset 1s ease;}
 
+
+  /* ---------- Trend charts ---------- */
+  .trends{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px;margin-bottom:22px;}
+  .chartcard{background:var(--white);border:1px solid var(--light-gray);border-radius:var(--r);
+    box-shadow:var(--shadow);padding:16px 18px 12px;min-width:0;}
+  .chartcard h3{font-size:12px;letter-spacing:0.05em;}
+  .chartcard .cap{font-size:11px;color:var(--medium-gray);margin:4px 0 10px;}
+  .chartcard .plot{position:relative;}
+  svg.chart.plot-svg{display:block;width:100%;height:auto;overflow:visible;}
+  .ax-line{stroke:var(--light-gray);stroke-width:1;}
+  .grid-line{stroke:var(--bright-gray);stroke-width:1;}
+  .ax-txt{font-family:Arial, Helvetica, sans-serif;font-size:9px;fill:var(--medium-gray);}
+  .val-txt{font-family:'Arial Black', Arial, sans-serif;font-size:9px;fill:var(--dark-gray);}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:8px;}
+  .legend span{font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.04em;color:var(--medium-gray);
+    display:inline-flex;align-items:center;gap:6px;}
+  .legend i{width:10px;height:10px;border-radius:2px;display:inline-block;}
+  .ctip{position:absolute;display:none;pointer-events:none;z-index:30;background:var(--dark-blue);color:var(--white);
+    border-left:3px solid var(--energy-blue);border-radius:var(--r-sm);padding:8px 10px;font-size:11px;
+    box-shadow:var(--shadow-lift);min-width:120px;}
+  .ctip.show{display:block;}
+  .ctip b{display:block;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--light-blue);margin-bottom:3px;}
+  .ctip .r{display:flex;justify-content:space-between;gap:12px;}
+  .hitrect{fill:var(--white);opacity:0;cursor:pointer;}
+  .hitrect:hover{opacity:0.001;}
+  .chartcard details{margin-top:8px;}
+  .chartcard summary{font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.05em;
+    color:var(--energy-blue);cursor:pointer;}
+  .chartcard details table{font-size:11px;margin-top:8px;}
+  .chartcard details th{background:var(--bright-gray);color:var(--dark-blue);border-radius:0;}
+
+  /* ---------- Status history timeline (per-unit detail) ---------- */
+  .tl{margin:0;padding:0;list-style:none;}
+  .tl li{display:flex;gap:10px;align-items:flex-start;padding:5px 0;border-bottom:1px solid var(--bright-gray);font-size:12px;}
+  .tl li:last-child{border-bottom:none;}
+  .tl .d{flex:0 0 62px;font-weight:bold;color:var(--dark-blue);font-variant-numeric:tabular-nums;}
+  .tl .s{flex:0 0 auto;}
+  .tl .len{flex:0 0 auto;color:var(--medium-gray);font-size:11px;white-space:nowrap;}
+  .tl .rm{flex:1 1 auto;color:var(--medium-gray);min-width:0;word-break:break-word;}
+  .tl li.dn{background:var(--bright-gray);}
+
   /* ---------- Toolbar / table ---------- */
   .toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:16px;}
   .toolbar .search{flex:1 1 220px;min-width:0;}
@@ -314,9 +355,12 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
       <div class="intro">
         <h2>Unit KPIs</h2>
         <div class="rule"></div>
-        <p>Every unit on the jobsite, joined across the Equipment Master and the KPI reports
-          below. Utilization, PM and cost columns appear as soon as the matching report is
-          imported — nothing else changes. Click a row for the full per-report detail.</p>
+        <p>Every unit on the jobsite, joined across the Equipment Master and the JDE
+          reports below — <strong>downtime</strong> from the transfer status history,
+          <strong>monthly and yearly spend</strong> from the equipment rates, and
+          <strong>rental commitments</strong> from the anniversary report. Each report's
+          columns and tiles appear as soon as it is imported. Click a row for its full
+          status history and per-report detail.</p>
       </div>
 
       <div class="card" id="importPanel" style="display:none;margin-bottom:22px;">
@@ -339,6 +383,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
 
       <section class="cov" id="coverage" aria-label="Report coverage"></section>
       <section class="tiles" id="tiles" aria-label="Site KPIs"></section>
+      <section class="trends" id="trends" aria-label="Equipment trends"></section>
 
       <div class="toolbar">
         <div class="search"><input type="text" id="q" autocomplete="off"
@@ -348,11 +393,14 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
         <select id="fStatus"><option value="">All statuses</option></select>
         <select id="fFocus" aria-label="Focus">
           <option value="">All units</option>
-          <option value="idle">Idle-heavy</option>
-          <option value="pm">PM overdue / due soon</option>
-          <option value="down">Down / open work orders</option>
+          <option value="downnow">Down right now</option>
+          <option value="down7">Down over 7 days (12 mo)</option>
+          <option value="repeat">Repeat offenders (3+ breakdowns)</option>
+          <option value="anniv30">Rental renewal in 30 days</option>
+          <option value="annivpast">Rental past billed-through</option>
           <option value="cost">Highest monthly cost</option>
-          <option value="nodata">No KPI report data</option>
+          <option value="downcost">Highest cost while down</option>
+          <option value="nodata">No report data</option>
         </select>
         <button class="btn small secondary" id="exportCsv">Export CSV</button>
       </div>
@@ -398,28 +446,42 @@ let WORKER_URL = "https://asset-portal.site-asset-manager.workers.dev";
      py scripts/sync_kpi_spec.py
    ============================================================ */
 /* KPI-REPORT-SPEC-START */
-const KPI_SPEC = {"kinds":[{"fields":{"engineHours":{"aliases":["Engine Hours","Total Hours","Total Engine Hours","Run Hours"],"type":"num"},"idleHours":{"aliases":["Idle Hours","Idling Hours","Idle Time","Idle"],"type":"num"},"meterDate":{"aliases":["Meter Date","Reading Date","Meter Reading Date","As Of","As Of Date"],"type":"date"},"meterHours":{"aliases":["Hour Meter","Hour Meter Reading","Meter Reading","Meter","Current Hours","Current Meter","Hours"],"type":"num"},"periodHours":{"aliases":["Period Hours","Hours This Period","Monthly Hours","Hours Used","Hours (Period)"],"type":"num"},"targetHours":{"aliases":["Target Hours","Utilization Target","Target Utilization"],"type":"num"},"workHours":{"aliases":["Working Hours","Work Hours","Productive Hours","Operating Hours"],"type":"num"}},"hints":["utilization","utilisation","hour meter","hourmeter","meter","telematics","hours"],"kind":"utilization","label":"Utilization / hour meter","signals":["meterHours","engineHours","idleHours","workHours","periodHours"]},{"fields":{"downDays":{"aliases":["Down Days","Downtime Days","Days Down","Downtime (Days)"],"type":"num"},"lastServiceDate":{"aliases":["Last Service","Last Service Date","Last PM","Last PM Date","Last Serviced"],"type":"date"},"lastWo":{"aliases":["Work Order","Work Order #","WO #","Last Work Order"],"type":"str"},"maintStatus":{"aliases":["Maintenance Status","PM Status","Service Status","Condition"],"type":"str"},"openWo":{"aliases":["Open Work Orders","Open WO","Open WOs","WO Count","Work Orders Open","Open Orders"],"type":"int"},"pmDueDate":{"aliases":["PM Due","PM Due Date","Next PM","Next PM Date","Next Service","Next Service Date","Service Due","Service Due Date"],"type":"date"},"pmDueHours":{"aliases":["PM Due Hours","Hours To PM","Next Service Hours","Service Due Hours"],"type":"num"}},"hints":["maintenance","pm","preventive","work order","workorder","service","wo"],"kind":"maintenance","label":"Maintenance / PM / work orders","signals":["pmDueDate","pmDueHours","openWo","downDays","lastServiceDate","maintStatus"]},{"fields":{"costPeriod":{"aliases":["Period","Cost Period","Billing Period","Month"],"type":"str"},"costToDate":{"aliases":["Cost To Date","Job To Date","JTD Cost","YTD Cost","Total Cost","Cost YTD"],"type":"num"},"fuelCost":{"aliases":["Fuel Cost","Fuel Spend","Fuel $"],"type":"num"},"fuelGal":{"aliases":["Fuel Gallons","Fuel (gal)","Gallons","Gallons Used","Fuel Used","Fuel Qty"],"type":"num"},"monthlyCost":{"aliases":["Monthly Cost","Monthly Rate","Monthly Rental","Rental Rate","Rate Per Month","Month Rate","Monthly Charge"],"type":"num"},"ownership":{"aliases":["Ownership","Owned/Rented","Own Or Rent","Rental Or Owned","Finance Method"],"type":"str"},"ratePerHour":{"aliases":["Cost Per Hour","Hourly Rate","Rate Per Hour","Rate/Hr","Cost/Hr"],"type":"num"},"vendor":{"aliases":["Vendor","Supplier","Rental Vendor","Lessor"],"type":"str"}},"hints":["cost","rental","rent","fuel","rate","billing","spend"],"kind":"cost","label":"Cost / rental / fuel","signals":["monthlyCost","costToDate","ratePerHour","fuelGal","fuelCost"]}],"serialAliases":["Serial Number","Serial #","Serial","Serial No","VIN"],"unitAliases":["Unit Number","Unit #","Unit","Unit No","Unit Nbr","Equipment Number","Equipment #","Equipment","Equip Number","Equip #","Asset Number","Asset #"]};
+const KPI_SPEC = {"downStatuses":["DN","DS"],"excludeFromAvailability":["MS","LG"],"headerScan":12,"kinds":[{"fields":{"billingType":{"aliases":["Billing Type"],"type":"str"},"getComponent":{"aliases":["GET"],"type":"num"},"hourlyBillingRate":{"aliases":["Hourly Billing Rate","Hourly Rate","Rate Per Hour"],"type":"num"},"monthlyBillingRate":{"aliases":["Monthly Billing Rate","Monthly Rate","Monthly Charge"],"type":"num"},"monthlyNonHourlyOwnership":{"aliases":["Monthly Non-Hourly Ownership","Monthly Non Hourly Ownership"],"type":"num"},"monthlyOwnership":{"aliases":["Monthly Ownership"],"type":"num"},"oilComponent":{"aliases":["Oil / Grease","Oil/Grease","Oil & Grease"],"type":"num"},"ownershipComponent":{"aliases":["Ownership Component","Ownership"],"type":"num"},"pmComponent":{"aliases":["Preventative Maintenance","Preventive Maintenance","PM"],"type":"num"},"projectNumber":{"aliases":["Project Number","Project","Job Number"],"type":"str"},"rateBegin":{"aliases":["Begin Date","Effective From"],"type":"date"},"rateEnd":{"aliases":["End Date","Effective To"],"type":"date"},"rateGroup":{"aliases":["Rate Group"],"type":"str"},"rateGroupDesc":{"aliases":["Rate Group Description","Rate Description"],"type":"str"},"repairComponent":{"aliases":["Corrective Repair","Repair"],"type":"num"},"tiresComponent":{"aliases":["Tires / U.C.","Tires / UC","Tires","Tires/U.C."],"type":"num"}},"hints":["rate","rates","equipment rates","charge","billing"],"kind":"rates","label":"Equipment rates (charge-out)","mode":"record","signals":["monthlyBillingRate","monthlyOwnership","rateGroup","monthlyNonHourlyOwnership","hourlyBillingRate"]},{"fields":{"acquiredDate":{"aliases":["Acquired Date","Acquisition Date","Start Date"],"type":"date"},"bareRentalRate":{"aliases":["Bare Rental Rate","Bare Rate"],"type":"num"},"billedThroughDate":{"aliases":["Billed Through Date","Billed Through","Anniversary Date","Next Billing Date"],"type":"date"},"billingType":{"aliases":["Billing Type"],"type":"str"},"contractDays":{"aliases":["Contract Days","Billing Cycle Days","Cycle Days"],"type":"int"},"eqStatus":{"aliases":["EQ St","EQ Status","Equipment Status"],"type":"str"},"hourlyRate":{"aliases":["Total Hourly Rate","Hourly Rental Rate"],"type":"num"},"monthlyNonHourlyRate":{"aliases":["Monthly Non-Hourly Rate","Monthly Non Hourly Rate"],"type":"num"},"po":{"aliases":["PO#","PO #","PO Number","Purchase Order"],"type":"str"},"totalNonHourlyRate":{"aliases":["Total Non-Hourly Rate","Total Non Hourly Rate","Total Monthly Rate"],"type":"num"},"vendor":{"aliases":["Vendor","Supplier","Rental Vendor","Lessor"],"type":"str"}},"hints":["anniversary","rental","rent","contract","vendor"],"kind":"rental","label":"Rental contracts (anniversary)","mode":"record","signals":["billedThroughDate","totalNonHourlyRate","bareRentalRate","monthlyNonHourlyRate","vendor","contractDays"]},{"asOfField":"date","backfillField":{"aliases":["Transfer Status","Status of Transfer"],"values":["Newly Acquired"]},"eventDateField":"date","eventStatusField":"status","fields":{"date":{"aliases":["Effective Date","Transfer Date","Date"],"type":"date"},"from":{"aliases":["Project Transferred From","Transferred From","From Project"],"type":"str"},"prev":{"aliases":["Previous Status","Prior Status","From Status"],"type":"str"},"remark":{"aliases":["Request Remark","Remark","Comment","Reason"],"type":"str"},"status":{"aliases":["Current Status","New Status","To Status"],"type":"str"}},"hints":["transfer","status","history","movement"],"kind":"transfers","label":"Transfer / status history","mode":"events","signals":["status","prev","date","from"],"unitFields":{"eqClass":{"aliases":["Major Equipment Class","Equipment Class","Class"],"type":"str"},"transferTrade":{"aliases":["Current Trade"],"type":"str"}}},{"asOfField":"meterDate","fields":{"engineHours":{"aliases":["Engine Hours","Total Hours","Total Engine Hours","Run Hours"],"type":"num"},"idleHours":{"aliases":["Idle Hours","Idling Hours","Idle Time","Idle"],"type":"num"},"meterDate":{"aliases":["Meter Date","Reading Date","Meter Reading Date","As Of","As Of Date"],"type":"date"},"meterHours":{"aliases":["Hour Meter","Hour Meter Reading","Meter Reading","Current Meter Reading","Current Hours","Hours"],"type":"num"},"periodHours":{"aliases":["Period Hours","Hours This Period","Monthly Hours","Hours Used","Hours (Period)","Reported Hours"],"type":"num"},"targetHours":{"aliases":["Target Hours","Utilization Target","Target Utilization"],"type":"num"},"workHours":{"aliases":["Working Hours","Work Hours","Productive Hours","Operating Hours"],"type":"num"}},"hints":["utilization","utilisation","hour meter","hourmeter","zero hours","telematics","hours"],"kind":"utilization","label":"Utilization / hour meter","mode":"record","signals":["meterHours","engineHours","idleHours","workHours","periodHours"]}],"maxYear":2099,"serialAliases":["Serial Number","Serial #","Serial","Serial No","VIN"],"siteAliases":["Project Number","Project Transferred To","Location","Branch/Plant","Project","Job Number"],"statusLabels":{"AC":"Available but Consigned","AV":"Available","DN":"Down","DS":"Down - In Shop","LG":"Legal Hold","MS":"Missing/stolen","NR":"Not Ready","WK":"Working"},"unitAliases":["Unit Number","Unit #","Unit","Unit No","Unit Nbr","Equipment Number","Equipment #","Equipment","Equip Number","Equip #","Asset Number","Asset #"],"workingStatuses":["WK"]};
 /* KPI-REPORT-SPEC-END */
 
 const KPI_KINDS = KPI_SPEC.kinds.map(k => k.kind);
 const kindSpec = k => KPI_SPEC.kinds.find(x => x.kind === k);
 
-/* Field labels for the expanded per-unit detail (display only). */
+/* Field labels for the expanded per-unit detail and the CSV (display only). */
 const FIELD_LABELS = {
+  monthlyBillingRate:"Monthly billing rate", monthlyOwnership:"Monthly ownership",
+  monthlyNonHourlyOwnership:"Monthly non-hourly ownership", hourlyBillingRate:"Hourly billing rate",
+  billingType:"Billing type", rateGroup:"Rate group", rateGroupDesc:"Rate group description",
+  ownershipComponent:"Ownership / hr", pmComponent:"PM / hr", repairComponent:"Corrective repair / hr",
+  tiresComponent:"Tires & U.C. / hr", oilComponent:"Oil & grease / hr", getComponent:"GET / hr",
+  rateBegin:"Rate begins", rateEnd:"Rate ends", projectNumber:"Project",
+  vendor:"Vendor", po:"PO #", acquiredDate:"On rent since", billedThroughDate:"Billed through",
+  contractDays:"Billing cycle (days)", hourlyRate:"Hourly rental rate",
+  monthlyNonHourlyRate:"Monthly non-hourly rate", bareRentalRate:"Bare rental rate",
+  totalNonHourlyRate:"Total monthly rate", eqStatus:"Status on report", location:"Location",
+  date:"Effective date", status:"Status", prev:"Previous status", from:"Transferred from",
+  remark:"Remark", eqClass:"Equipment class", transferTrade:"Trade on transfer",
   meterHours:"Hour meter", meterDate:"Meter date", engineHours:"Engine hours",
   idleHours:"Idle hours", workHours:"Working hours", periodHours:"Period hours",
   targetHours:"Target hours",
-  pmDueDate:"PM due", pmDueHours:"PM due (hours)", lastServiceDate:"Last service",
-  openWo:"Open work orders", downDays:"Down days", maintStatus:"Condition", lastWo:"Work order",
-  monthlyCost:"Monthly cost", costToDate:"Cost to date", ratePerHour:"Rate per hour",
-  fuelGal:"Fuel (gal)", fuelCost:"Fuel cost", ownership:"Ownership", vendor:"Vendor",
-  costPeriod:"Period",
 };
 
-/* Thresholds — the only tuned numbers on the page, kept together on purpose. */
-const IDLE_HEAVY_PCT = 40;    // utilization at or below this is "idle-heavy"
-const PM_SOON_DAYS   = 14;    // PM due within this many days is "due soon"
-const PM_SOON_HOURS  = 50;    // ...or within this many meter hours
+/* Thresholds and constants — the only tuned numbers on the page, kept together. */
+const TREND_MONTHS   = 12;   // trend charts and the rolling downtime window
+const LONG_DOWN_DAYS = 7;    // "down over a week" in the focus filter
+const REPEAT_DOWNS   = 3;    // breakdowns in the window that make a repeat offender
+const RENEW_SOON_DAYS = 30;  // rental renewal horizon
+const DAYS_PER_MONTH = 30.44;// month length used to turn a monthly rate into a daily one
+
+const DOWN_SET = new Set(KPI_SPEC.downStatuses || []);
+const EXCL_SET = new Set(KPI_SPEC.excludeFromAvailability || []);
+const STATUS_LABELS = KPI_SPEC.statusLabels || {};
+const statusLabel = c => STATUS_LABELS[String(c||"").trim()] || String(c||"");
 
 const TRADES = ["Civil","Electrical","Foundation","Collection","Install","Mechanical",
   "Commissioning","Substation","BESS","Safety","SM/PCC","Survey","Quality","TLine",
@@ -441,6 +503,7 @@ function banner(kind,msg){ const b=$("#banner"); if(!kind){ b.style.display="non
 function adminKey(){ return nsGet("bac_admin_key")||""; }
 
 /* ---------- formatting ---------- */
+const DASH = "—";
 function fmtUpdated(iso){
   if(!iso) return "";
   const p=iso.slice(0,10).split("-");
@@ -450,56 +513,130 @@ function fmtUpdated(iso){
   if(t){ let h=+t.slice(0,2); const m=t.slice(3,5); const ap=h<12?"AM":"PM"; h=h%12||12; time=h+":"+m+" "+ap; }
   return '<span><span class="lbl2">Last updated</span><br><span class="val">'+esc(date)+(time?(' &middot; '+esc(time)):'')+'</span></span>';
 }
-const DASH = "—";
 function fmtNum(n,dp){ return n==null||isNaN(n) ? DASH : Number(n).toLocaleString(undefined,{minimumFractionDigits:dp||0,maximumFractionDigits:dp||0}); }
 function fmtMoney(n){ return n==null||isNaN(n) ? DASH : (n<0?"-":"")+"$"+Math.abs(Math.round(n)).toLocaleString(); }
+/* Big money reads better abbreviated on a tile; the table keeps full precision. */
+function fmtMoneyShort(n){
+  if(n==null||isNaN(n)) return DASH;
+  const a=Math.abs(n), sg=n<0?"-":"";
+  if(a>=1e6) return sg+"$"+(a/1e6).toFixed(a>=1e7?1:2)+"M";
+  if(a>=1e4) return sg+"$"+Math.round(a/1e3)+"K";
+  return fmtMoney(n);
+}
 function fmtPct(n){ return n==null||isNaN(n) ? DASH : Math.round(n)+"%"; }
 function fmtDate(iso){ if(!iso) return DASH; const p=String(iso).slice(0,10).split("-"); return p.length===3?(p[1]+"-"+p[2]+"-"+p[0].slice(2)):iso; }
-function daysUntil(iso){ if(!iso) return null; const d=new Date(String(iso).slice(0,10)+"T00:00:00"); if(isNaN(d)) return null;
-  const n=new Date(); const t=new Date(n.getFullYear(),n.getMonth(),n.getDate()); return Math.round((d-t)/86400000); }
-function daysSince(iso){ const d=daysUntil(iso); return d==null?null:-d; }
+const MONTH_ABBR=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function fmtMonth(mk){ const p=mk.split("-"); return MONTH_ABBR[(+p[1])-1]+" "+p[0].slice(2); }
 const num = v => (typeof v==="number" && isFinite(v)) ? v : null;
+
+/* ---------- day math (UTC integers, so no timezone drift) ---------- */
+const TODAY = new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
+function dnum(iso){ const t=Date.parse(String(iso).slice(0,10)+"T00:00:00Z"); return isNaN(t)?null:Math.round(t/86400000); }
+function dstr(dn){ return new Date(dn*86400000).toISOString().slice(0,10); }
+const TODAY_DN = dnum(TODAY);
+function daysUntil(iso){ const d=dnum(iso); return d==null?null:(d-TODAY_DN); }
+function daysSince(iso){ const d=daysUntil(iso); return d==null?null:-d; }
+/* The last N month keys, oldest first, ending with the current month. */
+function monthList(n){
+  const out=[]; const d=new Date(TODAY+"T00:00:00Z");
+  d.setUTCDate(1);
+  for(let i=n-1;i>=0;i--){ const x=new Date(d); x.setUTCMonth(d.getUTCMonth()-i); out.push(x.toISOString().slice(0,7)); }
+  return out;
+}
+function monthStartDn(mk){ return dnum(mk+"-01"); }
+function monthEndDn(mk){ const p=mk.split("-"); const d=new Date(Date.UTC(+p[0], (+p[1]), 1)); return Math.round(d.getTime()/86400000); }
 
 /* ============================================================
    Derived metrics — the single definition of every KPI on this page.
-   kpis.json holds raw report facts only, so nothing here can go stale
-   and the two ingest paths can never disagree about meaning.
+   kpis.json holds raw report facts only, so nothing here can go stale and the
+   two ingest paths can never disagree about what a number means.
    ============================================================ */
-/* Share of tracked hours actually working. Falls back through the three
-   shapes vendors ship: work/idle split, engine-minus-idle, or hours/target. */
-function utilPct(u){
-  if(!u) return null;
-  const w=num(u.workHours), i=num(u.idleHours);
-  if(w!=null && i!=null && (w+i)>0) return 100*w/(w+i);
-  const e = num(u.engineHours)!=null ? num(u.engineHours) : num(u.periodHours);
-  if(e!=null && e>0 && i!=null) return 100*Math.max(0,e-i)/e;
-  const t=num(u.targetHours), p=num(u.periodHours);
-  if(t!=null && t>0 && p!=null) return 100*Math.min(p/t,1);
-  return null;
+
+/* Turn a unit's status events into spans of [from, to) days. The state after an
+   event holds until the next event, or until today for the last one. */
+function statusSpans(events){
+  const ev=(events||[]).filter(e=>e && e.date);
+  const out=[];
+  for(let i=0;i<ev.length;i++){
+    const a=dnum(ev[i].date); if(a==null) continue;
+    const nxt = i+1<ev.length ? dnum(ev[i+1].date) : TODAY_DN;
+    out.push({ a, b:Math.max(a, nxt==null?TODAY_DN:nxt), st:String(ev[i].status||""),
+      closed:i+1<ev.length, ev:ev[i] });
+  }
+  return out;
 }
-/* PM state, from the due date and/or the hours-to-PM gap against the meter. */
-function pmState(m,u){
-  if(!m) return { state:"", days:null, hours:null };
-  const days = m.pmDueDate ? daysUntil(m.pmDueDate) : null;
-  const due=num(m.pmDueHours), meter=u?num(u.meterHours):null;
-  const hours = (due!=null && meter!=null) ? (due-meter) : (due!=null && meter==null ? null : null);
-  let state="";
-  if((days!=null && days<0) || (hours!=null && hours<0)) state="overdue";
-  else if((days!=null && days<=PM_SOON_DAYS) || (hours!=null && hours<=PM_SOON_HOURS)) state="soon";
-  else if(days!=null || hours!=null) state="ok";
-  return { state, days, hours };
+/* Downtime, availability and MTTR over a window.
+   - a span with an unknown status ('' — JDE's initial-load snapshot) counts as
+     neither up nor down, so a data gap never invents downtime;
+   - Missing/stolen and Legal Hold are excluded rather than counted as downtime:
+     they are not a maintenance question. */
+function timelineStats(events, fromDn){
+  const spans=statusSpans(events);
+  const from = fromDn==null ? -Infinity : fromDn;
+  let downDays=0, observedDays=0, downEvents=0, mttrSum=0, mttrN=0, longest=0;
+  spans.forEach(s=>{
+    if(!s.st || EXCL_SET.has(s.st)) return;
+    const a=Math.max(s.a, from), b=Math.min(s.b, TODAY_DN);
+    const len=Math.max(0, b-a);
+    if(len>0) observedDays+=len;
+    if(DOWN_SET.has(s.st)){
+      if(len>0){ downDays+=len; if(len>longest) longest=len; }
+      if(s.a>=from && s.a<=TODAY_DN) downEvents++;          // a breakdown started in-window
+      if(s.closed && s.a>=from){ mttrSum+=(s.b-s.a); mttrN++; }
+    }
+  });
+  const last=spans.length?spans[spans.length-1]:null;
+  const cur=last?last.st:"";
+  return {
+    downDays, observedDays, downEvents, longestDown:longest,
+    mttrDays: mttrN ? mttrSum/mttrN : null,
+    availPct: observedDays>0 ? 100*(observedDays-downDays)/observedDays : null,
+    currentStatus: cur,
+    isDown: !!cur && DOWN_SET.has(cur),
+    since: last?last.ev.date:"",
+    daysInState: last ? (TODAY_DN-last.a) : null,
+    lastRemark: last?(last.ev.remark||""):"",
+    arrived: spans.length?dstr(spans[0].a):"",
+    events: spans.length,
+  };
 }
-function costPerHour(c,u){
-  if(!c) return null;
-  const r=num(c.ratePerHour); if(r!=null) return r;
-  const mo=num(c.monthlyCost), p=u?num(u.periodHours):null;
-  return (mo!=null && p!=null && p>0) ? mo/p : null;
+/* Down days per month, split by status, over the given month keys. */
+function downByMonth(events, months){
+  const idx={}; months.forEach(m=>idx[m]={});
+  statusSpans(events).forEach(s=>{
+    if(!DOWN_SET.has(s.st)) return;
+    months.forEach(m=>{
+      const a=Math.max(s.a, monthStartDn(m)), b=Math.min(Math.min(s.b,TODAY_DN+1), monthEndDn(m));
+      const len=Math.max(0,b-a);
+      if(len>0) idx[m][s.st]=(idx[m][s.st]||0)+len;
+    });
+  });
+  return idx;
 }
-/* Monthly spend attributable to hours the unit wasn't working — the number that
-   turns "idle" into a conversation with the vendor. */
-function idleCost(c,u){
-  const mo=c?num(c.monthlyCost):null, up=utilPct(u);
-  return (mo!=null && mo>0 && up!=null) ? mo*(1-up/100) : null;
+/* The unit's monthly charge-out cost. Hourly units carry it as Monthly
+   Ownership, non-hourly as Monthly Non-Hourly Ownership; Monthly Billing Rate
+   is the unified column when the export has it. */
+function monthlyCostOf(rt){
+  if(!rt) return null;
+  const v=[rt.monthlyBillingRate, rt.monthlyOwnership, rt.monthlyNonHourlyOwnership]
+    .map(num).find(x=>x!=null && x>0);
+  return v==null ? (num(rt.monthlyBillingRate)!=null ? 0 : null) : v;
+}
+/* Maintenance allowance inside the hourly rate — the share of every billed hour
+   set aside for PM, repairs, tires, oil and ground-engaging tools. */
+function maintPerHour(rt){
+  if(!rt) return null;
+  const parts=[rt.pmComponent, rt.repairComponent, rt.tiresComponent, rt.oilComponent, rt.getComponent]
+    .map(num).filter(x=>x!=null);
+  return parts.length ? parts.reduce((s,v)=>s+v,0) : null;
+}
+/* External rental commitment per month (vendor-billed, not the internal rate). */
+function rentalMonthlyOf(rn){
+  if(!rn) return null;
+  const t=num(rn.totalNonHourlyRate);
+  if(t!=null && t>0) return t;
+  const a=num(rn.monthlyNonHourlyRate)||0, b=num(rn.bareRentalRate)||0;
+  return (a+b)>0 ? (a+b) : null;
 }
 
 /* ---------- data loading ---------- */
@@ -526,39 +663,56 @@ async function loadSite(code){
   else banner(null);
 }
 
-/* ---------- join: Equipment Master asset + KPI report blocks ---------- */
+/* ---------- join: Equipment Master asset + report blocks ---------- */
 const assignedOf = a => a.assignedEmployee==="0" ? "" : String(a.assignedEmployee||"");
 function kpiFor(a){
   const U=STATE.kpis.units||{};
   return U[String(a.unit||"")] || (a.serial ? U["SN:"+String(a.serial)] : null) || null;
 }
 function buildRows(){
+  const winFrom = monthStartDn(monthList(TREND_MONTHS)[0]);
   STATE.rows = STATE.assets.map(a=>{
     const k=kpiFor(a)||{};
-    const u=k.utilization||null, m=k.maintenance||null, c=k.cost||null;
-    const up=utilPct(u), pm=pmState(m,u);
+    const tr=k.transfers||null, rt=k.rates||null, rn=k.rental||null, ut=k.utilization||null;
+    const st = tr ? timelineStats(tr.events, winFrom) : null;
+    const monthly = monthlyCostOf(rt);
+    const rental = rentalMonthlyOf(rn);
+    const dailyRate = monthly!=null ? monthly/DAYS_PER_MONTH : null;
+    const annivDays = rn && rn.billedThroughDate ? daysUntil(rn.billedThroughDate) : null;
     return {
-      asset:a, kpi:k, u, m, c,
+      asset:a, kpi:k, tr, rt, rn, ut, st,
       unit:String(a.unit||""), serial:String(a.serial||""),
       description:String(a.description||""), description2:String(a.description2||""),
       status:String(a.status||""), trade:String(a.trade||""), assigned:assignedOf(a),
-      daysOnSite:daysSince(a.fromDate),
-      meterHours:u?num(u.meterHours):null,
-      utilPct:up,
-      idleHours:u?num(u.idleHours):null,
-      pmDueDate:m?(m.pmDueDate||""):"",
-      pmDays:pm.days, pmHours:pm.hours, pmFlag:pm.state,
-      openWo:m?num(m.openWo):null,
-      downDays:m?num(m.downDays):null,
-      monthlyCost:c?num(c.monthlyCost):null,
-      costPerHour:costPerHour(c,u),
-      idleCost:idleCost(c,u),
-      hasKpi:KPI_KINDS.some(kk=>k[kk]),
+      eqClass: tr ? String(tr.eqClass||"") : "",
+      // downtime (rolling window)
+      downDays: st?st.downDays:null,
+      downEvents: st?st.downEvents:null,
+      availPct: st?st.availPct:null,
+      mttrDays: st?st.mttrDays:null,
+      isDown: st?st.isDown:false,
+      daysInState: st?st.daysInState:null,
+      curStatus: st?st.currentStatus:"",
+      arrived: st&&st.arrived ? st.arrived : String(a.fromDate||""),
+      // cost
+      monthlyCost: monthly,
+      yearlyCost: monthly!=null ? monthly*12 : null,
+      hourlyRate: rt?num(rt.hourlyBillingRate):null,
+      maintPerHour: maintPerHour(rt),
+      rentalMonthly: rental,
+      vendor: rn?String(rn.vendor||""):"",
+      annivDate: rn?String(rn.billedThroughDate||""):"",
+      annivDays,
+      isRented: !!rn,
+      // cross-report: what the job paid while the unit sat broken
+      downCost: (dailyRate!=null && st && st.downDays) ? dailyRate*st.downDays : null,
+      hasKpi: KPI_KINDS.some(kk=>k[kk]),
     };
   });
+  STATE.rows.forEach(r=>{ r.daysOnSite = r.arrived ? daysSince(r.arrived) : null; });
 }
-/* Which report families actually have data for the shown site — drives both the
-   coverage strip and which table columns exist at all. */
+/* Which report families have data for the shown site — drives the coverage strip,
+   which tiles appear, and which table columns exist at all. */
 function activeKinds(){
   const on={};
   KPI_KINDS.forEach(k=>{ on[k]=STATE.rows.some(r=>r.kpi && r.kpi[k]); });
@@ -576,15 +730,18 @@ function renderCoverage(){
       return '<div class="cov-item off"><div class="k">'+esc(ks.label)+'</div>'+
         '<div class="v">Not imported</div><div class="m">Its columns stay hidden until a report lands.</div></div>';
     }
-    const cls = on[ks.kind] ? "" : " off";
+    // A report stamped with another jobsite is the most likely import mistake.
+    const wrongSite = rep.site && STATE.site && rep.site!==STATE.site;
+    const cls = (on[ks.kind] && !wrongSite) ? "" : " off";
     return '<div class="cov-item'+cls+'"><div class="k">'+esc(ks.label)+'</div>'+
       '<div class="v">'+esc(rep.file||"imported")+'</div>'+
-      '<div class="m">'+matched+' of '+STATE.rows.length+' units on this site'+
-      (rep.asOf?(' &middot; as of '+esc(fmtDate(rep.asOf))):'')+
-      (rep.units?(' &middot; '+rep.units+' in report'):'')+'</div></div>';
+      '<div class="m">'+(wrongSite
+        ? ('Stamped site '+esc(rep.site)+' — not this jobsite.')
+        : (matched+' of '+STATE.rows.length+' units on this site'+
+           (rep.asOf?(' &middot; as of '+esc(fmtDate(rep.asOf))):'')+
+           (rep.rows?(' &middot; '+rep.rows.toLocaleString()+(ks.mode==="events"?' events':' rows')):'')))+
+      '</div></div>';
   });
-  // Units carried by a report but not on this site — usually another jobsite's, so
-  // say that rather than crying data error.
   const keys=Object.keys(STATE.kpis.units||{});
   if(keys.length && STATE.rows.length){
     const here=new Set();
@@ -592,7 +749,7 @@ function renderCoverage(){
     const other=keys.filter(k=>!here.has(k)).length;
     if(other){
       items.push('<div class="cov-item off"><div class="k">Elsewhere</div><div class="v">'+other+' unit'+(other===1?"":"s")+'</div>'+
-        '<div class="m">In a report but not on this site — likely another jobsite’s units.</div></div>');
+        '<div class="m">In a report but not on this site — units that have since left, or another jobsite’s.</div></div>');
     }
   }
   box.innerHTML=items.join("");
@@ -615,55 +772,82 @@ function tile(lbl,val,sub,opt){
     (o.meter!=null?('<div class="meter '+(o.meterCls||"")+'"><span data-w="'+Math.max(0,Math.min(100,Math.round(o.meter)))+'"></span></div>'):"")+
     (sub?('<div class="sub">'+esc(sub)+'</div>'):"")+'</div></div>';
 }
+function sum(list){ return list.filter(v=>v!=null&&!isNaN(v)).reduce((s,v)=>s+v,0); }
 function renderTiles(){
   const box=$("#tiles"), R=STATE.rows, n=R.length;
   if(!n){ box.innerHTML=""; return; }
   const on=activeKinds();
-  const st=s=>String(s||"");
-  const working=R.filter(r=>st(r.status).startsWith("WK")).length;
-  const pct=n?100*working/n:0;
+  const working=R.filter(r=>String(r.status||"").startsWith("WK")).length;
   const pctOf=v=>n?100*v/n:0;
 
-  let html = tile("Working", working.toLocaleString(), "of "+n.toLocaleString()+" units on site", {ring:pct});
+  let html = tile("Working", working.toLocaleString(), "of "+n.toLocaleString()+" units on site", {ring:n?100*working/n:0});
   html += tile("Units on site", n.toLocaleString(),
     (STATE.meta&&STATE.meta.sourceVersion)?("Master "+STATE.meta.sourceVersion):"");
 
+  if(on.rates){
+    const rated=R.filter(r=>r.monthlyCost!=null);
+    const mo=sum(rated.map(r=>r.monthlyCost));
+    const hourly=R.filter(r=>r.hourlyRate!=null&&r.hourlyRate>0);
+    const avgHr=hourly.length?sum(hourly.map(r=>r.hourlyRate))/hourly.length:null;
+    const maint=R.filter(r=>r.maintPerHour!=null&&r.maintPerHour>0);
+    const maintShare=(avgHr&&maint.length)?100*(sum(maint.map(r=>r.maintPerHour))/maint.length)/avgHr:null;
+    html += tile("Monthly spend", fmtMoneyShort(mo), rated.length+" of "+n+" units rated");
+    html += tile("Yearly spend", fmtMoneyShort(mo*12), "At the current monthly run-rate");
+    if(avgHr!=null) html += tile("Avg hourly rate", "$"+avgHr.toFixed(2),
+      hourly.length+" hourly-billed unit"+(hourly.length===1?"":"s")+
+      (maintShare!=null?(" · "+Math.round(maintShare)+"% maintenance"):""));
+  } else {
+    html += tile("Monthly spend", DASH, "Import the Equipment Rates report");
+  }
+
+  if(on.rental){
+    const rented=R.filter(r=>r.isRented);
+    const rmo=sum(rented.map(r=>r.rentalMonthly));
+    const soon=rented.filter(r=>r.annivDays!=null&&r.annivDays>=0&&r.annivDays<=RENEW_SOON_DAYS);
+    const past=rented.filter(r=>r.annivDays!=null&&r.annivDays<0);
+    html += tile("Rental commitment", fmtMoneyShort(rmo)+"/mo", rented.length+" unit"+(rented.length===1?"":"s")+" on vendor rental");
+    html += tile("Renewals in "+RENEW_SOON_DAYS+" days", String(soon.length),
+      soon.length?(fmtMoneyShort(sum(soon.map(r=>r.rentalMonthly)))+"/mo re-bills"):"Nothing due this cycle",
+      {meter:pctOf(soon.length), meterCls:"light"});
+    if(past.length) html += tile("Past billed-through", String(past.length),
+      "Off-rent or re-bill — "+fmtMoneyShort(sum(past.map(r=>r.rentalMonthly)))+"/mo", {alert:true});
+  } else {
+    html += tile("Rental commitment", DASH, "Import the Anniversary Date report");
+  }
+
+  if(on.transfers){
+    const tracked=R.filter(r=>r.st);
+    const downNow=tracked.filter(r=>r.isDown);
+    const dd=sum(tracked.map(r=>r.downDays));
+    const mttrs=tracked.map(r=>r.mttrDays).filter(v=>v!=null);
+    // Ratio of totals: observed days minus down days, over observed days. Averaging
+    // each unit's own percentage would let hundreds of healthy hand tools drown out
+    // a pile driver that sat broken for two months.
+    const obs=sum(tracked.map(r=>r.st?r.st.observedDays:null));
+    const avail=obs>0 ? 100*(obs-dd)/obs : null;
+    const repeat=tracked.filter(r=>(r.downEvents||0)>=REPEAT_DOWNS);
+    html += tile("Down right now", String(downNow.length),
+      downNow.length?("Longest "+fmtNum(Math.max.apply(null,downNow.map(r=>r.daysInState||0)))+" days"):"Nothing down on site",
+      {meter:pctOf(downNow.length), meterCls:downNow.length?"warn":"light", alert:downNow.length>0});
+    html += tile("Downtime days", fmtNum(dd), "Last "+TREND_MONTHS+" months · "+tracked.length+" units with history");
+    if(avail!=null) html += tile("Fleet availability", avail.toFixed(1)+"%",
+      fmtNum(obs)+" unit-days tracked, last "+TREND_MONTHS+" months", {ring:avail});
+    if(mttrs.length) html += tile("Avg repair time", fmtNum(sum(mttrs)/mttrs.length,1)+" d",
+      "Mean time to return to service");
+    if(repeat.length) html += tile("Repeat offenders", String(repeat.length),
+      REPEAT_DOWNS+"+ breakdowns in "+TREND_MONTHS+" months", {alert:true});
+  } else {
+    html += tile("Downtime days", DASH, "Import the Equipment Transfer report");
+  }
+
+  if(on.transfers && on.rates){
+    const dc=sum(R.map(r=>r.downCost));
+    if(dc>0) html += tile("Cost while down", fmtMoneyShort(dc),
+      "Charge-out rate × downtime, last "+TREND_MONTHS+" months", {alert:true});
+  }
   if(on.utilization){
-    const ups=R.map(r=>r.utilPct).filter(v=>v!=null);
-    const avg=ups.length?ups.reduce((s,v)=>s+v,0)/ups.length:null;
-    const idle=R.filter(r=>r.utilPct!=null && r.utilPct<=IDLE_HEAVY_PCT).length;
-    const hrs=R.map(r=>r.u?num(r.u.periodHours):null).filter(v=>v!=null).reduce((s,v)=>s+v,0);
-    html += tile("Avg utilization", fmtPct(avg), ups.length+" unit"+(ups.length===1?"":"s")+" reporting", {ring:avg||0});
-    html += tile("Idle-heavy units", String(idle), "At or below "+IDLE_HEAVY_PCT+"% utilization",
-      {meter:pctOf(idle), meterCls:idle?"warn":"light", alert:idle>0});
-    if(hrs>0) html += tile("Hours this period", fmtNum(hrs), "Across reporting units");
-  } else {
-    html += tile("Avg utilization", DASH, "Import a utilization report");
-  }
-
-  if(on.maintenance){
-    const over=R.filter(r=>r.pmFlag==="overdue").length;
-    const soon=R.filter(r=>r.pmFlag==="soon").length;
-    const wo=R.map(r=>r.openWo).filter(v=>v!=null).reduce((s,v)=>s+v,0);
-    const down=R.filter(r=>r.downDays!=null && r.downDays>0).length;
-    html += tile("PM overdue", String(over), soon?(soon+" more due within "+PM_SOON_DAYS+" days"):"Against report due date / hours",
-      {meter:pctOf(over), meterCls:over?"warn":"light", alert:over>0});
-    html += tile("Open work orders", fmtNum(wo), R.filter(r=>r.openWo!=null&&r.openWo>0).length+" unit(s) with WOs open");
-    html += tile("Units down", String(down), "Reported downtime days", {meter:pctOf(down), meterCls:"blue"});
-  } else {
-    html += tile("PM overdue", DASH, "Import a maintenance report");
-  }
-
-  if(on.cost){
-    const priced=R.filter(r=>r.monthlyCost!=null);
-    const mo=priced.reduce((s,r)=>s+r.monthlyCost,0);
-    const ic=R.map(r=>r.idleCost).filter(v=>v!=null).reduce((s,v)=>s+v,0);
-    const ctd=R.map(r=>r.c?num(r.c.costToDate):null).filter(v=>v!=null).reduce((s,v)=>s+v,0);
-    html += tile("Monthly cost", fmtMoney(mo), priced.length+" of "+n+" units priced");
-    if(ctd>0) html += tile("Cost to date", fmtMoney(ctd), "Job to date, priced units");
-    if(ic>0) html += tile("Idle cost / month", fmtMoney(ic), "Monthly cost × non-working share", {alert:true});
-  } else {
-    html += tile("Monthly cost", DASH, "Import a cost report");
+    const hrs=R.map(r=>r.ut?num(r.ut.periodHours):null).filter(v=>v!=null);
+    if(hrs.length) html += tile("Hours reported", fmtNum(sum(hrs)), hrs.length+" units reporting");
   }
 
   box.innerHTML=html;
@@ -676,9 +860,174 @@ function renderTiles(){
   });
 }
 
+/* ============================================================
+   Trend charts — inline SVG, Blattner palette, no libraries.
+   Two single-purpose charts, one measure each (never a second y-scale):
+   downtime days per month, and the monthly charge-out run-rate.
+   ============================================================ */
+const SERIES = { DN:{c:"#2DA2DB", label:"Down on site"}, DS:{c:"#02568A", label:"Down - in shop"} };
+const PLOT = { w:520, h:170, l:34, r:8, t:10, b:22 };
+
+function axisTicks(max, count){
+  if(max<=0) return [0];
+  const raw=max/count;
+  const mag=Math.pow(10, Math.floor(Math.log10(raw)));
+  const step=[1,2,2.5,5,10].map(m=>m*mag).find(s=>s>=raw)||mag*10;
+  const out=[]; for(let v=0; v<=Math.ceil(max/step)*step+1e-9; v+=step) out.push(v);
+  return out;
+}
+/* Stacked bars: down days per month, split on-site vs in-shop. Two series, so a
+   legend is always shown and the total is labelled above each bar. */
+function downtimeChart(months, data){
+  const totals=months.map(m=>Object.values(data[m]||{}).reduce((s,v)=>s+v,0));
+  const max=Math.max.apply(null, totals.concat([1]));
+  const ticks=axisTicks(max,4), top=ticks[ticks.length-1];
+  const iw=PLOT.w-PLOT.l-PLOT.r, ih=PLOT.h-PLOT.t-PLOT.b;
+  const bw=Math.min(30, iw/months.length*0.62), gap=iw/months.length;
+  const y=v=>PLOT.t+ih-(v/top)*ih;
+  let g="";
+  ticks.forEach(t=>{ g+='<line class="grid-line" x1="'+PLOT.l+'" y1="'+y(t).toFixed(1)+'" x2="'+(PLOT.w-PLOT.r)+'" y2="'+y(t).toFixed(1)+'"></line>'+
+    '<text class="ax-txt" x="'+(PLOT.l-5)+'" y="'+(y(t)+3).toFixed(1)+'" text-anchor="end">'+fmtNum(t)+'</text>'; });
+  let bars="", hits="";
+  months.forEach((m,i)=>{
+    const cx=PLOT.l+gap*i+gap/2, x=cx-bw/2;
+    let acc=0;
+    ["DN","DS"].forEach(st=>{
+      const v=(data[m]||{})[st]||0; if(v<=0) return;
+      const y0=y(acc+v), y1=y(acc);
+      // 2px surface gap between stacked segments so they read as separate marks
+      const h=Math.max(1,(y1-y0)-(acc>0?2:0));
+      bars+='<rect x="'+x.toFixed(1)+'" y="'+y0.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+h.toFixed(1)+
+        '" rx="'+(acc+v>=totals[i]?3:0)+'" fill="'+SERIES[st].c+'"></rect>';
+      acc+=v;
+    });
+    if(totals[i]>0) bars+='<text class="val-txt" x="'+cx.toFixed(1)+'" y="'+(y(totals[i])-4).toFixed(1)+'" text-anchor="middle">'+fmtNum(totals[i])+'</text>';
+    bars+='<text class="ax-txt" x="'+cx.toFixed(1)+'" y="'+(PLOT.h-8)+'" text-anchor="middle">'+esc(fmtMonth(m))+'</text>';
+    hits+='<rect class="hitrect" data-m="'+m+'" x="'+(PLOT.l+gap*i).toFixed(1)+'" y="'+PLOT.t+'" width="'+gap.toFixed(1)+'" height="'+ih+'"></rect>';
+  });
+  return '<svg class="chart plot-svg" viewBox="0 0 '+PLOT.w+' '+PLOT.h+'" role="img" aria-label="Downtime days per month">'+
+    g+bars+'<line class="ax-line" x1="'+PLOT.l+'" y1="'+(PLOT.t+ih)+'" x2="'+(PLOT.w-PLOT.r)+'" y2="'+(PLOT.t+ih)+'"></line>'+hits+'</svg>';
+}
+/* One measure, one series: no legend, the title names it. */
+function spendChart(months, series){
+  const max=Math.max.apply(null, series.concat([1]));
+  const ticks=axisTicks(max,4), top=ticks[ticks.length-1];
+  const iw=PLOT.w-PLOT.l-PLOT.r, ih=PLOT.h-PLOT.t-PLOT.b;
+  const gap=iw/months.length;
+  const x=i=>PLOT.l+gap*i+gap/2, y=v=>PLOT.t+ih-(v/top)*ih;
+  let g="";
+  ticks.forEach(t=>{ g+='<line class="grid-line" x1="'+PLOT.l+'" y1="'+y(t).toFixed(1)+'" x2="'+(PLOT.w-PLOT.r)+'" y2="'+y(t).toFixed(1)+'"></line>'+
+    '<text class="ax-txt" x="'+(PLOT.l-5)+'" y="'+(y(t)+3).toFixed(1)+'" text-anchor="end">'+fmtMoneyShort(t)+'</text>'; });
+  const pts=series.map((v,i)=>x(i).toFixed(1)+","+y(v).toFixed(1));
+  const area='<polygon points="'+(PLOT.l+gap/2).toFixed(1)+','+(PLOT.t+ih)+' '+pts.join(" ")+' '+
+    x(series.length-1).toFixed(1)+','+(PLOT.t+ih)+'" fill="#B9E5FB"></polygon>';
+  const line='<polyline points="'+pts.join(" ")+'" fill="none" stroke="#02568A" stroke-width="2" stroke-linejoin="round"></polyline>';
+  let dots="", labels="", hits="";
+  series.forEach((v,i)=>{
+    dots+='<circle cx="'+x(i).toFixed(1)+'" cy="'+y(v).toFixed(1)+'" r="'+(i===series.length-1?4:2.5)+
+      '" fill="#02568A" stroke="#FFFFFF" stroke-width="2"></circle>';
+    labels+='<text class="ax-txt" x="'+x(i).toFixed(1)+'" y="'+(PLOT.h-8)+'" text-anchor="middle">'+esc(fmtMonth(months[i]))+'</text>';
+    hits+='<rect class="hitrect" data-m="'+months[i]+'" x="'+(PLOT.l+gap*i).toFixed(1)+'" y="'+PLOT.t+'" width="'+gap.toFixed(1)+'" height="'+ih+'"></rect>';
+  });
+  // Direct-label only the newest point: a number on every point is noise.
+  const lastV=series[series.length-1];
+  labels+='<text class="val-txt" x="'+x(series.length-1).toFixed(1)+'" y="'+(y(lastV)-8).toFixed(1)+'" text-anchor="end">'+esc(fmtMoneyShort(lastV))+'</text>';
+  return '<svg class="chart plot-svg" viewBox="0 0 '+PLOT.w+' '+PLOT.h+'" role="img" aria-label="Monthly charge-out run-rate">'+
+    g+area+line+dots+labels+'<line class="ax-line" x1="'+PLOT.l+'" y1="'+(PLOT.t+ih)+'" x2="'+(PLOT.w-PLOT.r)+'" y2="'+(PLOT.t+ih)+'"></line>'+hits+'</svg>';
+}
+function dataTable(head, rows){
+  return '<details><summary>View as table</summary><div class="table-scroll"><table><thead><tr>'+
+    head.map(h=>'<th>'+esc(h)+'</th>').join("")+'</tr></thead><tbody>'+
+    rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c)+'</td>').join("")+'</tr>').join("")+
+    '</tbody></table></div></details>';
+}
+function renderTrends(){
+  const box=$("#trends"), on=activeKinds(), R=STATE.rows;
+  if(!R.length){ box.innerHTML=""; return; }
+  const months=monthList(TREND_MONTHS);
+  let cards="";
+
+  if(on.transfers){
+    // Site-level downtime per month, plus how many distinct units were down.
+    const agg={}; months.forEach(m=>agg[m]={});
+    const unitsPer={}; months.forEach(m=>unitsPer[m]=new Set());
+    R.forEach(r=>{
+      if(!r.tr) return;
+      const per=downByMonth(r.tr.events, months);
+      months.forEach(m=>{
+        Object.keys(per[m]).forEach(st=>{ agg[m][st]=(agg[m][st]||0)+per[m][st]; unitsPer[m].add(r.unit); });
+      });
+    });
+    const rows=months.map(m=>[fmtMonth(m), fmtNum(agg[m].DN||0), fmtNum(agg[m].DS||0),
+      fmtNum((agg[m].DN||0)+(agg[m].DS||0)), String(unitsPer[m].size)]);
+    cards += '<div class="chartcard"><h3>Downtime by month</h3>'+
+      '<div class="cap">Days units spent down, from the transfer status history. The newest month is to date. Hover a month for the unit count.</div>'+
+      '<div class="plot" data-chart="down">'+downtimeChart(months, agg)+'<div class="ctip" id="tipDown"></div></div>'+
+      '<div class="legend"><span><i style="background:'+SERIES.DN.c+'"></i>'+esc(SERIES.DN.label)+'</span>'+
+      '<span><i style="background:'+SERIES.DS.c+'"></i>'+esc(SERIES.DS.label)+'</span></div>'+
+      dataTable(["Month","Down on site","In shop","Total days","Units down"], rows)+'</div>';
+    window.__downAgg={agg, unitsPer, months};
+  }
+
+  if(on.rates){
+    // Run-rate by month: the monthly charge-out of every unit that had arrived by
+    // that month. Units that have since left aren't in the Master, so earlier
+    // months read low — said plainly in the caption rather than papered over.
+    const series=months.map(m=>{
+      const end=monthEndDn(m);
+      return sum(R.map(r=>{
+        if(r.monthlyCost==null) return null;
+        const a=r.arrived?dnum(r.arrived):null;
+        return (a==null || a<end) ? r.monthlyCost : null;
+      }));
+    });
+    const rows=months.map((m,i)=>[fmtMonth(m), fmtMoney(series[i]), fmtMoney(series[i]*12)]);
+    cards += '<div class="chartcard"><h3>Monthly charge-out run-rate</h3>'+
+      '<div class="cap">Equipment Rates × units on site, by arrival month. Counts only units still on site today, so earlier months exclude units that have left.</div>'+
+      '<div class="plot" data-chart="spend">'+spendChart(months, series)+'<div class="ctip" id="tipSpend"></div></div>'+
+      dataTable(["Month","Monthly run-rate","Annualized"], rows)+'</div>';
+    window.__spendSeries={series, months};
+  }
+  box.innerHTML=cards;
+  bindChartHover();
+}
+/* Hover layer: a crosshair-free tooltip keyed off the per-month hit rects. */
+function bindChartHover(){
+  document.querySelectorAll("#trends .plot").forEach(plot=>{
+    const tip=plot.querySelector(".ctip"), kind=plot.dataset.chart;
+    plot.addEventListener("mousemove", e=>{
+      const hit=e.target.closest(".hitrect");
+      if(!hit){ tip.classList.remove("show"); return; }
+      const m=hit.dataset.m;
+      let html="";
+      if(kind==="down"){
+        const A=window.__downAgg; if(!A) return;
+        const dn=A.agg[m].DN||0, ds=A.agg[m].DS||0;
+        html='<b>'+esc(fmtMonth(m))+'</b>'+
+          '<div class="r"><span>Down on site</span><span>'+fmtNum(dn)+' d</span></div>'+
+          '<div class="r"><span>In shop</span><span>'+fmtNum(ds)+' d</span></div>'+
+          '<div class="r"><span>Total</span><span>'+fmtNum(dn+ds)+' d</span></div>'+
+          '<div class="r"><span>Units down</span><span>'+A.unitsPer[m].size+'</span></div>';
+      } else {
+        const S=window.__spendSeries; if(!S) return;
+        const i=S.months.indexOf(m); const v=S.series[i]||0;
+        html='<b>'+esc(fmtMonth(m))+'</b>'+
+          '<div class="r"><span>Run-rate</span><span>'+fmtMoney(v)+'</span></div>'+
+          '<div class="r"><span>Annualized</span><span>'+fmtMoneyShort(v*12)+'</span></div>';
+      }
+      tip.innerHTML=html; tip.classList.add("show");
+      const pr=plot.getBoundingClientRect();
+      let x=e.clientX-pr.left+12, y=e.clientY-pr.top-10;
+      if(x+150>pr.width) x=e.clientX-pr.left-150;
+      tip.style.left=Math.max(0,x)+"px"; tip.style.top=Math.max(0,y)+"px";
+    });
+    plot.addEventListener("mouseleave", ()=>plot.querySelector(".ctip").classList.remove("show"));
+  });
+}
+
 /* ---------- columns ---------- */
-/* Column set is built from the report families present, so a site with no cost
-   report shows no empty cost columns rather than a wall of dashes. */
+/* Built from the report families present, so a site with no rental report shows
+   no empty rental columns rather than a wall of dashes. */
 function columns(){
   const on=activeKinds();
   const cols=[
@@ -686,25 +1035,28 @@ function columns(){
     {key:"description", label:"Description", cls:"desc", type:"str"},
     {key:"status", label:"Status", type:"status"},
     {key:"trade", label:"Trade", type:"trade"},
-    {key:"daysOnSite", label:"Days on site", type:"num", dp:0},
   ];
-  if(on.utilization) cols.push(
-    {key:"meterHours", label:"Hour meter", type:"num", grp:true},
-    {key:"utilPct", label:"Util %", type:"pct"},
-    {key:"idleHours", label:"Idle hrs", type:"num"});
-  if(on.maintenance) cols.push(
-    {key:"pmDueDate", label:"PM due", type:"pm", grp:true},
-    {key:"openWo", label:"Open WO", type:"num"},
-    {key:"downDays", label:"Down days", type:"num"});
-  if(on.cost) cols.push(
+  if(on.transfers) cols.push({key:"eqClass", label:"Class", type:"str"});
+  cols.push({key:"daysOnSite", label:"Days on site", type:"num"});
+  if(on.transfers) cols.push(
+    {key:"downDays", label:"Down days "+TREND_MONTHS+"mo", type:"num", grp:true},
+    {key:"downEvents", label:"Breakdowns", type:"num"},
+    {key:"availPct", label:"Avail %", type:"pct"});
+  if(on.rates) cols.push(
     {key:"monthlyCost", label:"Cost / mo", type:"money", grp:true},
-    {key:"costPerHour", label:"Cost / hr", type:"money2"});
+    {key:"yearlyCost", label:"Cost / yr", type:"money"});
+  if(on.transfers && on.rates) cols.push({key:"downCost", label:"Cost while down", type:"money"});
+  if(on.rental) cols.push(
+    {key:"rentalMonthly", label:"Rental / mo", type:"money", grp:true},
+    {key:"annivDate", label:"Billed through", type:"anniv"});
+  if(on.utilization) cols.push({key:"meterHours", label:"Hour meter", type:"num", grp:true});
   return cols;
 }
 function renderHead(cols){
   $("#headRow").innerHTML = cols.map(c=>{
-    const numeric=["num","pct","money","money2"].includes(c.type);
-    return '<th data-sort="'+c.key+'"'+(numeric?' class="n'+(c.grp?" grp":"")+'"':(c.grp?' class="grp"':''))+'>'+esc(c.label)+'</th>';
+    const numeric=["num","pct","money"].includes(c.type);
+    const cls=(numeric?"n":"")+(c.grp?" grp":"");
+    return '<th data-sort="'+c.key+'"'+(cls.trim()?' class="'+cls.trim()+'"':'')+'>'+esc(c.label)+'</th>';
   }).join("") + '<th></th>';
   updateSortHeaders();
 }
@@ -721,33 +1073,42 @@ function statusDot(status){
   if(!s) return '<span class="status-dot"></span>';
   return '<span class="status-dot warn"></span>';
 }
-function pmCell(r){
-  if(!r.pmDueDate && r.pmHours==null) return '<span class="muted">'+DASH+'</span>';
-  const cls = r.pmFlag==="overdue" ? "flag bad" : (r.pmFlag==="soon" ? "flag soon" : "flag ok");
-  let txt = r.pmDueDate ? fmtDate(r.pmDueDate) : (fmtNum(r.pmHours)+" hrs");
-  if(r.pmFlag==="overdue" && r.pmDays!=null && r.pmDays<0) txt += " ("+Math.abs(r.pmDays)+"d late)";
-  else if(r.pmFlag==="soon" && r.pmDays!=null && r.pmDays>=0) txt += " ("+r.pmDays+"d)";
+function annivCell(r){
+  if(!r.annivDate) return '<span class="muted">'+DASH+'</span>';
+  const d=r.annivDays;
+  const cls = d==null ? "flag ok" : (d<0 ? "flag bad" : (d<=RENEW_SOON_DAYS ? "flag soon" : "flag ok"));
+  let txt=fmtDate(r.annivDate);
+  if(d!=null && d<0) txt+=" ("+Math.abs(d)+"d past)";
+  else if(d!=null && d<=RENEW_SOON_DAYS) txt+=" ("+d+"d)";
   return '<span class="'+cls+'">'+esc(txt)+'</span>';
 }
 function cpAttr(v){ const s=String(v==null?"":v).trim(); return s? ' data-copy="'+esc(s)+'"' : ""; }
 function cell(r,c){
   const v=r[c.key];
-  const nCls=["num","pct","money","money2"].includes(c.type) ? " n" : "";
+  const nCls=["num","pct","money"].includes(c.type) ? " n" : "";
   const cls=(c.cls?" "+c.cls:"")+nCls+(c.grp?" grp":"");
-  if(c.type==="status") return '<td class="status-cell'+cls+'"'+cpAttr(r.status)+'>'+statusDot(r.status)+esc(r.status||DASH)+'</td>';
+  if(c.type==="status"){
+    const down=r.isDown;
+    const extra = down&&r.daysInState!=null ? ' <span class="flag bad">'+r.daysInState+'d down</span>' : "";
+    return '<td class="status-cell'+cls+'"'+cpAttr(r.status)+'>'+statusDot(r.status)+esc(r.status||DASH)+extra+'</td>';
+  }
   if(c.type==="trade") return '<td class="'+cls.trim()+'">'+(r.trade?('<span class="trade-badge">'+esc(r.trade)+'</span>'):'<span class="trade-badge none">Unassigned</span>')+'</td>';
-  if(c.type==="pm") return '<td class="'+cls.trim()+'">'+pmCell(r)+'</td>';
+  if(c.type==="anniv") return '<td class="'+cls.trim()+'">'+annivCell(r)+'</td>';
   if(c.key==="description") return '<td class="'+cls.trim()+'"'+cpAttr(r.description)+'>'+esc(r.description||DASH)+
     (r.description2?('<div class="d2">'+esc(r.description2)+'</div>'):'')+'</td>';
+  if(c.key==="meterHours"){
+    const mh=r.ut?num(r.ut.meterHours):null;
+    return '<td class="'+(cls.trim()+(mh==null?" muted":"")).trim()+'">'+esc(fmtNum(mh))+'</td>';
+  }
   let txt;
   if(c.type==="money") txt=fmtMoney(v);
-  else if(c.type==="money2") txt = v==null?DASH:("$"+Number(v).toFixed(2));
   else if(c.type==="pct") txt=fmtPct(v);
-  else if(c.type==="num") txt=fmtNum(v, c.dp||0);
+  else if(c.type==="num") txt=fmtNum(v, 0);
   else txt = (v==null||v==="")?DASH:String(v);
   const muted = txt===DASH ? ' class="'+(cls.trim()+" muted").trim()+'"' : (cls.trim()?(' class="'+cls.trim()+'"'):"");
   return '<td'+muted+cpAttr(txt===DASH?"":v)+'>'+esc(txt)+'</td>';
 }
+
 /* ---------- filter / sort ---------- */
 function viewRows(){
   const q=$("#q").value.trim().toLowerCase();
@@ -756,29 +1117,36 @@ function viewRows(){
   if(tf===TRADE_NONE) v=v.filter(r=>!r.trade);
   else if(tf) v=v.filter(r=>r.trade===tf);
   if(sf) v=v.filter(r=>r.status===sf);
-  if(ff==="idle") v=v.filter(r=>r.utilPct!=null && r.utilPct<=IDLE_HEAVY_PCT);
-  else if(ff==="pm") v=v.filter(r=>r.pmFlag==="overdue"||r.pmFlag==="soon");
-  else if(ff==="down") v=v.filter(r=>(r.downDays!=null&&r.downDays>0)||(r.openWo!=null&&r.openWo>0));
+  if(ff==="downnow") v=v.filter(r=>r.isDown);
+  else if(ff==="down7") v=v.filter(r=>(r.downDays||0)>LONG_DOWN_DAYS);
+  else if(ff==="repeat") v=v.filter(r=>(r.downEvents||0)>=REPEAT_DOWNS);
+  else if(ff==="anniv30") v=v.filter(r=>r.annivDays!=null&&r.annivDays>=0&&r.annivDays<=RENEW_SOON_DAYS);
+  else if(ff==="annivpast") v=v.filter(r=>r.annivDays!=null&&r.annivDays<0);
   else if(ff==="cost") v=v.filter(r=>r.monthlyCost!=null);
+  else if(ff==="downcost") v=v.filter(r=>r.downCost!=null&&r.downCost>0);
   else if(ff==="nodata") v=v.filter(r=>!r.hasKpi);
-  if(q) v=v.filter(r=>[r.unit,r.serial,r.description,r.description2,r.assigned].some(x=>String(x||"").toLowerCase().includes(q)));
+  if(q) v=v.filter(r=>[r.unit,r.serial,r.description,r.description2,r.assigned,r.vendor,r.eqClass].some(x=>String(x||"").toLowerCase().includes(q)));
   const s=STATE.sort;
   if(s&&s.key){
     const dir=s.dir==="desc"?-1:1;
     const col=columns().find(c=>c.key===s.key);
-    const numeric=col && ["num","pct","money","money2"].includes(col.type);
+    const numeric=col && ["num","pct","money"].includes(col.type);
+    const get=r=> s.key==="meterHours" ? (r.ut?num(r.ut.meterHours):null) : r[s.key];
     v.sort((a,b)=>{
       if(numeric){
-        const x=a[s.key], y=b[s.key];
+        const x=get(a), y=get(b);
         if(x==null && y==null) return 0;
         if(x==null) return 1;                 // blanks always last, either direction
         if(y==null) return -1;
         return dir*(x-y);
       }
-      return dir*String(a[s.key]==null?"":a[s.key]).localeCompare(String(b[s.key]==null?"":b[s.key]), undefined, {numeric:true, sensitivity:"base"});
+      return dir*String(get(a)==null?"":get(a)).localeCompare(String(get(b)==null?"":get(b)), undefined, {numeric:true, sensitivity:"base"});
     });
-  } else if(ff==="cost"){
-    v.sort((a,b)=>(b.monthlyCost||0)-(a.monthlyCost||0));   // "highest cost" is a ranking
+  } else if(ff==="cost"||ff==="downcost"){
+    const k=ff==="cost"?"monthlyCost":"downCost";
+    v.sort((a,b)=>(b[k]||0)-(a[k]||0));       // these focuses are rankings
+  } else if(ff==="down7"||ff==="repeat"){
+    v.sort((a,b)=>(b.downDays||0)-(a.downDays||0));
   } else {
     v.sort((a,b)=>String(a.unit).localeCompare(String(b.unit), undefined, {numeric:true}));
   }
@@ -799,43 +1167,72 @@ function renderPager(total,pc){
   $("#pgFirst").disabled=$("#pgPrev").disabled=(STATE.page<=1);
   $("#pgNext").disabled=$("#pgLast").disabled=(STATE.page>=pc);
 }
+
 /* ---------- detail row ---------- */
+/* The status history is the whole point of the transfer report: it says when a
+   unit went down, for how long, and what the crew wrote about it. */
+function timelineHtml(r){
+  const spans=statusSpans(r.tr.events);
+  if(!spans.length) return "";
+  const items=spans.slice().reverse().map(s=>{
+    const down=DOWN_SET.has(s.st);
+    const len=Math.max(0,Math.min(s.b,TODAY_DN)-s.a);
+    const lbl = s.st ? (s.st+" · "+statusLabel(s.st)) : "Arrived on site";
+    const flag = s.st ? ('<span class="flag'+(down?" bad":"")+'">'+esc(lbl)+'</span>')
+                      : ('<span class="flag">'+esc(lbl)+'</span>');
+    const prev = s.ev.prev ? '<span class="len">from '+esc(s.ev.prev)+'</span>' : "";
+    return '<li class="'+(down?"dn":"")+'"><span class="d">'+esc(fmtDate(s.ev.date))+'</span>'+
+      '<span class="s">'+flag+'</span>'+prev+
+      '<span class="len">'+(s.closed?len+" d":len+" d, ongoing")+'</span>'+
+      '<span class="rm">'+esc(s.ev.remark||"")+'</span></li>';
+  }).join("");
+  return '<div><h3>Status history</h3><ul class="tl">'+items+'</ul>'+
+    '<div class="detail-src">From '+esc((reportFor("transfers")||{}).file||"the transfer report")+
+    ' &middot; '+spans.length+' event'+(spans.length===1?"":"s")+'</div></div>';
+}
+function fmtField(kind, f, v){
+  const ks=kindSpec(kind), t=ks&&ks.fields[f]?ks.fields[f].type:"str";
+  if(t==="date") return fmtDate(v);
+  if(t==="num"||t==="int"){
+    if(/rate|cost|ownership|component/i.test(f) && Math.abs(v)>=100) return fmtMoney(v);
+    if(/rate|component/i.test(f)) return "$"+Number(v).toFixed(2);
+    return fmtNum(v, Number.isInteger(v)?0:1);
+  }
+  return String(v);
+}
 function detailBlocks(r){
   const parts=[];
+  if(r.tr && r.tr.events && r.tr.events.length) parts.push(timelineHtml(r));
   KPI_SPEC.kinds.forEach(ks=>{
+    if(ks.mode==="events") return;                       // rendered as the timeline above
     const blk=r.kpi?r.kpi[ks.kind]:null;
     if(!blk) return;
     const rep=reportFor(ks.kind);
-    const cells=Object.keys(ks.fields).filter(f=>blk[f]!=null&&blk[f]!=="").map(f=>{
-      const t=ks.fields[f].type;
-      let v=blk[f];
-      if(t==="date") v=fmtDate(v);
-      else if(t==="num"||t==="int"){
-        v = /cost|rate|fuelCost/i.test(f) ? fmtMoney(v) : fmtNum(v, Number.isInteger(v)?0:1);
-      }
-      return '<div><div class="k">'+esc(FIELD_LABELS[f]||f)+'</div>'+esc(v)+'</div>';
-    }).join("");
+    const cells=Object.keys(ks.fields).filter(f=>blk[f]!=null&&blk[f]!=="")
+      .map(f=>'<div><div class="k">'+esc(FIELD_LABELS[f]||f)+'</div>'+esc(fmtField(ks.kind,f,blk[f]))+'</div>').join("");
     parts.push('<div><h3>'+esc(ks.label)+'</h3><div class="detail-grid">'+cells+'</div>'+
       (rep&&rep.file?('<div class="detail-src">From '+esc(rep.file)+(rep.asOf?(' &middot; as of '+esc(fmtDate(rep.asOf))):'')+'</div>'):'')+'</div>');
   });
-  // Derived block: the cross-report numbers, with their inputs named.
+  // Derived: the cross-report numbers, each with its inputs named.
   const der=[];
-  if(r.utilPct!=null) der.push('<div><div class="k">Utilization</div>'+fmtPct(r.utilPct)+'</div>');
-  if(r.costPerHour!=null) der.push('<div><div class="k">Cost / hour</div>$'+r.costPerHour.toFixed(2)+'</div>');
-  if(r.idleCost!=null) der.push('<div><div class="k">Idle cost / mo</div>'+fmtMoney(r.idleCost)+'</div>');
-  if(r.pmHours!=null) der.push('<div><div class="k">Hours to PM</div>'+fmtNum(r.pmHours)+'</div>');
+  if(r.downDays!=null) der.push('<div><div class="k">Down days ('+TREND_MONTHS+" mo)"+'</div>'+fmtNum(r.downDays)+'</div>');
+  if(r.availPct!=null) der.push('<div><div class="k">Availability</div>'+fmtPct(r.availPct)+'</div>');
+  if(r.mttrDays!=null) der.push('<div><div class="k">Avg repair time</div>'+fmtNum(r.mttrDays,1)+' d</div>');
+  if(r.yearlyCost!=null) der.push('<div><div class="k">Cost / year</div>'+fmtMoney(r.yearlyCost)+'</div>');
+  if(r.maintPerHour!=null) der.push('<div><div class="k">Maintenance / hr</div>$'+r.maintPerHour.toFixed(2)+'</div>');
+  if(r.downCost!=null) der.push('<div><div class="k">Cost while down</div>'+fmtMoney(r.downCost)+'</div>');
+  if(r.annivDays!=null) der.push('<div><div class="k">Days to renewal</div>'+r.annivDays+'</div>');
   if(der.length) parts.push('<div><h3>Derived</h3><div class="detail-grid">'+der.join("")+'</div>'+
     '<div class="detail-src">Computed on this page from the reports above</div></div>');
-  // Always show the Equipment Master side, so a unit with no report data still opens.
   const a=r.asset;
   const em=[["Serial",r.serial],["Mfg / Yr",[a.mfg,a.modelYear].filter(Boolean).join(" ")],
-    ["Assigned",r.assigned],["Finance",a.financeMethod],["On site since",fmtDate(a.fromDate)],
+    ["Assigned",r.assigned],["Finance",a.financeMethod],["On site since",fmtDate(r.arrived)],
     ["Acquired",fmtDate(a.acquiredDate)],["Location",a.location||a.locationCode],
     ["Asset #",a.assetNumber],["Remarks",a.remarks]]
     .filter(p=>p[1]).map(p=>'<div><div class="k">'+esc(p[0])+'</div>'+esc(p[1])+'</div>').join("");
   parts.push('<div><h3>Equipment Master</h3><div class="detail-grid">'+em+'</div>'+
     '<div class="detail-src">'+(STATE.meta&&STATE.meta.sourceVersion?('Master '+esc(STATE.meta.sourceVersion)):'Equipment Master')+'</div></div>');
-  if(!r.hasKpi) parts.unshift('<div class="hintbox" style="margin:0;">No KPI report covers this unit yet '+
+  if(!r.hasKpi) parts.unshift('<div class="hintbox" style="margin:0;">No report covers this unit yet '+
     '(matched on Unit #'+(r.serial?" or Serial #":"")+').</div>');
   return '<div class="detail-blocks">'+parts.join("")+'</div>';
 }
@@ -888,27 +1285,32 @@ function exportCsv(){
   if(!v.length){ toast("Nothing to export"); return; }
   const on=activeKinds();
   const cols=[["Unit","unit"],["Serial","serial"],["Description","description"],["Description 2","description2"],
-    ["Status","status"],["Trade","trade"],["Assigned","assigned"],["Days on site","daysOnSite"]];
-  if(on.utilization) cols.push(["Hour meter","meterHours"],["Utilization %","utilPct"],["Idle hours","idleHours"],
-    ["Working hours",r=>r.u?r.u.workHours:null],["Period hours",r=>r.u?r.u.periodHours:null],
-    ["Meter date",r=>r.u?r.u.meterDate:null]);
-  if(on.maintenance) cols.push(["PM due","pmDueDate"],["Days to PM","pmDays"],["Hours to PM","pmHours"],
-    ["PM state","pmFlag"],["Open WO","openWo"],["Down days","downDays"],
-    ["Last service",r=>r.m?r.m.lastServiceDate:null],["Condition",r=>r.m?r.m.maintStatus:null]);
-  if(on.cost) cols.push(["Monthly cost","monthlyCost"],["Cost per hour","costPerHour"],["Idle cost per month","idleCost"],
-    ["Cost to date",r=>r.c?r.c.costToDate:null],["Fuel gallons",r=>r.c?r.c.fuelGal:null],
-    ["Ownership",r=>r.c?r.c.ownership:null],["Vendor",r=>r.c?r.c.vendor:null]);
+    ["Status","status"],["Trade","trade"],["Assigned","assigned"],["On site since","arrived"],["Days on site","daysOnSite"]];
+  if(on.transfers) cols.push(["Equipment class","eqClass"],["Current status","curStatus"],
+    ["Days in status","daysInState"],["Down days "+TREND_MONTHS+"mo","downDays"],["Breakdowns","downEvents"],
+    ["Availability %","availPct"],["Avg repair days","mttrDays"],
+    ["Last remark",r=>r.st?r.st.lastRemark:""]);
+  if(on.rates) cols.push(["Monthly cost","monthlyCost"],["Yearly cost","yearlyCost"],
+    ["Hourly rate","hourlyRate"],["Maintenance per hour","maintPerHour"],
+    ["Rate group",r=>r.rt?r.rt.rateGroupDesc:""],["Billing type",r=>r.rt?r.rt.billingType:""],
+    ["Rate ends",r=>r.rt?r.rt.rateEnd:""]);
+  if(on.transfers && on.rates) cols.push(["Cost while down","downCost"]);
+  if(on.rental) cols.push(["Vendor","vendor"],["PO",r=>r.rn?r.rn.po:""],
+    ["Rental monthly","rentalMonthly"],["Billed through","annivDate"],["Days to renewal","annivDays"],
+    ["Contract days",r=>r.rn?r.rn.contractDays:""],["On rent since",r=>r.rn?r.rn.acquiredDate:""]);
+  if(on.utilization) cols.push(["Hour meter",r=>r.ut?r.ut.meterHours:""],
+    ["Idle hours",r=>r.ut?r.ut.idleHours:""],["Period hours",r=>r.ut?r.ut.periodHours:""]);
   const get=(r,k)=>{ const val=typeof k==="function"?k(r):r[k]; return val==null?"":val; };
   const lines=[cols.map(c=>csvCell(c[0])).join(",")];
   v.forEach(r=>lines.push(cols.map(c=>csvCell(get(r,c[1]))).join(",")));
   const blob=new Blob(["﻿"+lines.join("\r\n")],{type:"text/csv;charset=utf-8;"});
-  const today=new Date().toISOString().slice(0,10);
   const a=document.createElement("a");
-  a.href=URL.createObjectURL(blob); a.download="asset_kpis_"+(STATE.site||"all")+"_"+today+".csv";
+  a.href=URL.createObjectURL(blob); a.download="asset_kpis_"+(STATE.site||"all")+"_"+TODAY+".csv";
   document.body.appendChild(a); a.click();
   setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },0);
   toast("Exported "+v.length+" unit"+(v.length===1?"":"s"));
 }
+
 /* ---------- hover-to-copy (shared button parked in the hovered cell) ---------- */
 let CP_CELL=null, CP_BTN=null;
 function cpButton(){
@@ -1075,13 +1477,37 @@ async function kpiFirstSheetRows(file){
   let t=relMap[sm[1]]||""; if(t && !t.startsWith("xl/")) t="xl/"+t;
   return kpiSheetRows(await zip.get(t)||"", shared);
 }
+function kpiFind(norm, aliases){
+  for(const a of aliases){ const i=norm.indexOf(kpiNormHeader(a).toLowerCase()); if(i>=0) return i; }
+  return null;
+}
 function kpiMapHeaders(header, kind){
   const ks=kindSpec(kind);
   const norm=header.map(h=>kpiNormHeader(h).toLowerCase());
-  const find=aliases=>{ for(const a of aliases){ const i=norm.indexOf(kpiNormHeader(a).toLowerCase()); if(i>=0) return i; } return null; };
-  const cols={};
-  Object.keys(ks.fields).forEach(t=>{ const i=find(ks.fields[t].aliases); if(i!=null) cols[t]=i; });
-  return { unit:find(KPI_SPEC.unitAliases), serial:find(KPI_SPEC.serialAliases), cols };
+  const cols={}, unitCols={};
+  Object.keys(ks.fields).forEach(t=>{ const i=kpiFind(norm, ks.fields[t].aliases); if(i!=null) cols[t]=i; });
+  Object.keys(ks.unitFields||{}).forEach(t=>{ const i=kpiFind(norm, ks.unitFields[t].aliases); if(i!=null) unitCols[t]=i; });
+  return { unit:kpiFind(norm, KPI_SPEC.unitAliases), serial:kpiFind(norm, KPI_SPEC.serialAliases),
+    site:kpiFind(norm, KPI_SPEC.siteAliases), cols, unitCols,
+    backfill: ks.backfillField ? kpiFind(norm, ks.backfillField.aliases) : null };
+}
+/* These exports carry a report title (and sometimes the project name) above the
+   header row, so find it by scoring the first rows on alias matches. Mirrors
+   kpi_reports.find_header. */
+function kpiFindHeader(rows){
+  const wanted=[KPI_SPEC.unitAliases, KPI_SPEC.serialAliases];
+  KPI_SPEC.kinds.forEach(ks=>{
+    Object.keys(ks.fields).forEach(t=>wanted.push(ks.fields[t].aliases));
+    Object.keys(ks.unitFields||{}).forEach(t=>wanted.push(ks.unitFields[t].aliases));
+  });
+  let best=0, bestScore=0;
+  rows.slice(0, KPI_SPEC.headerScan).forEach((row,i)=>{
+    const norm=row.map(h=>kpiNormHeader(h).toLowerCase());
+    if(!norm.some(Boolean)) return;
+    const score=wanted.filter(a=>kpiFind(norm,a)!=null).length;
+    if(score>bestScore){ best=i; bestScore=score; }
+  });
+  return best;
 }
 function kpiDetectKind(header, filename){
   const base=String(filename||"").toLowerCase();
@@ -1096,16 +1522,55 @@ function kpiDetectKind(header, filename){
   });
   return best;
 }
+/* Mirrors kpi_reports.report_site: a project code in the title rows, else the
+   most common value of the report's own site column. */
+function kpiReportSite(rows, hi, siteCol){
+  for(let i=0;i<hi;i++){
+    for(const cell of rows[i]||[]){
+      const m=/\b(\d{9,13})\b/.exec(String(cell||""));
+      if(m) return m[1];
+    }
+  }
+  if(siteCol==null) return "";
+  const counts={};
+  for(let r=hi+1;r<rows.length;r++){
+    const v=String((rows[r]||[])[siteCol]||"").trim();
+    if(/^\d{9,13}$/.test(v)) counts[v]=(counts[v]||0)+1;
+  }
+  const keys=Object.keys(counts);
+  return keys.length ? keys.reduce((a,b)=>counts[b]>counts[a]?b:a) : "";
+}
+/* Mirrors kpi_reports._timeline — see there for why the initial-load blocks and
+   same-day duplicates are collapsed. */
+function kpiTimeline(events){
+  const byDate={};
+  events.forEach(e=>{ const d=e.date||""; if(d){ (byDate[d]=byDate[d]||[]).push(e); } });
+  return Object.keys(byDate).sort().map(d=>{
+    const group=byDate[d];
+    const snaps=group.filter(e=>e._backfill);
+    if(group.length>1 && snaps.length===group.length) return { date:d, status:"", arrival:true };
+    const pool=group.filter(e=>!e._backfill);
+    const keep=(pool.length?pool:group)[ (pool.length?pool:group).length-1 ];
+    const ev={ date:d, status:keep.status||"" };
+    ["prev","from","remark"].forEach(k=>{ if(keep[k]) ev[k]=keep[k]; });
+    if(keep._backfill) ev.arrival=true;
+    return ev;
+  });
+}
 function kpiExtract(rows, kind, filename){
   if(!rows.length) throw new Error("Sheet is empty");
-  const header=rows[0].map(kpiNormHeader);
+  const hi=kpiFindHeader(rows);
+  const header=rows[hi].map(kpiNormHeader);
   const m=kpiMapHeaders(header, kind);
   if(m.unit==null && m.serial==null) throw new Error("No unit or serial column found. Headers: "+header.filter(Boolean).join(", ").slice(0,200));
   const targets=Object.keys(m.cols);
   if(!targets.length) throw new Error("No recognised "+kind+" columns. Headers: "+header.filter(Boolean).join(", ").slice(0,200));
   const ks=kindSpec(kind);
+  const eventsMode = ks.mode==="events";
+  const bfValues = new Set(((ks.backfillField||{}).values)||[]);
+  const asOfField = ks.asOfField||"";
   const units={}; const dates=[]; let rowCount=0;
-  for(let r=1;r<rows.length;r++){
+  for(let r=hi+1;r<rows.length;r++){
     const arr=rows[r];
     const at=i=>(i!=null&&i<arr.length)?arr[i]:"";
     const unit=String(at(m.unit)||"").trim(), serial=String(at(m.serial)||"").trim();
@@ -1113,20 +1578,42 @@ function kpiExtract(rows, kind, filename){
     if(!key) continue;
     const rec={};
     targets.forEach(t=>{
-      const ty=ks.fields[t].type;
-      const val=KPI_COERCE[ty](at(m.cols[t]));
+      const val=KPI_COERCE[ks.fields[t].type](at(m.cols[t]));
       if(val==null||val==="") return;
       rec[t]=val;
-      if(ty==="date") dates.push(val);
+      if(t===asOfField) dates.push(val);
     });
     if(!Object.keys(rec).length) continue;
-    if(serial) rec.serial=serial;
     rowCount++;
-    units[key]=Object.assign(units[key]||{}, rec);
+    const blk=units[key]||(units[key]={});
+    if(serial && !blk.serial) blk.serial=serial;
+    Object.keys(m.unitCols).forEach(t=>{
+      const val=KPI_COERCE[ks.unitFields[t].type](at(m.unitCols[t]));
+      if(val) blk[t]=val;                                  // newest row wins
+    });
+    if(eventsMode){
+      if(!rec[ks.eventDateField]) continue;                // an undated row is not an event
+      rec._backfill = m.backfill!=null && bfValues.has(String(at(m.backfill)||"").trim());
+      (blk._events=blk._events||[]).push(rec);
+    } else {
+      Object.assign(blk, rec);
+    }
   }
-  dates.sort();
+  if(eventsMode){
+    let total=0;
+    Object.keys(units).forEach(key=>{
+      const tl=kpiTimeline(units[key]._events||[]);
+      delete units[key]._events;
+      if(!tl.length){ delete units[key]; return; }
+      units[key].events=tl; total+=tl.length;
+    });
+    rowCount=total;
+  }
+  // "As of" is when the data was true: only a backward-looking field counts.
+  const past=dates.filter(d=>d<=TODAY).sort();
   return { units, report:{ kind, label:ks.label, file:String(filename||""), rows:rowCount,
-    units:Object.keys(units).length, asOf:dates.length?dates[dates.length-1]:"", columns:targets.slice().sort() } };
+    units:Object.keys(units).length, asOf:past.length?past[past.length-1]:"",
+    site:kpiReportSite(rows, hi, m.site), columns:targets.slice().sort() } };
 }
 /* ---------- import UI ---------- */
 async function onFiles(files){
@@ -1159,10 +1646,13 @@ function renderPreview(){
   let html="";
   if(p.extracted.length){
     html+='<div class="table-scroll" style="margin-bottom:12px;"><table><thead><tr>'+
-      '<th>File</th><th>Report</th><th>Rows</th><th>Units</th><th>As of</th><th>Columns matched</th>'+
+      '<th>File</th><th>Report</th><th>Rows</th><th>Units</th><th>Site</th><th>As of</th><th>Columns matched</th>'+
       '</tr></thead><tbody>'+p.extracted.map(e=>{
         const r=e.report;
-        return '<tr><td>'+esc(r.file)+'</td><td>'+esc(r.label)+'</td><td>'+r.rows+'</td><td>'+r.units+'</td>'+
+        const mismatch = r.site && STATE.site && r.site!==STATE.site;
+        return '<tr><td>'+esc(r.file)+'</td><td>'+esc(r.label)+'</td><td>'+r.rows.toLocaleString()+
+          (kindSpec(r.kind).mode==="events"?" events":"")+'</td><td>'+r.units+'</td>'+
+          '<td>'+(r.site?(mismatch?('<span class="flag bad">'+esc(r.site)+'</span>'):esc(r.site)):DASH)+'</td>'+
           '<td>'+esc(r.asOf?fmtDate(r.asOf):DASH)+'</td><td>'+esc(r.columns.map(c=>FIELD_LABELS[c]||c).join(", "))+'</td></tr>';
       }).join("")+'</tbody></table></div>';
     const names=p.extracted.map(e=>'<strong>'+esc(e.report.label)+'</strong>');
@@ -1187,7 +1677,7 @@ async function publishKpis(){
     toast("Published "+(d.units||0)+" unit(s) — live in ~1–2 min");
     STATE.pending=null; $("#kpiFiles").value=""; renderPreview();
     $("#importPanel").style.display="none";
-    await loadKpis(); buildRows(); renderCoverage(); renderTiles(); renderTable();
+    await loadKpis(); buildRows(); renderCoverage(); renderTiles(); renderTrends(); renderTable();
   }catch(e){
     toast("Publish failed: "+e.message); $("#kpiPublish").disabled=false;
   }
@@ -1224,7 +1714,7 @@ async function selectSite(code,{push=true}={}){
   buildRows();
   const s=STATE.siteIndex.find(x=>x.code===code);
   $("#count").textContent = code ? ((s?s.name+" · ":"")+STATE.rows.length+" units") : "";
-  renderCoverage(); renderTiles(); renderTable();
+  renderCoverage(); renderTiles(); renderTrends(); renderTable();
   if(push) syncUrl();
 }
 function bind(){

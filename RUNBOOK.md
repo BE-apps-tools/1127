@@ -109,54 +109,82 @@ GitHub notifies you of new issues (watch the repo / check the **Issues** tab).
 ---
 
 ## Asset KPIs (KPIs tab)
-The **Asset KPIs** page shows every unit on the jobsite with its utilization, PM
-status and cost side by side. It reads the Equipment Master **plus** up to three
-report families:
+The **Asset KPIs** page shows every unit on the jobsite with its downtime, cost and
+rental position side by side, plus month-by-month trends. It reads the Equipment
+Master **plus** these JDE reports:
 
-| Family | Typical export | Drives |
-|--------|----------------|--------|
-| Utilization / hour meter | hour-meter, telematics, idle-vs-working hours | Hour meter, Util %, idle hours, idle-heavy units, hours this period |
-| Maintenance / PM / work orders | PM due list, open work orders, downtime | PM due (overdue / due soon), open WOs, down days |
-| Cost / rental / fuel | monthly rental or ownership cost, cost to date, fuel | Cost/mo, cost/hr, cost to date, idle cost per month |
+| Report | What it is | KPIs it drives |
+|--------|------------|----------------|
+| **Equipment Rates** | one row per unit: charge-out rate, rate group, hourly rate and its cost components | Monthly spend, yearly spend, avg $/hr, maintenance share of the hourly rate, run-rate trend |
+| **Anniversary Date** | vendor rental contracts: vendor, PO, rate, billed-through date, contract days | Rental commitment/month, renewals due in 30 days, units past billed-through, off-rent candidates |
+| **Equipment Transfer** | the **status event log** — every `Previous → Current` status change with its effective date | Downtime days, breakdowns, fleet availability, avg repair time (MTTR), repeat offenders, who's down right now, downtime-by-month trend |
+| *(optional)* utilization / hour meter | the weekly hours or "zero hours" export | Hour meter, idle vs working hours |
 
-Nothing is required: with no reports imported the page still shows the fleet from
-the Equipment Master, and each family's columns and tiles appear only once its
-report lands. A unit is matched on **Unit #**, or on **Serial #** if the report
-carries only a serial.
+Nothing is required: with no reports imported the page still lists the fleet from
+the Equipment Master, and each report's columns, tiles and charts appear only once
+it lands. A unit is matched on **Unit #**, or on **Serial #** if the report carries
+only a serial.
 
 ### Refreshing a report
-Two paths, same result — importing one family never disturbs the others.
+Two paths, same result — importing one report never disturbs the others.
 
 **Browser (no git access needed):**
 1. Sign in as admin (**Admin** tab), then open **KPIs** and add `?admin=import` to
-   the address (or use the Import panel link).
+   the address (or use the **KPI reports** card on the Admin tab).
 2. Drop one or more `.xlsx` reports. Each file's family is detected from its
-   **column headers**, so the filename and column order don't matter. Files are
-   parsed on your device — the spreadsheet is never uploaded, only the extracted
-   per-unit values.
-3. Check the preview (family, rows, units, columns matched) → **Publish KPI data**.
+   **column headers**, so the filename, the column order, and even a report title
+   above the header row don't matter. Files are parsed on your device — the
+   spreadsheet is never uploaded, only the extracted per-unit values.
+3. Check the preview (family, rows/events, units, site, columns matched) →
+   **Publish KPI data**. If the **Site** column is flagged, that export is stamped
+   with a different jobsite — stop and check you exported the right one.
 
 **Commit to `source/` (automatic):** drop the report `.xlsx` in `source/` alongside
 the Equipment Master. The **build-data** Action detects it and rebuilds
-`data/kpis.json` on the same run. (Reminder: the repo is public — trim the report
-to your site first, same as the Equipment Master.)
+`data/kpis.json` on the same run.
+
+> **The repo is public.** Whatever lands in `data/kpis.json` is publicly readable —
+> that includes vendor names, PO numbers and rates once those reports are imported.
+> Decide that's acceptable (or make the repo private) before importing the rate and
+> rental reports.
+
+### How downtime is measured
+From the transfer history, not a downtime column — the page rebuilds each unit's
+status timeline and adds up the time it spent in a down status:
+
+- **`DN - Down`** (down on site) and **`DS - Down - In Shop`** both count as downtime.
+- **`MS - Missing/stolen`** and **`LG - Legal Hold`** are *excluded* rather than
+  counted — they are not maintenance problems, so they don't drag availability down.
+- Two known quirks of the export are handled so they can't invent downtime: JDE's
+  initial-load rows (several same-date "Newly Acquired" rows with no previous
+  status, each repeating a later remark) collapse to a single **arrival** marker
+  whose status is unknown and counts as neither up nor down; and where a unit
+  changed status twice in one day, the day ends in the last state recorded.
+- **Avg repair time (MTTR)** is the mean length of *finished* down spans — a unit
+  still down doesn't get a repair time until it's back.
+- **Fleet availability** is total unit-days not down over total unit-days tracked
+  (not an average of per-unit percentages, which would let hundreds of healthy hand
+  tools mask a pile driver down for two months).
+- **Cost while down** is the unit's charge-out rate × its downtime — what the job
+  paid while the unit sat broken.
+
+Click any row for its full **status history**: every change with the date, the
+status, how long it lasted, and the remark the crew wrote ("metal in fuel tank",
+"DS went to Vermeer"). That's the "why" behind every downtime number.
+
+### Reading the trends
+- **Downtime by month** — days down per month, split *on site* vs *in shop*. The
+  newest month is to date. Hover for the number of distinct units down.
+- **Monthly charge-out run-rate** — the rate report × the units on site, by arrival
+  month. It counts only units still on site today, so earlier months exclude units
+  that have since left; treat the curve as fleet growth, not accounting history.
 
 ### If a report isn't recognised
-The importer names the headers it found (the Action logs them as `skipped`). That
-usually means the export spells a column differently — send the header row to
+The importer names the headers it found (the Action logs them under `skipped`).
+That usually means the export spells a column differently — send the header row to
 whoever maintains the portal; adding the real spelling to
-`build/kpi_reports.py` teaches **both** import paths at once.
-
-### What the numbers mean
-`data/kpis.json` stores only what the reports say. The page derives the rest, so
-nothing goes stale:
-- **Util %** — working ÷ (working + idle) hours; falls back to
-  (engine − idle) ÷ engine, or hours ÷ target, depending on what the report carries.
-- **Idle-heavy** — utilization at or below **40%**.
-- **PM overdue / due soon** — past its due date or due hours; "soon" is within
-  **14 days** or **50 hours**.
-- **Cost / hr** — the report's rate per hour, else monthly cost ÷ period hours.
-- **Idle cost / month** — monthly cost × the non-working share of hours.
+`build/kpi_reports.py` and running `py scripts/sync_kpi_spec.py` teaches **both**
+import paths at once.
 
 Every view is shareable (site, search, filters, sort and page live in the URL) and
 **Export CSV** downloads the filtered rows, including the raw report fields.
@@ -179,7 +207,9 @@ Every view is shareable (site, search, filters, sort and page live in the URL) a
 | Submit says "submit key was rejected" | The Worker's `SUBMIT_KEY` no longer matches the one in `inventory.html`. Most often it was wiped by a `wrangler deploy`: only `GH_REPO`/`ALLOWED_ORIGIN` live in `wrangler.toml`, so a plain-text `SUBMIT_KEY` set in the dashboard is dropped on deploy. Re-add it in Cloudflare (**Settings → Variables and Secrets**, then click **Deploy**), or `wrangler secret put SUBMIT_KEY` so it survives future deploys. Nothing is lost — nothing was saved. |
 | Submit says "server busy" | A 5xx/429 from the Worker (usually `GH_TOKEN` expired or lost Issues:write). Regenerate + update the secret; held requests retry themselves on the next load. |
 | A site you removed still shows | Hard-refresh; the build clears stale sites on each run, so it should drop after the next build. |
-| KPI columns missing on the Asset KPIs page | That family's report hasn't been imported (the coverage strip at the top says which are in). Import it, or check the **build-data** run for a `skipped` entry naming the file. |
-| A KPI report imported but matched few units | The report's Unit #s don't match the Equipment Master's (e.g. it's keyed by serial or by another site's units). The coverage strip counts what matched; "Elsewhere" counts report units not on this site. |
+| KPI columns missing on the Asset KPIs page | That report hasn't been imported (the coverage strip at the top says which are in). Import it, or check the **build-data** run for a `skipped` entry naming the file. |
+| A KPI report imported but matched few units | The report's Unit #s don't match the Equipment Master's (e.g. it covers another site, or is keyed by serial). The coverage strip counts what matched and flags a report stamped with a different site; "Elsewhere" counts report units not on this jobsite. |
+| Downtime looks too high for a unit | Open its row and read the status history. A long span usually means the unit was left in `DN`/`DS` in JDE after it was fixed — the fix is in JDE, and the next export corrects the number. |
+| A unit shows no downtime but you know it broke | The transfer report only covers status changes it recorded; a unit with no history shows "—" rather than 0. The coverage strip says how many units have history. |
 | Publish KPI data says an error | The Worker needs the `/kpis` route deployed and `GH_TOKEN` with Contents: Read+write — see `worker/SETUP.md` §6. |
 | Teams cards stopped arriving (requests still land as Issues) | Only the alert is broken — nothing is lost. Run `wrangler tail` and submit a test request: a `teams webhook …` line gives the status. Usual causes: the Teams workflow was turned off/deleted, or `TEAMS_WEBHOOK_URL` is unset or stale. See `worker/SETUP.md` §7. |

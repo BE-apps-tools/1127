@@ -76,11 +76,12 @@ present — the same result as the `build-data` Action.
 
 ## 6. Enable browser KPI-report import (Asset KPIs → `/kpis`)
 
-The **Asset KPIs** page joins the Equipment Master with up to three report families —
-utilization / hour meter, maintenance / PM / work orders, and cost / rental / fuel.
-Admins can publish those reports from the browser the same way as the Equipment
-Master: the `.xlsx` is parsed client-side and only the extracted per-unit values are
-committed, by the **`POST /kpis`** route.
+The **Asset KPIs** page joins the Equipment Master with four JDE report families —
+**Equipment Rates**, **Anniversary Date** (rental contracts), **Equipment Transfer**
+(the status event log behind every downtime number) and an optional utilization /
+hour-meter export. Admins can publish those reports from the browser the same way as
+the Equipment Master: the `.xlsx` is parsed client-side and only the extracted
+per-unit values are committed, by the **`POST /kpis`** route.
 
 1. **Needs the same `Contents: Read+write` token as §5** — no new secret; `/kpis` is
    gated by the existing `ADMIN_KEY` (or any admin in `data/admins.json`).

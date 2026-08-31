@@ -18,7 +18,7 @@
  * Equipment Master inventory:
  *   POST /inventory  -> ADMIN: commit browser-parsed inventory JSON to main
  *                       (data/meta.json, data/sites.json, data/sites/<code>.json).
- * Asset KPI reports (utilization / maintenance / cost):
+ * Asset KPI reports (rates / rental / transfers / utilization):
  *   POST /kpis       -> ADMIN: merge browser-parsed report blocks into
  *                       data/kpis.json, replacing only the families supplied.
  * Admin team access (repo-based user list — no Cloudflare needed to manage it):
@@ -735,6 +735,8 @@ async function postAdmins(req, env, h){
 
 /* ============================ asset KPI reports ============================
  * POST /kpis — ADMIN: merge browser-parsed KPI report blocks into data/kpis.json.
+ * Families: `rates` (Equipment Rates), `rental` (Anniversary Date), `transfers`
+ * (Equipment Transfer status history — an events array per unit), `utilization`.
  * Body: { extracted: [ { report:{kind,label,file,rows,units,asOf,columns}, units:{key:{field:value}} } ] }
  *
  * Mirrors build/kpi_reports.py `merge`: each supplied family REPLACES that
@@ -743,24 +745,47 @@ async function postAdmins(req, env, h){
  * different reports without clobbering the other. The spreadsheets are parsed in
  * the browser and never uploaded — only the extracted values arrive here.
  * Requires GH_TOKEN with Contents: Read+write. */
-const KPI_KINDS = ["utilization", "maintenance", "cost"];
+const KPI_KINDS = ["rates", "rental", "transfers", "utilization"];
 const KPI_KEY_RE = /^(SN:)?[\x20-\x7E]{1,60}$/;     // unit # or "SN:<serial>", printable ASCII
 const KPI_FIELD_RE = /^[A-Za-z][A-Za-z0-9]{0,30}$/;
 const KPI_MAX_UNITS = 20000;                        // a jobsite fleet is hundreds; this is a runaway guard
 const KPI_MAX_FIELDS = 24;
+const KPI_MAX_EVENTS = 500;                         // status events kept per unit
+const KPI_MAX_STR = 140;
 
-/* Keep only well-formed field values (number, or string trimmed to 120 chars). */
+/* One status event from the transfer history: small, flat, all-string/boolean. */
+function kpiCleanEvent(e){
+  if (!e || typeof e !== "object" || Array.isArray(e)) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(e.date || ""))) return null;   // undated is not an event
+  const out = { date: String(e.date) };
+  for (const k of ["status", "prev", "from", "remark"]){
+    if (typeof e[k] === "string" && e[k]) out[k] = e[k].slice(0, KPI_MAX_STR);
+  }
+  if (typeof e.status !== "string") out.status = "";
+  else if (!("status" in out)) out.status = "";                          // '' = state unknown
+  if (e.arrival === true) out.arrival = true;
+  return out;
+}
+
+/* Keep only well-formed values: a number, a trimmed string, or the `events`
+ * array of the transfer history. Anything else is dropped rather than trusted. */
 function kpiCleanBlock(rec){
   const out = {};
   let n = 0;
   for (const [k, v] of Object.entries(rec || {})){
     if (n >= KPI_MAX_FIELDS) break;
     if (!KPI_FIELD_RE.test(k)) continue;
-    if (typeof v === "number"){
+    if (k === "events"){
+      if (!Array.isArray(v)) continue;
+      const events = v.slice(0, KPI_MAX_EVENTS).map(kpiCleanEvent).filter(Boolean);
+      if (!events.length) continue;
+      events.sort((a, b) => a.date < b.date ? -1 : (a.date > b.date ? 1 : 0));  // timeline order
+      out[k] = events; n++;
+    } else if (typeof v === "number"){
       if (!Number.isFinite(v)) continue;
       out[k] = v; n++;
     } else if (typeof v === "string"){
-      const s = v.slice(0, 120);
+      const s = v.slice(0, KPI_MAX_STR);
       if (!s) continue;
       out[k] = s; n++;
     }
@@ -801,6 +826,9 @@ async function postKpis(req, env, h){
         file: String(rep.file || "").slice(0, 160),
         rows: Number(rep.rows) || 0, units: Object.keys(units).length,
         asOf: /^\d{4}-\d{2}-\d{2}$/.test(String(rep.asOf || "")) ? rep.asOf : "",
+        // The jobsite the export stamped itself with, so the page can flag a
+        // report imported against the wrong site.
+        site: /^\d{9,13}$/.test(String(rep.site || "")) ? String(rep.site) : "",
         columns: Array.isArray(rep.columns) ? rep.columns.filter(c => KPI_FIELD_RE.test(c)).slice(0, KPI_MAX_FIELDS) : [],
       },
       units,

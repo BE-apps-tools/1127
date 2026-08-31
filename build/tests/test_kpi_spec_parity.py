@@ -62,11 +62,45 @@ def test_aliases_are_unique_within_a_kind():
 
 def test_page_labels_every_field():
     # A field with no entry in FIELD_LABELS would render as a raw camelCase key
-    # in the per-unit detail panel.
+    # in the per-unit detail panel and the CSV header.
     src = page_src()
     m = re.search(r"const FIELD_LABELS = \{(.*?)\n\};", src, re.DOTALL)
     assert m, "FIELD_LABELS not found in kpis.html"
     labelled = set(re.findall(r"(\w+)\s*:", m.group(1)))
     for ks in SPEC["kinds"]:
-        for target in ks["fields"]:
+        for target in list(ks["fields"]) + list(ks.get("unitFields", {})):
             assert target in labelled, ks["kind"] + "." + target + " has no FIELD_LABELS entry"
+
+
+def test_modes_are_known():
+    for ks in SPEC["kinds"]:
+        assert ks.get("mode") in ("record", "events"), (ks["kind"], ks.get("mode"))
+
+
+def test_event_families_declare_their_timeline_fields():
+    # The timeline builder (both ports) reads these by name.
+    for ks in SPEC["kinds"]:
+        if ks.get("mode") != "events":
+            continue
+        for key in ("eventDateField", "eventStatusField"):
+            assert ks.get(key) in ks["fields"], (ks["kind"], key)
+        bf = ks.get("backfillField")
+        assert bf and bf.get("aliases") and bf.get("values"), \
+            ks["kind"] + " needs backfillField to spot the initial-load snapshot"
+
+
+def test_as_of_field_is_a_real_date_field():
+    for ks in SPEC["kinds"]:
+        f = ks.get("asOfField")
+        if not f:
+            continue                      # a report with no run-date column has no as-of
+        assert ks["fields"][f]["type"] == "date", (ks["kind"], f)
+
+
+def test_status_codes_cover_the_derived_sets():
+    labels = SPEC["statusLabels"]
+    for key in ("downStatuses", "workingStatuses", "excludeFromAvailability"):
+        for code in SPEC[key]:
+            assert code in labels, key + " references an unlabelled status: " + code
+    assert not (set(SPEC["downStatuses"]) & set(SPEC["excludeFromAvailability"])), \
+        "a status cannot be both downtime and excluded from availability"

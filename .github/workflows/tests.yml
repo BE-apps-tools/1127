@@ -43,3 +43,8 @@ jobs:
       # (same shared case table as the pytest run above).
       - name: KPI coercion parity (kpis.html vs build/kpi_reports.py)
         run: node worker/tests/kpi_coerce.test.mjs
+
+      # Downtime, MTTR and availability are derived in the page only, so they are
+      # exercised straight out of kpis.html.
+      - name: KPI downtime maths (kpis.html)
+        run: node worker/tests/kpi_downtime.test.mjs

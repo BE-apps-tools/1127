@@ -1,18 +1,129 @@
-"""Generate tiny .xlsx fixtures for the three KPI report families.
+"""Generate tiny .xlsx fixtures for the KPI report families.
 
-Mirrors make_fixture.py's hand-rolled writer (stdlib only) and deliberately
-uses messy real-world values — '$4,200.00', '83%', a serial-only row, a unit
-that isn't in the Equipment Master — so the adapters are tested on the shapes
-they'll actually meet.
+Each fixture mirrors the **real JDE export's** shape, including the parts that
+break naive parsers: a report title above the header row (Equipment Rates puts
+four rows there), an embedded newline inside a header, blank spacer columns, a
+'Description' header repeated for an unrelated column, money as '$4,200.00',
+credits as '(150)', and — for the transfer log — several rows per unit plus the
+initial-load snapshot block that must not be read as real state changes.
+
+The unit numbers match build/tests/fixtures/mini.xlsx (the Equipment Master
+fixture), so the join can be tested too. No real vendor, PO or rate data is used.
 
 Usage: py build/tests/make_kpi_fixture.py
 """
 import os
 import zipfile
 
-# (filename, sheet name, headers, rows). Cells: ("s", text) | ("n", number) | "".
+# (filename, sheet, [pre-header rows], headers, data rows).
+# Cells: ("s", text) | ("n", number) | "".
 FIXTURES = [
+    # --- Equipment Rates: title rows above the header, blank spacer column ---
+    ("kpi_rates_mini.xlsx", "Equipment Rates",
+     [[], [("s", "SITE1 - Alpha Solar, TX")], [], []],
+     ["Project\nNumber", "Unit\nNumber", "Description", "Begin Date", "End Date",
+      "Rate\nGroup", "Rate Group Description", "Billing Type", "Monthly Ownership",
+      "Hourly\nBilling\nRate", "Monthly\nBilling\nRate", "Ownership Component",
+      "Preventative Maintenance", "", "Corrective Repair", "Tires / U.C.",
+      "Oil / Grease", "GET", "Monthly\nNon-Hourly\nOwnership"],
+     [
+         [("s", "SITE1"), ("s", "U1"), ("s", "Excavator, tracked"), ("n", "46023"), ("n", "46507"),
+          ("s", "364"), ("s", "Whl Ldr LT 2 cu yards"), ("s", "Hourly"), ("s", "7,392.00"),
+          ("n", "51.61"), ("s", "7,392.00"), ("n", "42.00"), ("n", "0.66"), "",
+          ("n", "2.59"), ("n", "1.50"), ("n", "3.86"), ("n", "1.00"), ("n", "0")],
+         [("s", "SITE1"), ("s", "U2"), ("s", "Generator 20kW"), ("n", "46023"), ("n", "46507"),
+          ("s", "512"), ("s", "Jobcost Eq w/ mo rent"), ("s", "Non Hourly"), ("n", "0"),
+          ("n", "0"), ("s", "1,250.00"), "", "", "", "", "", "", "", ("s", "1,250.00")],
+         # a unit that isn't in the Equipment Master -> surfaces as "elsewhere"
+         [("s", "SITE1"), ("s", "U9"), ("s", "Radio, portable"), "", "",
+          ("s", "900"), ("s", "Portable Radio - Small"), ("s", "Non Hourly"), ("n", "0"),
+          ("n", "0"), ("n", "45"), "", "", "", "", "", "", "", ("n", "45")],
+     ]),
+    # --- Anniversary Date: one title row, duplicate 'Description', $ and () money ---
+    ("kpi_rental_mini.xlsx", "Anniversary Date",
+     [[("s", ""), ("s", ""), ("s", "Anniversary Date")]],
+     ["Unit Number", "Description", "", "Serial Number", "EQ\nSt", "Location ", "Trade",
+      "Description", "PO#", "Vendor", "Acquired\nDate", "Billed\nThrough\nDate",
+      "Contract\nDays", "Billing Type", "Total\nHourly\nRate", "",
+      "Monthly\nNon-Hourly\nRate", "Bare Rental Rate", "Total Non-Hourly Rate"],
+     [
+         [("s", "U1"), ("s", "Excavator, tracked"), "", ("s", "S1"), ("s", "WK"),
+          ("s", "SITE1"), ("s", "CIVIL"), ("s", "ID C140418"), ("s", "52120606"),
+          ("s", "Acme Equipment Co"), ("n", "45873"), ("n", "46600"), ("n", "30"),
+          ("s", "Hourly"), ("s", "36.35"), "", ("n", "0"), ("n", "0"), ("n", "0")],
+         [("s", "U2"), ("s", "Generator 20kW"), "", ("s", "S2"), ("s", "WK"),
+          ("s", "SITE1"), "", ("s", "ID EQ0025534"), ("s", "52115182"),
+          ("s", "Northern Rentals LLC"), ("n", "45735"), ("n", "46000"), ("n", "28"),
+          ("s", "Non Hourly"), ("n", "0"), "", ("s", "$125.00"), ("s", "1,190.0000"),
+          ("s", "1,315.0000")],
+         # a 2169 "billed through" is a JDE sentinel, not a date -> must be dropped
+         [("s", "U3"), ("s", "Total station"), "", ("s", "S3"), ("s", "DN"),
+          ("s", "SITE1"), "", "", ("s", "52130000"), ("s", "Acme Equipment Co"),
+          ("n", "45900"), ("n", "98000"), ("n", "30"), ("s", "Non Hourly"), ("n", "0"), "",
+          ("s", "(150)"), ("n", "0"), ("s", "(150)")],
+     ]),
+    # --- Equipment Transfer: an event log, header on row 0 ---
+    ("kpi_transfers_mini.xlsx", "Equipment Transfer",
+     [],
+     ["Transfer Status", "Equipment \nNumber", "Equipment Description", "Serial Number",
+      "Assigned Employee", "Effective\nDate", "Project\nTransferred From",
+      "Project\nTransferred To", "Previous Status", "Current Status", "Request Remark",
+      "Current Meter\nReading", "Current Trade", "Major Equipment Class"],
+     [
+         # U1: arrives, breaks twice, back to work — 2 closed down spans
+         [("s", "Newly Acquired"), ("s", "U1"), ("s", "Excavator, tracked"), ("s", "S1"), "",
+          ("n", "45900"), "", ("s", "SITE1"), "", ("s", "WK"), ("s", "arrived on site"),
+          ("n", "0"), ("s", "CIVIL"), ("s", "Excavator")],
+         [("s", "Processed"), ("s", "U1"), ("s", "Excavator, tracked"), ("s", "S1"), "",
+          ("n", "45910"), ("s", "SITE1"), ("s", "SITE1"), ("s", "WK"), ("s", "DN"),
+          ("s", "hydraulic leak"), ("n", "0"), ("s", "CIVIL"), ("s", "Excavator")],
+         [("s", "Processed"), ("s", "U1"), ("s", "Excavator, tracked"), ("s", "S1"), "",
+          ("n", "45920"), ("s", "SITE1"), ("s", "SITE1"), ("s", "DN"), ("s", "WK"),
+          ("s", "repaired 10 days later"), ("n", "0"), ("s", "CIVIL"), ("s", "Excavator")],
+         [("s", "Processed"), ("s", "U1"), ("s", "Excavator, tracked"), ("s", "S1"), "",
+          ("n", "45930"), ("s", "SITE1"), ("s", "SITE1"), ("s", "WK"), ("s", "DS"),
+          ("s", "to the shop"), ("n", "0"), ("s", "CIVIL"), ("s", "Excavator")],
+         [("s", "Processed"), ("s", "U1"), ("s", "Excavator, tracked"), ("s", "S1"), "",
+          ("n", "45934"), ("s", "SITE1"), ("s", "SITE1"), ("s", "DS"), ("s", "WK"),
+          ("s", "back from the shop"), ("n", "0"), ("s", "CIVIL"), ("s", "Excavator")],
+         # U2: the initial-load snapshot block — several same-date rows with no
+         # previous status, each repeating a later remark. Must collapse to one
+         # arrival marker rather than inventing five state changes.
+         [("s", "Newly Acquired"), ("s", "U2"), ("s", "Generator 20kW"), ("s", "S2"), "",
+          ("n", "45800"), "", ("s", "SITE1"), "", ("s", "WK"), ("s", "per timecards"),
+          ("n", "0"), "", ("s", "Generator")],
+         [("s", "Newly Acquired"), ("s", "U2"), ("s", "Generator 20kW"), ("s", "S2"), "",
+          ("n", "45800"), "", ("s", "SITE1"), "", ("s", "DN"), ("s", "fuel issues"),
+          ("n", "0"), "", ("s", "Generator")],
+         [("s", "Newly Acquired"), ("s", "U2"), ("s", "Generator 20kW"), ("s", "S2"), "",
+          ("n", "45800"), "", ("s", "SITE1"), "", ("s", "DS"), ("s", "went to vendor"),
+          ("n", "0"), "", ("s", "Generator")],
+         # U3: down and still down (open span), transferred in from another site
+         [("s", "Processed"), ("s", "U3"), ("s", "Total station"), ("s", "S3"), "",
+          ("n", "45950"), ("s", "SITE2"), ("s", "SITE1"), ("s", "AV"), ("s", "WK"),
+          ("s", "moved from Beta Wind"), ("n", "0"), ("s", "COMMISSG"), ("s", "Survey")],
+         [("s", "Processed"), ("s", "U3"), ("s", "Total station"), ("s", "S3"), "",
+          ("n", "45960"), ("s", "SITE1"), ("s", "SITE1"), ("s", "WK"), ("s", "DN"),
+          ("s", "dropped, needs calibration"), ("n", "0"), ("s", "COMMISSG"), ("s", "Survey")],
+         # two changes on one date: the last is the state at the end of that day
+         [("s", "Processed"), ("s", "U4"), ("s", "Trailer Utility"), ("s", "S4"), "",
+          ("n", "45970"), ("s", "SITE1"), ("s", "SITE1"), ("s", "WK"), ("s", "DN"),
+          ("s", "flat tire"), ("n", "0"), "", ("s", "Trailers - Haul")],
+         [("s", "Processed"), ("s", "U4"), ("s", "Trailer Utility"), ("s", "S4"), "",
+          ("n", "45970"), ("s", "SITE1"), ("s", "SITE1"), ("s", "DN"), ("s", "WK"),
+          ("s", "tire changed same day"), ("n", "0"), "", ("s", "Trailers - Haul")],
+         # Missing/stolen: unavailable but not a maintenance question
+         [("s", "Processed"), ("s", "U5"), ("s", "Laptop"), ("s", "S5"), "",
+          ("n", "45975"), ("s", "SITE1"), ("s", "SITE1"), ("s", "WK"), ("s", "MS"),
+          ("s", "not returned"), ("n", "0"), "", ("s", "Office Equipment")],
+         # an undated row is not an event
+         [("s", "Processed"), ("s", "U6"), ("s", "Light Tower"), ("s", "S6"), "",
+          "", ("s", "SITE1"), ("s", "SITE1"), ("s", "WK"), ("s", "DN"), ("s", "no date"),
+          ("n", "0"), "", ("s", "Major Tools")],
+     ]),
+    # --- Utilization: the weekly hours export ---
     ("kpi_util_mini.xlsx", "Utilization",
+     [],
      ["Unit\nNumber", "Serial Number", "Hour Meter", "Meter Date", "Idle Hours",
       "Working Hours", "Period Hours"],
      [
@@ -20,27 +131,10 @@ FIXTURES = [
           ("n", "900"), ("n", "1200")],
          [("s", "U2"), ("s", "S2"), ("n", "800"), ("n", "46000"), ("n", "500"),
           ("n", "100"), ("n", "600")],
-         # unit not in the Equipment Master -> should surface as unmatched
-         [("s", "U9"), "", ("n", "10"), "", ("n", "5"), ("n", "5"), ("n", "10")],
          # serial-only row (telematics style) -> keyed SN:S3
          ["", ("s", "S3"), ("n", "120"), "", ("n", "20"), ("n", "100"), ("n", "120")],
          # no unit and no serial -> skipped
          ["", "", ("n", "1"), "", "", "", ""],
-     ]),
-    ("kpi_maint_mini.xlsx", "PM Due",
-     ["Unit #", "PM Due Date", "Open Work Orders", "Down Days", "Last Service", "Condition"],
-     [
-         [("s", "U1"), ("s", "9/15/2026"), ("n", "2"), ("n", "0"), ("s", "2026-06-01"),
-          ("s", "Serviceable")],
-         [("s", "U3"), ("s", "7/01/2026"), ("n", "0"), ("n", "4"), ("s", "2026-01-15"),
-          ("s", "Awaiting parts")],
-     ]),
-    ("kpi_cost_mini.xlsx", "Rental Cost",
-     ["Unit Number", "Monthly Cost", "Cost To Date", "Fuel Gallons", "Ownership", "Vendor"],
-     [
-         [("s", "U1"), ("s", "$4,200.00"), ("s", "19,400"), ("n", "880"),
-          ("s", "Rented"), ("s", "Holt CAT")],
-         [("s", "U2"), ("s", "(150)"), ("s", ""), ("n", "40"), ("s", "Owned"), ""],
      ]),
 ]
 
@@ -68,8 +162,8 @@ def xml_escape(s):
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def write_xlsx(out, sheet_name, headers, rows):
-    all_rows = [[("s", h) for h in headers]] + rows
+def write_xlsx(out, sheet_name, pre_rows, headers, rows):
+    all_rows = list(pre_rows) + [[("s", h) for h in headers]] + list(rows)
     strings, sidx = build_shared(all_rows)
     shared_xml = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
                   '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
@@ -125,9 +219,9 @@ def write_xlsx(out, sheet_name, headers, rows):
 def main():
     here = os.path.join(os.path.dirname(__file__), "fixtures")
     os.makedirs(here, exist_ok=True)
-    for name, sheet, headers, rows in FIXTURES:
+    for name, sheet, pre, headers, rows in FIXTURES:
         out = os.path.join(here, name)
-        write_xlsx(out, sheet, headers, rows)
+        write_xlsx(out, sheet, pre, headers, rows)
         print("wrote", out)
 
 

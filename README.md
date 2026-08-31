@@ -13,11 +13,15 @@ change requests — which become auto-reconciling GitHub Issues.
 - **Portal (`index.html`):** a static, Blattner-branded single-page app served by
   GitHub Pages. Pick a site, search by Unit # or Serial #, review assets, and
   submit change requests.
-- **Asset KPIs (`kpis.html`):** unit-level detail for a jobsite, joining the
-  Equipment Master with up to three Excel report families — utilization / hour
-  meter, maintenance / PM / work orders, and cost / rental / fuel. Reports are
-  recognised by their **column headers** (not filenames), and each family's
-  columns and tiles only appear once that report is imported.
+- **Asset KPIs (`kpis.html`):** unit-level detail and equipment trends for a
+  jobsite, joining the Equipment Master with four JDE report families:
+  **Equipment Rates** (monthly/yearly spend, $/hr, maintenance share),
+  **Anniversary Date** (vendor rental commitment, renewals, off-rent candidates),
+  **Equipment Transfer** (a status event log → downtime, MTTR, availability,
+  repeat offenders) and an optional **utilization / hour-meter** export. Reports
+  are recognised by their **column headers** (not filenames, and the header row
+  need not be row 1), and each family's columns, tiles and trend charts appear
+  only once that report is imported.
 - **Requests:** a small Cloudflare Worker (`worker/`) turns UI submissions into
   GitHub Issues (no GitHub account needed for submitters). Satisfied
   reassignments auto-close on the next build.
