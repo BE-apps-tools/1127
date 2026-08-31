@@ -1460,7 +1460,12 @@ function toggleDetail(key){
   renderTable();
 }
 /* ---------- filters ---------- */
+/* Rebuilds the option lists from the data now loaded. Rewriting innerHTML drops
+   the current selection, so each value is captured and put back if it still
+   exists — a preview must not silently reset the filters a reader has set. */
 function fillFilters(){
+  const keep={};
+  ["#fTrade","#fStatus","#fClass","#fBilling"].forEach(sel=>{ keep[sel]=$(sel).value; });
   const tsel=$("#fTrade");
   tsel.innerHTML='<option value="">All trades</option><option value="'+TRADE_NONE+'">Unassigned</option>'+
     TRADES.map(t=>'<option value="'+esc(t)+'">'+esc(t)+'</option>').join("");
@@ -1478,6 +1483,10 @@ function fillFilters(){
   csel.style.display = classes.length ? "" : "none";
   const billing=[...new Set(STATE.rows.map(r=>r.billingType).filter(Boolean))].sort();
   $("#fBilling").style.display = billing.length ? "" : "none";
+  Object.keys(keep).forEach(sel=>{
+    const el=$(sel), v=keep[sel];
+    if(v && [...el.options].some(o=>o.value===v)) el.value=v;
+  });
 }
 /* ---------- CSV ---------- */
 function csvCell(v){ const s=String(v==null?"":v); return /[",\n\r]/.test(s) ? ('"'+s.replace(/"/g,'""')+'"') : s; }
@@ -1576,8 +1585,11 @@ function bindCopy(){
 /* ============================================================
    In-memory preview — apply parsed values to this page without publishing.
    ============================================================ */
+/* A preview can introduce a family that was not loaded before, so the option
+   lists it feeds — equipment class, billing type — have to be rebuilt as well,
+   or the filter for the report you just previewed never appears. */
 function rerenderAll(){
-  buildRows(); renderFreshness(); renderTiles(); renderTrends(); renderTable();
+  buildRows(); fillFilters(); renderFreshness(); renderTiles(); renderTrends(); renderTable();
   renderPreviewBar();
 }
 function renderPreviewBar(){
