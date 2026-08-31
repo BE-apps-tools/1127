@@ -27,6 +27,15 @@ jobs:
           export BUILD_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           python -c "from build.build_data import build, newest_source; import json; print(json.dumps(build(newest_source('source'), 'data')))"
 
+      # Any other xlsx in source/ is treated as a KPI report (utilization /
+      # maintenance / cost), detected by its column headers. Only the families
+      # found here are replaced, so reports published from the portal's browser
+      # importer survive this build. Never fatal: an unrecognised file is skipped.
+      - name: Build asset KPIs from the KPI reports in source/
+        run: |
+          export BUILD_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          python -m build.build_kpis source data
+
       - name: Commit generated data
         run: |
           git config user.name "portal-bot"

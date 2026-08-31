@@ -1,0 +1,53 @@
+{
+  "_comment": "Shared coercion cases for the two ports of the KPI report adapters: build/kpi_reports.py (coerce_num/coerce_int/coerce_date) and kpis.html (kpiNum/kpiInt/kpiDate). Asserted by build/tests/test_build_kpis.py and worker/tests/kpi_coerce.test.mjs, so a change to one port without the other fails CI. Includes the absurd-year sentinel cases: JDE ships a 2169 'billed through' meaning 'no end', which must never become a real date.",
+  "num": [
+    ["", null],
+    ["   ", null],
+    ["4200", 4200],
+    ["$4,200.00", 4200],
+    ["19,400", 19400],
+    ["$ 1 200", 1200],
+    ["83%", 83],
+    ["12.5%", 12.5],
+    ["(150)", -150],
+    ["-42", -42],
+    ["1.5", 1.5],
+    ["0", 0],
+    ["-0", 0],
+    ["abc", null],
+    ["1.2.3", null],
+    ["", null],
+    ["N/A", null],
+    ["--", null]
+  ],
+  "int": [
+    ["2", 2],
+    ["2.9", 2],
+    ["-2.9", -2],
+    ["0", 0],
+    ["", null],
+    ["x", null]
+  ],
+  "date": [
+    ["2026-09-15", "2026-09-15"],
+    ["2026-09-15T00:00:00", "2026-09-15"],
+    ["9/15/2026", "2026-09-15"],
+    ["09/15/26", "2026-09-15"],
+    ["9-15-2026", "2026-09-15"],
+    ["46000", "2025-12-09"],
+    ["46000.5", "2025-12-09"],
+    ["", ""],
+    ["   ", ""],
+    ["not a date", ""],
+    ["0", ""],
+    ["-5", ""],
+    ["2026-13-01", ""],
+    ["2/30/2026", ""],
+    ["98000", ""],
+    ["2169-03-24", ""],
+    ["2168-04-23", ""],
+    ["3/24/2169", ""],
+    ["2099-12-31", "2099-12-31"],
+    ["2100-01-01", ""]
+  ]
+}

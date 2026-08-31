@@ -45,6 +45,11 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
     box-shadow:12px 0 0 currentColor,0 12px 0 currentColor,12px 12px 0 currentColor;}
   .ic-assets::before{content:"";position:absolute;left:0;top:2px;width:20px;height:3px;border-radius:2px;background:currentColor;
     box-shadow:0 7px 0 currentColor,0 14px 0 currentColor;}
+  /* KPI icon: three rising bars */
+  .ic-kpi::before{content:"";position:absolute;left:1px;bottom:1px;width:4px;height:8px;border-radius:1px;background:currentColor;
+    box-shadow:6px 0 0 currentColor,12px 0 0 currentColor;}
+  .ic-kpi::after{content:"";position:absolute;left:7px;bottom:1px;width:4px;height:13px;border-radius:1px;background:currentColor;
+    box-shadow:6px 0 0 currentColor;}
   .ic-deliv::before{content:"";box-sizing:border-box;position:absolute;left:1px;top:1px;width:18px;height:18px;border:2px solid currentColor;border-radius:3px;}
   .ic-deliv::after{content:"";box-sizing:border-box;position:absolute;left:6px;top:5px;width:6px;height:10px;border:2px solid currentColor;
     border-top:none;border-left:none;transform:rotate(45deg);}
@@ -105,6 +110,23 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
   .card.soon .chip::before{background:var(--light-gray);box-shadow:0 6px 0 var(--light-gray),0 12px 0 var(--light-gray);}
   .soon-tag{font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;font-size:11px;letter-spacing:0.04em;
     color:var(--medium-gray);border:1px solid var(--light-gray);border-radius:var(--r-sm);padding:11px 16px;display:inline-block;}
+  /* Whole-card link: the card itself is the <a>, so the hover lift and the
+     button are one target instead of a button inside a clickable div. */
+  .card.navcard{text-decoration:none;color:var(--dark-gray);}
+  /* The card's parts are spans (an <a> can't wrap divs cleanly), so give the ones
+     the card layout relies on their block box back. */
+  .card.navcard .accent-top,.card.navcard .body,.card.navcard .foot,
+  .card.navcard .chip,.card.navcard .eyebrow{display:block;}
+  .card.navcard:hover .open-btn{background:var(--energy-blue);border-color:var(--energy-blue);gap:12px;}
+  /* Three rising bars, matching the KPIs rail icon */
+  .card.kpi-card .chip::before{content:"";position:absolute;left:12px;bottom:12px;width:5px;height:9px;border-radius:1px;
+    background:var(--dark-blue);box-shadow:7px 0 0 var(--dark-blue),14px 0 0 var(--dark-blue);}
+  .card.kpi-card .chip::after{content:"";position:absolute;left:19px;bottom:12px;width:5px;height:15px;border-radius:1px;
+    background:var(--dark-blue);box-shadow:7px 0 0 var(--dark-blue);}
+  .card .meta{display:block;font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:0.04em;
+    color:var(--energy-blue);margin-top:10px;min-height:16px;}
+  .cards-head{margin:26px 0 14px;}
+  .cards-head h3{font-size:13px;letter-spacing:0.05em;color:var(--medium-gray);}
 
   /* KPI tiles */
   .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;}
@@ -219,7 +241,8 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
 </g>
 </svg></a>
     <a class="rail-item active" href="index.html"><span class="rail-ic ic-hub"></span><span class="rail-lbl">Dashboard</span></a>
-    <a class="rail-item" href="inventory.html"><span class="rail-ic ic-assets"></span><span class="rail-lbl">Assets</span></a>
+    <a class="rail-item" href="inventory.html" title="Equipment Tracking"><span class="rail-ic ic-assets"></span><span class="rail-lbl">Equipment Tracking</span></a>
+    <a class="rail-item" href="kpis.html"><span class="rail-ic ic-kpi"></span><span class="rail-lbl">KPIs</span></a>
     <a id="railDeliveries" class="rail-item" href="deliveries.html"><span class="rail-ic ic-deliv"></span><span class="rail-lbl">Deliveries</span></a>
     <a id="railReceiving" class="rail-item" href="deliveries.html?view=receiving" style="display:none"><span class="rail-ic ic-recv"></span><span class="rail-lbl">Receiving</span></a>
     <a class="rail-item" href="admin.html"><span class="rail-ic ic-admin"></span><span class="rail-lbl">Admin</span></a>
@@ -252,6 +275,23 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
 
       <section class="kpis" id="kpis" aria-label="Key metrics">
         <div class="kpi"><div class="grow"><div class="lbl">Loading…</div></div></div>
+      </section>
+
+      <div class="cards-head"><h3>Go deeper</h3></div>
+      <section class="grid" aria-label="Portal areas">
+        <a class="card navcard kpi-card" href="kpis.html">
+          <span class="accent-top"></span>
+          <span class="body">
+            <span class="chip" aria-hidden="true"></span>
+            <span class="eyebrow">Assets &middot; Excel reports</span>
+            <h3>Asset KPIs</h3>
+            <p>Unit-by-unit detail for everything on the jobsite — downtime and repair time,
+              monthly and yearly spend, damage costs, rental renewals and what the job pays while
+              a unit sits broken — joined from the Equipment Master and the JDE equipment reports.</p>
+            <span class="meta" id="navKpiMeta"></span>
+          </span>
+          <span class="foot"><span class="open-btn">Open</span></span>
+        </a>
       </section>
     </main>
 
@@ -368,6 +408,20 @@ function bindGlobalSearch(){
   inp.addEventListener("focus", ()=>{ if(inp.value.trim()) renderGResults(inp.value); });
   document.addEventListener("click", e=>{ if(!e.target.closest(".gsearch")) $("#gresults").classList.remove("show"); });
 }
+/* Asset KPIs nav card subline: which report families are live, so the card says
+   what's behind it instead of just where it goes. */
+async function loadKpiCardMeta(total){
+  const el=$("#navKpiMeta"); if(!el) return;
+  let k=null;
+  try{ const r=await fetch("data/kpis.json",{cache:"no-store"}); if(r.ok) k=await r.json(); }catch(e){}
+  const reports=(k&&Array.isArray(k.reports))?k.reports:[];
+  const units=(k&&k.units)?Object.keys(k.units).length:0;
+  const base=total?(total.toLocaleString()+" units"):"";
+  if(!reports.length){ el.textContent=[base,"no KPI reports imported yet"].filter(Boolean).join(" · "); return; }
+  const names={rates:"Rates", rental:"Rental", transfers:"Downtime", damage:"Damage", utilization:"Utilization"};
+  el.textContent=[base, reports.map(r=>names[r.kind]||r.kind).join(" · "),
+    units?(units+" with report data"):""].filter(Boolean).join(" · ");
+}
 async function loadDashboard(){
   let meta=null, sites=[];
   try{ const r=await fetch("data/meta.json"); if(r.ok) meta=await r.json(); }catch(e){}
@@ -391,6 +445,7 @@ async function loadDashboard(){
     });
   }catch(e){}
   if(!total && meta && meta.assetCount) total=meta.assetCount;
+  loadKpiCardMeta(total);
 
   let openReq=null, activeDeliv=null, overdueDeliv=null;
   try{

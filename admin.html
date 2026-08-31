@@ -45,6 +45,11 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
     box-shadow:12px 0 0 currentColor,0 12px 0 currentColor,12px 12px 0 currentColor;}
   .ic-assets::before{content:"";position:absolute;left:0;top:2px;width:20px;height:3px;border-radius:2px;background:currentColor;
     box-shadow:0 7px 0 currentColor,0 14px 0 currentColor;}
+  /* KPI icon: three rising bars */
+  .ic-kpi::before{content:"";position:absolute;left:1px;bottom:1px;width:4px;height:8px;border-radius:1px;background:currentColor;
+    box-shadow:6px 0 0 currentColor,12px 0 0 currentColor;}
+  .ic-kpi::after{content:"";position:absolute;left:7px;bottom:1px;width:4px;height:13px;border-radius:1px;background:currentColor;
+    box-shadow:6px 0 0 currentColor;}
   .ic-deliv::before{content:"";box-sizing:border-box;position:absolute;left:1px;top:1px;width:18px;height:18px;border:2px solid currentColor;border-radius:3px;}
   .ic-deliv::after{content:"";box-sizing:border-box;position:absolute;left:6px;top:5px;width:6px;height:10px;border:2px solid currentColor;
     border-top:none;border-left:none;transform:rotate(45deg);}
@@ -208,6 +213,53 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
   .note strong{color:var(--dark-blue);}
   .step-body[hidden]{display:none;}
 
+  /* ---------- KPI builder ---------- */
+  .kb{margin-top:24px;}
+  .kb > h2{font-size:18px;margin-bottom:4px;}
+  .kb .kb-lead{color:var(--medium-gray);font-size:13px;margin-bottom:14px;max-width:760px;}
+  .kb-panel{background:var(--white);border:1px solid var(--light-gray);border-radius:var(--r);
+    box-shadow:var(--shadow);padding:18px 20px;}
+  /* The drop zone is a label wrapping a real file input, so click, keyboard and
+     drag-and-drop all reach the same control without any custom key handling. */
+  .kb-drop{display:block;border:2px dashed var(--light-gray);border-radius:var(--r);background:var(--bright-gray);
+    padding:26px 20px;text-align:center;cursor:pointer;transition:border-color .15s ease,background .15s ease;}
+  .kb-drop:hover,.kb-drop.over{border-color:var(--energy-blue);background:var(--light-blue);}
+  .kb-drop input{position:absolute;width:1px;height:1px;opacity:0;}
+  .kb-drop .kb-dt{font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;font-size:13px;
+    letter-spacing:0.02em;color:var(--dark-blue);margin-bottom:5px;}
+  .kb-drop .kb-ds{font-size:12.5px;color:var(--medium-gray);}
+  .kb-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:18px;}
+  .kb-card{background:var(--white);border:1px solid var(--light-gray);border-left:4px solid var(--energy-blue);
+    border-radius:var(--r-sm);padding:12px 14px;}
+  .kb-card.off{border-left-color:var(--light-gray);}
+  .kb-card.bad{border-left-color:var(--amber);border-color:var(--amber);}
+  .kb-card .kb-k{font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.05em;color:var(--medium-gray);
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .kb-card .kb-v{font-size:13px;font-weight:bold;color:var(--dark-blue);margin-top:3px;overflow-wrap:anywhere;}
+  .kb-card.off .kb-v{color:var(--medium-gray);}
+  .kb-card .kb-m{font-size:11.5px;color:var(--medium-gray);margin-top:4px;}
+  .kb-card .kb-cols{font-size:11px;color:var(--medium-gray);margin-top:5px;overflow-wrap:anywhere;}
+  .kb-tag{display:inline-block;border-radius:999px;font-size:9px;font-weight:bold;text-transform:uppercase;
+    letter-spacing:0.04em;padding:2px 8px;border:1px solid var(--light-gray);background:var(--bright-gray);color:var(--medium-gray);}
+  .kb-tag.ok{border-color:var(--energy-blue);color:var(--dark-blue);}
+  .kb-tag.bad{background:var(--amber);border-color:var(--amber);color:var(--white);}
+  .kb-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;}
+  .kb-btn{font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;font-size:12px;letter-spacing:0.04em;
+    padding:11px 16px;border:1px solid var(--dark-blue);background:var(--dark-blue);color:var(--white);
+    border-radius:var(--r-sm);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;min-height:42px;}
+  /* Hover is scoped away from :disabled, and the disabled state only dims. It
+     must not repaint the background: .kb-btn:disabled and .kb-btn.secondary have
+     equal specificity, so a background here won the cascade and painted
+     dark-blue behind the secondary variant's dark-blue label — an invisible
+     button caption, which is the state both secondary buttons start in. */
+  .kb-btn:hover:not(:disabled){background:var(--energy-blue);border-color:var(--energy-blue);}
+  .kb-btn.secondary{background:var(--white);color:var(--dark-blue);}
+  .kb-btn.secondary:hover:not(:disabled){background:var(--light-blue);}
+  .kb-btn:disabled{opacity:0.45;cursor:default;}
+  .kb-msg{font-size:12.5px;color:var(--medium-gray);margin-top:14px;}
+  .kb-msg strong{color:var(--dark-blue);}
+  .kb[hidden]{display:none;}
+
   footer{max-width:1160px;width:100%;margin:0 auto;padding:0 32px 40px;color:var(--medium-gray);font-size:11px;}
 
   @media (max-width:820px){
@@ -249,7 +301,8 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
 </g>
 </svg></a>
     <a class="rail-item" href="index.html"><span class="rail-ic ic-hub"></span><span class="rail-lbl">Dashboard</span></a>
-    <a class="rail-item" href="inventory.html"><span class="rail-ic ic-assets"></span><span class="rail-lbl">Assets</span></a>
+    <a class="rail-item" href="inventory.html" title="Equipment Tracking"><span class="rail-ic ic-assets"></span><span class="rail-lbl">Equipment Tracking</span></a>
+    <a class="rail-item" href="kpis.html"><span class="rail-ic ic-kpi"></span><span class="rail-lbl">KPIs</span></a>
     <a id="railDeliveries" class="rail-item" href="deliveries.html"><span class="rail-ic ic-deliv"></span><span class="rail-lbl">Deliveries</span></a>
     <a id="railReceiving" class="rail-item" href="deliveries.html?view=receiving" style="display:none"><span class="rail-ic ic-recv"></span><span class="rail-lbl">Receiving</span></a>
     <a class="rail-item active" href="admin.html"><span class="rail-ic ic-admin"></span><span class="rail-lbl">Admin</span></a>
@@ -276,6 +329,32 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
       <div class="grid" id="adminZone"></div>
       <div id="teamWrap"></div>
       <div id="accessWrap"></div>
+
+      <section id="kpiBuilder" class="kb" hidden aria-label="KPI builder">
+        <h2>KPI builder</h2>
+        <p class="kb-lead">Drop all four JDE reports at once — <strong>Equipment Rates</strong>,
+          <strong>Anniversary Date</strong>, <strong>Equipment Transfer</strong> and
+          <strong>Damage Expenses</strong>. Each file's family is recognised from its column
+          headers, so filenames and column order don't matter. Everything is parsed in this
+          browser; only the extracted per-unit values are published. Publishing replaces the
+          families you dropped and leaves the others as they are.</p>
+        <div class="kb-panel">
+          <label class="kb-drop" id="kbDrop" for="kbFiles">
+            <input type="file" id="kbFiles" accept=".xlsx" multiple>
+            <span class="kb-dt">Drop the .xlsx reports here</span>
+            <span class="kb-ds">or click to choose files &mdash; one file per report family</span>
+          </label>
+          <div class="kb-cards" id="kbCards"></div>
+          <div class="kb-actions">
+            <button class="kb-btn secondary" id="kbPreview" type="button" disabled>Preview on the KPI page</button>
+            <button class="kb-btn" id="kbPublish" type="button" disabled>Publish for everyone</button>
+            <button class="kb-btn secondary" id="kbClear" type="button" disabled>Clear</button>
+          </div>
+          <div class="kb-msg" id="kbMsg">Preview applies the parsed values to the KPI page
+            <strong>in your browser only</strong> — nothing is committed and nobody else sees a
+            change. Publish writes them for everyone; the page goes live in about a minute.</div>
+        </div>
+      </section>
 
       <section id="guideSection" class="guide-sec" hidden aria-label="Admin guide">
         <h2>Admin guide</h2>
@@ -323,6 +402,20 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
             <p>Under <strong>Equipment Master</strong> (or Assets → <em>Import Equipment Master</em>), upload the latest <span class="k">.xlsx</span> export. It's parsed <strong>in your browser</strong> — the file is never uploaded, only the built inventory JSON is committed.</p>
             <p>Check the preview counts, then <strong>Publish</strong>. The site refreshes for everyone in a minute or two.</p>
             <a class="go" href="inventory.html?admin=import">Open importer</a>
+          </div>
+        </details>
+
+        <details class="step">
+          <summary class="step-head"><span class="step-num">3b</span><span class="step-t">Publish KPI reports (rates / rental / transfers / damage)</span><span class="step-chev"></span></summary>
+          <div class="step-body">
+            <p>Open the <strong>KPI builder</strong> card above and drop all the report <span class="k">.xlsx</span> files at once. Each file's family — <strong>Equipment Rates</strong>, <strong>Anniversary Date</strong> (rental contracts), <strong>Equipment Transfer</strong> (status history), <strong>Damage Expenses</strong> or a <strong>utilization / hour-meter</strong> export — is recognised from its <strong>column headers</strong>, so filenames and column order don't matter. Parsed in your browser; only the extracted per-unit values are committed.</p>
+            <ul>
+              <li>Publishing <strong>replaces just the families you dropped</strong> and leaves the others alone — so you can drop all four together, or one whenever its report arrives.</li>
+              <li>A card per family shows the file, row and unit counts, the jobsite it was run for and which columns matched. A file it can't recognise lists the headers it found — pass those on and the alias list can be taught the new spelling.</li>
+              <li><strong>Preview on the KPI page</strong> applies the parsed values in your browser only — the real tiles and charts, nothing committed, nobody else affected. Reload to drop it.</li>
+              <li>Committing the report to <span class="k">source/</span> instead does exactly the same thing on the next build.</li>
+            </ul>
+            <button class="go" type="button" id="guideBuilderBtn">Open builder</button>
           </div>
         </details>
 
@@ -390,6 +483,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
   </div>
 </div>
 
+<script src="kpi-core.js"></script>
 <script>
 "use strict";
 const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
@@ -634,6 +728,11 @@ function renderAdmin(){
           '<div class="eyebrow">Inventory</div><h3>Equipment Master</h3>' +
           '<p>Upload the latest Equipment Master .xlsx and publish updated inventory — parsed in your browser, no file upload.</p></div>' +
         '<div class="foot"><a class="open-btn" href="inventory.html?admin=import">Open importer</a></div></div>' +
+      '<div class="card"><div class="accent-top"></div>' +
+        '<div class="body"><div class="chip" aria-hidden="true"></div>' +
+          '<div class="eyebrow">Asset KPIs</div><h3>KPI builder</h3>' +
+          '<p>Drop the Equipment Rates, Anniversary Date, Equipment Transfer and Damage Expenses .xlsx together — parsed in your browser, previewed before anyone else sees it.</p></div>' +
+        '<div class="foot"><button class="open-btn" id="openBuilderBtn">Open builder</button></div></div>' +
       '<div class="card proc"><div class="accent-top"></div>' +
         '<div class="body"><div class="chip" aria-hidden="true"></div>' +
           '<div class="eyebrow">Procurement</div><h3>New tracker</h3>' +
@@ -655,6 +754,7 @@ function renderAdmin(){
           '<p>' + esc(adminName()||"admin") + ' — signed in on this device. Sign out to require the admin key again.</p></div>' +
         '<div class="foot"><button class="linkbtn" id="adminSignOut">Sign out</button></div></div>';
     $("#guideSection").hidden=true;                 // revealed via the Admin guide card
+    $("#kpiBuilder").hidden=true;                   // revealed via the KPI builder card
     $("#openReqsWrap").innerHTML=""; $("#openReqsWrap").dataset.open="";   // loaded via the Requests card
     loadTeam();
     loadAccess();
@@ -663,6 +763,7 @@ function renderAdmin(){
     $("#teamWrap").innerHTML="";
     $("#accessWrap").innerHTML="";
     $("#guideSection").hidden=true;
+    $("#kpiBuilder").hidden=true;
     z.innerHTML =
       '<div class="card lock"><div class="accent-top"></div>' +
         '<div class="body"><div class="chip" aria-hidden="true"></div>' +
@@ -688,6 +789,8 @@ $("#adminZone").addEventListener("click", e=>{
   else if(e.target.closest("#adminSignOut")) adminSignOut();
   else if(e.target.closest("#openGuideBtn")) toggleGuide(e.target.closest("#openGuideBtn"));
   else if(e.target.closest("#openReqsBtn")) toggleReqs(e.target.closest("#openReqsBtn"));
+  else if(e.target.closest("#openBuilderBtn")) toggleBuilder(e.target.closest("#openBuilderBtn"));
+  else if(e.target.closest("#guideBuilderBtn")) revealBuilder();
 });
 function toggleReqRow(row){
   const item=row.closest(".reqitem"); if(!item) return;
@@ -729,6 +832,174 @@ $("#accessWrap").addEventListener("click", e=>{
   if(e.target.closest("#accSet")||e.target.closest("#accChange")) setViewKey();
   else if(e.target.closest("#accPublic")) makePublic();
 });
+/* ============================================================
+   KPI builder — drop the JDE reports, see what parsed, preview or publish.
+   All the parsing lives in kpi-core.js, shared verbatim with the KPI page and
+   mirrored from build/kpi_reports.py, so a preview here and the nightly Action
+   build extract identical records from the same file.
+   ============================================================ */
+const KB_PREVIEW_KEY = "bac_kpi_preview";     // read once by kpis.html, then deleted
+let KB = { extracted:[], failed:[] };
+
+function kbFmtDate(iso){
+  if(!iso) return "—";
+  const p=String(iso).slice(0,10).split("-");
+  return p.length===3 ? (p[1]+"-"+p[2]+"-"+p[0].slice(2)) : iso;
+}
+/* Every family the spec knows about gets a card, imported or not: an operator
+   dropping three files needs to see which one they forgot, not just what landed. */
+function renderBuilder(){
+  const box=$("#kbCards");
+  const got={}; KB.extracted.forEach(e=>{ got[e.report.kind]=e; });
+  let html = KPI.KINDS.map(kind=>{
+    const ks=KPI.kindSpec(kind), e=got[kind];
+    if(!e){
+      return '<div class="kb-card off"><div class="kb-k">'+esc(ks.label)+
+        ' <span class="kb-tag">not dropped</span></div>'+
+        '<div class="kb-v">Unchanged</div>'+
+        '<div class="kb-m">Publishing without it leaves whatever is already live in place.</div></div>';
+    }
+    const r=e.report;
+    const unit = ks.mode==="events" ? "events" : (ks.mode==="ledger" ? "charge lines" : "rows");
+    return '<div class="kb-card"><div class="kb-k">'+esc(ks.label)+
+      ' <span class="kb-tag ok">parsed</span></div>'+
+      '<div class="kb-v">'+esc(r.file)+'</div>'+
+      '<div class="kb-m">'+r.rows.toLocaleString()+' '+unit+' · '+r.units.toLocaleString()+' units'+
+      (r.site?(' · site '+esc(r.site)):'')+
+      (r.asOf?(' · as of '+esc(kbFmtDate(r.asOf))):'')+'</div>'+
+      '<div class="kb-cols">Matched: '+esc(r.columns.map(c=>KPI.FIELD_LABELS[c]||c).join(", "))+'</div></div>';
+  }).join("");
+  html += KB.failed.map(f=>'<div class="kb-card bad"><div class="kb-k">Not read'+
+    ' <span class="kb-tag bad">skipped</span></div>'+
+    '<div class="kb-v">'+esc(f.name)+'</div>'+
+    '<div class="kb-m">'+esc(f.why)+'</div></div>').join("");
+  box.innerHTML=html;
+  // Two reports can disagree about which jobsite they were run for; that is the
+  // one mistake worth blocking on, because the merged bundle would mix sites.
+  const sites=[...new Set(KB.extracted.map(e=>e.report.site).filter(Boolean))];
+  const ok = KB.extracted.length>0 && sites.length<2;
+  $("#kbPreview").disabled=!ok;
+  $("#kbPublish").disabled=!ok;
+  $("#kbClear").disabled=!KB.extracted.length && !KB.failed.length;
+  if(sites.length>1){
+    $("#kbMsg").innerHTML='<strong>These files are from different jobsites ('+esc(sites.join(", "))+
+      ').</strong> Rerun the exports for one site and drop them together — publishing a mixed '+
+      'set would put another site’s numbers on this one’s units.';
+  } else {
+    $("#kbMsg").innerHTML='Preview applies the parsed values to the KPI page <strong>in your '+
+      'browser only</strong> — nothing is committed and nobody else sees a change. Publish '+
+      'writes them for everyone; the page goes live in about a minute.';
+  }
+}
+async function kbOnFiles(files){
+  const all=[...files];
+  const list=all.filter(f=>/\.xlsx$/i.test(f.name));
+  const failed=all.filter(f=>!/\.xlsx$/i.test(f.name))
+    .map(f=>({name:f.name, why:"Not an .xlsx file."}));
+  if(!all.length) return;
+  $("#kbCards").innerHTML='<div class="kb-card off"><div class="kb-v">Parsing…</div></div>';
+  const extracted=[];
+  for(const f of list){
+    try{
+      const rows=await KPI.firstSheetRows(f);
+      // The header is not necessarily row 0 — these exports put a report title
+      // above it — so scan for it before detecting the family, exactly as
+      // kpi_reports.read_report does.
+      const hi=rows.length?KPI.findHeader(rows):0;
+      const header=rows.length?rows[hi].map(KPI.normHeader):[];
+      const kind=KPI.detectKind(header, f.name);
+      if(!kind){
+        failed.push({name:f.name, why:"Not a recognised KPI report. Headers: "+
+          header.filter(Boolean).slice(0,8).join(", ")});
+        continue;
+      }
+      extracted.push(KPI.extract(rows, kind, f.name));
+    }catch(e){ failed.push({name:f.name, why:e.message}); }
+  }
+  // One file per family: the second would silently overwrite the first, so make
+  // the operator pick which export is the real one.
+  const kinds=extracted.map(e=>e.report.kind);
+  const dupe=kinds.find((k,i)=>kinds.indexOf(k)!==i);
+  if(dupe){
+    const label=(KPI.kindSpec(dupe)||{}).label||dupe;
+    const names=extracted.filter(e=>e.report.kind===dupe).map(e=>e.report.file).join(" and ");
+    KB={extracted:[], failed:failed.concat([{name:names,
+      why:"Both look like the "+label+" report — drop only the one you want published."}])};
+  } else {
+    KB={extracted, failed};
+  }
+  renderBuilder();
+}
+/* Hand the parsed bundle to kpis.html rather than re-deriving the tiles here:
+   that page owns every derivation, so the preview is the real thing and cannot
+   drift from what publishing would show. */
+function kbPreview(){
+  if(!KB.extracted.length) return;
+  const payload=JSON.stringify({ savedAt:new Date().toISOString(), extracted:KB.extracted });
+  const full="Couldn't stage the preview — this browser's storage is full. "+
+    "Publish instead, or clear this site's data and retry.";
+  try{ nsSet(KB_PREVIEW_KEY, payload); }catch(e){ alert(full); return; }
+  if(!nsGet(KB_PREVIEW_KEY)){ alert(full); return; }
+  const site=KB.extracted.map(e=>e.report.site).find(Boolean)||"";
+  location.href="kpis.html"+(site?("?site="+encodeURIComponent(site)):"");
+}
+async function kbPublish(){
+  if(!KB.extracted.length) return;
+  const labels=KB.extracted.map(e=>e.report.label).join(", ");
+  if(!window.confirm("Publish "+labels+" for everyone?\n\nThis replaces those report families on "+
+    "every unit and leaves the others as they are.")) return;
+  const btn=$("#kbPublish"), orig=btn.textContent;
+  btn.disabled=true; btn.textContent="Publishing…";
+  try{
+    const r=await fetch(wbase()+"/kpis",{method:"POST",headers:adminPostHeaders(),
+      body:JSON.stringify({extracted:KB.extracted})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||!d.ok){
+      btn.disabled=false; btn.textContent=orig;
+      alert("Publish failed: "+((d&&d.error)||("HTTP "+r.status)));
+      return;
+    }
+    btn.textContent=orig;
+    const n=d.units||0;
+    KB={extracted:[], failed:[]}; $("#kbFiles").value=""; renderBuilder();
+    $("#kbMsg").innerHTML='<strong>Published '+n.toLocaleString()+' unit'+(n===1?'':'s')+
+      '.</strong> The KPI page picks it up in about a minute — <a href="kpis.html">open it</a>.';
+  }catch(e){
+    btn.disabled=false; btn.textContent=orig;
+    alert("Publish failed: "+e.message);
+  }
+}
+function kbClear(){
+  KB={extracted:[], failed:[]}; $("#kbFiles").value=""; renderBuilder();
+}
+/* The guide's own "Open builder" only ever opens it — never toggles it shut. */
+function revealBuilder(){
+  const kb=$("#kpiBuilder");
+  if(kb.hidden) toggleBuilder($("#openBuilderBtn"));
+  else kb.scrollIntoView({block:"start", behavior:"smooth"});
+}
+function toggleBuilder(btn){
+  const kb=$("#kpiBuilder");
+  kb.hidden=!kb.hidden;
+  if(btn) btn.textContent = kb.hidden ? "Open builder" : "Hide builder";
+  if(!kb.hidden){ renderBuilder(); kb.scrollIntoView({block:"start", behavior:"smooth"}); }
+}
+(function bindBuilder(){
+  const drop=$("#kbDrop");
+  $("#kbFiles").addEventListener("change", e=>kbOnFiles(e.target.files));
+  ["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev, e=>{
+    e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave","drop"].forEach(ev=>drop.addEventListener(ev, e=>{
+    e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", e=>{
+    const f=e.dataTransfer&&e.dataTransfer.files;
+    if(f&&f.length) kbOnFiles(f);
+  });
+  $("#kbPreview").addEventListener("click", kbPreview);
+  $("#kbPublish").addEventListener("click", kbPublish);
+  $("#kbClear").addEventListener("click", kbClear);
+})();
+
 renderAdmin();
 /* ?view=requests opens the requests list straight away (Teams alerts link here).
    Signed out, the page shows the admin sign-in card instead — as it should. */

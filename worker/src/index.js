@@ -18,6 +18,9 @@
  * Equipment Master inventory:
  *   POST /inventory  -> ADMIN: commit browser-parsed inventory JSON to main
  *                       (data/meta.json, data/sites.json, data/sites/<code>.json).
+ * Asset KPI reports (rates / rental / transfers / utilization):
+ *   POST /kpis       -> ADMIN: merge browser-parsed report blocks into
+ *                       data/kpis.json, replacing only the families supplied.
  * Admin team access (repo-based user list — no Cloudflare needed to manage it):
  *   POST /admin/verify -> check a key, return {ok, name} (used by the sign-in UI).
  *   GET  /admins       -> ADMIN: list admins ({name, added}; never hashes).
@@ -143,6 +146,8 @@ export default {
       return postAdmins(req, env, h);
     } else if (path === "/access" && req.method === "POST"){
       return postAccess(req, env, h);
+    } else if (path === "/kpis" && req.method === "POST"){
+      return postKpis(req, env, h);
     } else if (path === "/receiving" && req.method === "POST"){
       return postReceiving(req, env, h);
     } else if (path === "/receiving/slip" && req.method === "POST"){
@@ -726,6 +731,173 @@ async function postAdmins(req, env, h){
   if (!pr.ok) { const t = await pr.text(); return json({ error: "github " + pr.status, detail: t.slice(0, 300) }, 502, h); }
   _adminsCache = { at: 0, admins: null };   // invalidate so the change is live immediately
   return json({ ok: true, admins: admins.map(a => ({ name: a.name, added: a.added || "" })) }, 200, h);
+}
+
+/* ============================ asset KPI reports ============================
+ * POST /kpis — ADMIN: merge browser-parsed KPI report blocks into data/kpis.json.
+ * Families: `rates` (Equipment Rates), `rental` (Anniversary Date), `transfers`
+ * (Equipment Transfer status history — an events array per unit), `damage`
+ * (Damage Expenses — a cost-ledger `items` array per unit), `utilization`.
+ * Body: { extracted: [ { report:{kind,label,file,rows,units,asOf,columns}, units:{key:{field:value}} } ] }
+ *
+ * Mirrors build/kpi_reports.py `merge`: each supplied family REPLACES that
+ * family's block on every unit and leaves the others alone, so the Action build
+ * (which owns whatever sits in source/) and this importer can each publish
+ * different reports without clobbering the other. The spreadsheets are parsed in
+ * the browser and never uploaded — only the extracted values arrive here.
+ * Requires GH_TOKEN with Contents: Read+write. */
+const KPI_KINDS = ["rates", "rental", "transfers", "damage", "utilization"];
+const KPI_KEY_RE = /^(SN:)?[\x20-\x7E]{1,60}$/;     // unit # or "SN:<serial>", printable ASCII
+const KPI_FIELD_RE = /^[A-Za-z][A-Za-z0-9]{0,30}$/;
+const KPI_MAX_UNITS = 20000;                        // a jobsite fleet is hundreds; this is a runaway guard
+const KPI_MAX_FIELDS = 24;
+const KPI_MAX_EVENTS = 500;                         // status events kept per unit
+const KPI_MAX_STR = 140;
+
+/* One dated row of a per-unit array: a status event, or a ledger charge line.
+ * Small, flat, dated; strings trimmed, numbers finite, everything else dropped. */
+const KPI_ROW_STRINGS = ["status", "prev", "from", "remark",      // transfer events
+                         "doc", "docType", "payee", "po", "damageArea", "caseNumber"];
+function kpiCleanRow(e, kind){
+  if (!e || typeof e !== "object" || Array.isArray(e)) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(e.date || ""))) return null;   // undated is not a row
+  const out = { date: String(e.date) };
+  for (const k of KPI_ROW_STRINGS){
+    if (typeof e[k] === "string" && e[k]) out[k] = e[k].slice(0, KPI_MAX_STR);
+  }
+  if (typeof e.amount === "number" && Number.isFinite(e.amount)) out.amount = e.amount;
+  if (kind === "transfers"){
+    if (typeof out.status !== "string") out.status = "";                  // '' = state unknown
+    if (e.arrival === true) out.arrival = true;
+  }
+  // A ledger line with no amount carries no cost, so it is not a charge.
+  if (kind === "damage" && !("amount" in out)) return null;
+  return out;
+}
+
+/* Keep only well-formed values: a number, a trimmed string, or the `events`
+ * array of the transfer history. Anything else is dropped rather than trusted. */
+function kpiCleanBlock(rec, kind){
+  const out = {};
+  let n = 0;
+  for (const [k, v] of Object.entries(rec || {})){
+    if (n >= KPI_MAX_FIELDS) break;
+    if (!KPI_FIELD_RE.test(k)) continue;
+    if (k === "events" || k === "items"){
+      if (!Array.isArray(v)) continue;
+      const rows = v.slice(0, KPI_MAX_EVENTS).map(e => kpiCleanRow(e, kind)).filter(Boolean);
+      if (!rows.length) continue;
+      rows.sort((a, b) => a.date < b.date ? -1 : (a.date > b.date ? 1 : 0));  // oldest first
+      out[k] = rows; n++;
+    } else if (typeof v === "number"){
+      if (!Number.isFinite(v)) continue;
+      out[k] = v; n++;
+    } else if (typeof v === "string"){
+      const s = v.slice(0, KPI_MAX_STR);
+      if (!s) continue;
+      out[k] = s; n++;
+    }
+  }
+  return out;
+}
+async function postKpis(req, env, h){
+  if (!(await checkAdmin(req, env)).ok) return json({ error: "admin only" }, 401, h);
+  let b; try { b = await req.json(); } catch { return json({ error: "bad json" }, 400, h); }
+  const incoming = Array.isArray(b && b.extracted) ? b.extracted : [];
+  if (!incoming.length) return json({ error: "no reports" }, 400, h);
+
+  // Validate every block before touching the repo — a half-applied import is worse
+  // than a rejected one.
+  const clean = [];
+  const seenKinds = new Set();
+  for (const ex of incoming){
+    const rep = ex && ex.report;
+    if (!rep || !KPI_KINDS.includes(rep.kind)) return json({ error: "unknown report kind" }, 400, h);
+    if (seenKinds.has(rep.kind)) return json({ error: "duplicate report kind: " + rep.kind }, 400, h);
+    seenKinds.add(rep.kind);
+    if (!ex.units || typeof ex.units !== "object" || Array.isArray(ex.units)) return json({ error: "bad units" }, 400, h);
+    const keys = Object.keys(ex.units);
+    if (!keys.length) return json({ error: "empty report: " + rep.kind }, 400, h);
+    if (keys.length > KPI_MAX_UNITS) return json({ error: "too many units" }, 400, h);
+    const units = {};
+    for (const k of keys){
+      if (!KPI_KEY_RE.test(k)) return json({ error: "bad unit key" }, 400, h);
+      const rec = ex.units[k];
+      if (!rec || typeof rec !== "object" || Array.isArray(rec)) return json({ error: "bad unit record" }, 400, h);
+      const blk = kpiCleanBlock(rec, rep.kind);
+      if (Object.keys(blk).length) units[k] = blk;
+    }
+    if (!Object.keys(units).length) return json({ error: "no usable values: " + rep.kind }, 400, h);
+    clean.push({
+      report: {
+        kind: rep.kind, label: String(rep.label || rep.kind).slice(0, 80),
+        file: String(rep.file || "").slice(0, 160),
+        rows: Number(rep.rows) || 0, units: Object.keys(units).length,
+        asOf: /^\d{4}-\d{2}-\d{2}$/.test(String(rep.asOf || "")) ? rep.asOf : "",
+        // Server-stamped, never taken from the client: this is what the daily
+        // freshness check reads to tell a forgotten report from a fresh one.
+        importedAt: new Date().toISOString().slice(0, 19) + "Z",
+        // The jobsite the export stamped itself with, so the page can flag a
+        // report imported against the wrong site.
+        site: /^\d{9,13}$/.test(String(rep.site || "")) ? String(rep.site) : "",
+        columns: Array.isArray(rep.columns) ? rep.columns.filter(c => KPI_FIELD_RE.test(c)).slice(0, KPI_MAX_FIELDS) : [],
+      },
+      units,
+    });
+  }
+
+  // Read the current bundle (with its blob sha, needed to update it).
+  let bundle = { builtAt: "", reports: [], units: {} }, sha = null;
+  const gr = await fetch(`https://api.github.com/repos/${env.GH_REPO}/contents/data/kpis.json`, { headers: ghHeaders(env) });
+  if (gr.ok){
+    const meta = await gr.json(); sha = meta.sha;
+    try {
+      const j = JSON.parse(b64decode(meta.content || ""));
+      if (j && typeof j === "object" && j.units && typeof j.units === "object"){
+        bundle = { builtAt: String(j.builtAt || ""), reports: Array.isArray(j.reports) ? j.reports : [], units: j.units };
+      }
+    } catch { /* corrupt file: start clean rather than refuse the import */ }
+  } else if (gr.status !== 404){
+    return json({ error: "github " + gr.status }, 502, h);
+  }
+
+  const units = { ...bundle.units };
+  let reports = bundle.reports.filter(r => r && typeof r === "object");
+  for (const ex of clean){
+    const kind = ex.report.kind;
+    for (const key of Object.keys(units)){                 // drop this family everywhere
+      const blk = { ...units[key] };
+      delete blk[kind];
+      units[key] = blk;
+    }
+    for (const [key, rec] of Object.entries(ex.units)){
+      const blk = { ...(units[key] || {}) };
+      const serial = rec.serial;
+      const body = { ...rec };
+      delete body.serial;
+      if (typeof serial === "string" && serial && !blk.serial) blk.serial = serial;
+      blk[kind] = body;
+      units[key] = blk;
+    }
+    reports = reports.filter(r => r.kind !== kind).concat([ex.report]);
+  }
+  for (const key of Object.keys(units)){                   // forget units with no data left
+    if (!KPI_KINDS.some(k => units[key][k])) delete units[key];
+  }
+  reports.sort((a, b2) => KPI_KINDS.indexOf(a.kind) - KPI_KINDS.indexOf(b2.kind));
+
+  const out = { builtAt: new Date().toISOString().slice(0, 19) + "Z", reports, units };
+  const kinds = clean.map(c => c.report.kind).join(", ");
+  const put = {
+    message: `Asset KPIs: ${kinds} (${Object.keys(units).length} units) [portal]`,
+    content: b64encode(JSON.stringify(out) + "\n"),
+  };
+  if (sha) put.sha = sha;
+  const pr = await fetch(`https://api.github.com/repos/${env.GH_REPO}/contents/data/kpis.json`, {
+    method: "PUT", headers: { ...ghHeaders(env), "Content-Type": "application/json" }, body: JSON.stringify(put),
+  });
+  if (!pr.ok){ const t = await pr.text(); return json({ error: "github " + pr.status, detail: t.slice(0, 300) }, 502, h); }
+  return json({ ok: true, kinds: clean.map(c => c.report.kind), units: Object.keys(units).length }, 200, h);
 }
 
 /* ============================ receiving log (MRR reconciliation) ============================

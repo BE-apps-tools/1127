@@ -35,3 +35,32 @@ jobs:
 
       - name: Worker Teams-alert tests
         run: node worker/tests/teams.test.mjs
+
+      - name: Worker asset-KPI publish tests
+        run: node worker/tests/kpis.test.mjs
+
+      # Guards the JS half of the KPI report adapters against the Python half
+      # (same shared case table as the pytest run above).
+      - name: KPI coercion parity (kpi-core.js vs build/kpi_reports.py)
+        run: node worker/tests/kpi_coerce.test.mjs
+
+      # Downtime, MTTR and availability are derived in the KPI page only, so they
+      # are exercised straight out of kpis.html (the spec comes from kpi-core.js).
+      - name: KPI downtime maths (kpis.html)
+        run: node worker/tests/kpi_downtime.test.mjs
+
+      # The builder's preview must merge exactly as the real publish does, or it
+      # would show numbers the publish wouldn't produce.
+      - name: KPI merge parity (builder preview vs worker publish)
+        run: node worker/tests/kpi_merge.test.mjs
+
+      # .xlsx part resolution: OOXML attribute order varies by writer, and the
+      # real exports put Target before Id / r last. Positional regexes silently
+      # read zero rows.
+      - name: KPI xlsx part resolution (kpi-core.js)
+        run: node worker/tests/kpi_xlsx.test.mjs
+
+      # The whole browser import chain over the same fixtures as Python, held to
+      # the committed golden — the end-to-end guard for port divergence.
+      - name: KPI import pipeline parity (kpi-core.js vs Python golden)
+        run: node worker/tests/kpi_pipeline.test.mjs
