@@ -683,6 +683,30 @@ function damageByMonth(items, months){
   });
   return idx;
 }
+/* Posted hours over a window, from the month buckets the hours report publishes.
+   Bucketed at import (see the note on the family in build/kpi_reports.py), so the
+   window is honoured to the month, not the day — a rolling 12 months here means
+   the 12 calendar months the trend charts already use. */
+function hoursStats(hr, months){
+  if(!hr) return null;
+  const by=hr.hoursByMonth||{};
+  const keys=Object.keys(by);
+  if(!keys.length) return null;
+  const inWin=months.filter(m=>by[m]!=null);
+  const total=sum(inWin.map(m=>by[m]));
+  const all=sum(keys.map(m=>by[m]));
+  const peak=inWin.length?Math.max(...inWin.map(m=>by[m])):null;
+  const last=months[months.length-1];
+  return {
+    total, all, months:inWin.length, peak,
+    thisMonth: by[last]!=null ? by[last] : 0,
+    perMonth: inWin.length ? total/inWin.length : null,
+    days: num(hr.days), first: hr.first||"", last: hr.last||"",
+    costCodes: num(hr.costCodes), job: hr.job||"",
+    ownership: sum(Object.keys(hr.ownershipHoursByMonth||{}).map(m=>hr.ownershipHoursByMonth[m])),
+    operating: sum(Object.keys(hr.operatingHoursByMonth||{}).map(m=>hr.operatingHoursByMonth[m])),
+  };
+}
 /* External rental commitment per month (vendor-billed, not the internal rate). */
 function rentalMonthlyOf(rn){
   if(!rn) return null;
@@ -723,19 +747,21 @@ function kpiFor(a){
   return U[String(a.unit||"")] || (a.serial ? U["SN:"+String(a.serial)] : null) || null;
 }
 function buildRows(){
-  const winFrom = monthStartDn(monthList(TREND_MONTHS)[0]);
+  const winMonths = monthList(TREND_MONTHS);
+  const winFrom = monthStartDn(winMonths[0]);
   STATE.rows = STATE.assets.map(a=>{
     const k=kpiFor(a)||{};
-    const tr=k.transfers||null, rt=k.rates||null, rn=k.rental||null, ut=k.utilization||null;
+    const tr=k.transfers||null, rt=k.rates||null, rn=k.rental||null, hr=k.hours||null;
     const dm=k.damage||null;
     const st = tr ? timelineStats(tr.events, winFrom) : null;
     const dg = dm ? damageStats(dm.items, winFrom) : null;
+    const hs = hoursStats(hr, winMonths);
     const monthly = monthlyCostOf(rt);
     const rental = rentalMonthlyOf(rn);
     const dailyRate = monthly!=null ? monthly/DAYS_PER_MONTH : null;
     const annivDays = rn && rn.billedThroughDate ? daysUntil(rn.billedThroughDate) : null;
     return {
-      asset:a, kpi:k, tr, rt, rn, ut, dm, st,
+      asset:a, kpi:k, tr, rt, rn, hr, dm, st, hs,
       unit:String(a.unit||""), serial:String(a.serial||""),
       description:String(a.description||""), description2:String(a.description2||""),
       status:String(a.status||""), trade:String(a.trade||""), assigned:assignedOf(a),
@@ -772,10 +798,31 @@ function buildRows(){
       damageShare: (dg && monthly!=null && monthly>0) ? 100*dg.total/(monthly*12) : null,
       // cross-report: what the job paid while the unit sat broken
       downCost: (dailyRate!=null && st && st.downDays) ? dailyRate*st.downDays : null,
+      // Posted hours, and what an hour of work actually cost: the charge-out the
+      // job carried over the window divided by the hours it got for it. Only
+      // meaningful where both reports cover the unit.
+      hoursTotal: hs ? hs.total : null,
+      hoursThisMonth: hs ? hs.thisMonth : null,
+      hoursPerMonth: hs ? hs.perMonth : null,
+      hoursDays: hs ? hs.days : null,
+      // Charge-out for the months this unit actually posted hours, divided by
+      // those hours. Using the full 12 months would divide a year of cost by
+      // three months of work for a unit that only ran in the spring, and report
+      // an hourly cost four times the real one.
+      costPerHour: (hs && hs.total>0 && monthly!=null && hs.months>0)
+        ? (monthly*hs.months)/hs.total : null,
+
       hasKpi: KPI_KINDS.some(kk=>k[kk]),
     };
   });
-  STATE.rows.forEach(r=>{ r.daysOnSite = r.arrived ? daysSince(r.arrived) : null; });
+  STATE.rows.forEach(r=>{
+    r.daysOnSite = r.arrived ? daysSince(r.arrived) : null;
+    // Share of the days on site that carried posted hours. A blunt read, and the
+    // only utilization these reports can support: the hours export says which
+    // days were charged, not how many hours a day was available.
+    r.utilPct = (r.hs && r.hs.days!=null && r.daysOnSite>0)
+      ? Math.min(100, 100*r.hs.days/r.daysOnSite) : null;
+  });
 }
 /* Which report families have data for the shown site — drives the freshness banner,
    which tiles appear, and which table columns exist at all. */
@@ -846,11 +893,9 @@ function staleNote(kind){
   const st=staleness(reportFor(kind));
   return st.level ? (" · " + ageText(st.age)) : "";
 }
-/* Rank values can live one level down (the utilization block), so reads go
-   through here rather than assuming a flat row key. */
+/* One place to read a rank value, so a drill's ranking key does not have to be a
+   visible column the way a header-click sort does. */
 function rankVal(r,key){
-  if(key==="meterHours") return r.ut ? num(r.ut.meterHours) : null;
-  if(key==="periodHours") return r.ut ? num(r.ut.periodHours) : null;
   return num(r[key]);
 }
 
@@ -955,10 +1000,27 @@ const DRILLS = {
               ["Units", fmtNum(t.length)],
               ["Down days behind it", fmtNum(sum(t.map(r=>r.downDays)))],
               ["Worst unit", t.length?fmtMoney(Math.max(...t.map(r=>r.downCost))):DASH]]; } },
-  "hours-reported": { focus:"hours", rank:{key:"periodHours",dir:"desc"},
-    stats:R=>{ const h=R.filter(r=>r.ut&&num(r.ut.periodHours)!=null);
-      return [["Hours reported", fmtNum(sum(h.map(r=>num(r.ut.periodHours))))],
-              ["Units reporting", fmtNum(h.length)]]; } },
+  "hours-posted": { focus:"hours", rank:{key:"hoursTotal",dir:"desc"},
+    stats:R=>{ const h=R.filter(r=>r.hoursTotal!=null&&r.hoursTotal>0);
+      const t=sum(h.map(r=>r.hoursTotal));
+      return [["Hours posted", fmtNum(t)], ["Units posting", fmtNum(h.length)],
+              ["Busiest unit", h.length?fmtNum(Math.max(...h.map(r=>r.hoursTotal)))+" h":DASH],
+              ["Avg per unit", h.length?fmtNum(t/h.length)+" h":DASH],
+              ["This month", fmtNum(sum(h.map(r=>r.hoursThisMonth)))+" h"]]; } },
+  "cost-per-hour-worked": { focus:"hours", rank:{key:"costPerHour",dir:"desc"},
+    stats:R=>{ const b=R.filter(r=>r.costPerHour!=null);
+      const cost=sum(b.map(r=>r.monthlyCost*r.hs.months)), h=sum(b.map(r=>r.hoursTotal));
+      return [["Cost per hour", h>0?("$"+(cost/h).toFixed(2)):DASH],
+              ["Units rated and posting", fmtNum(b.length)],
+              ["Charge-out while working", fmtMoney(cost)],
+              ["Hours bought", fmtNum(h)],
+              ["Dearest hour", b.length?("$"+Math.max(...b.map(r=>r.costPerHour)).toFixed(2)):DASH]]; } },
+  "days-posting-hours": { focus:"hours", rank:{key:"utilPct",dir:"asc"},
+    stats:R=>{ const u=R.filter(r=>r.utilPct!=null);
+      return [["Avg days posting", u.length?(Math.round(sum(u.map(r=>r.utilPct))/u.length)+"%"):DASH],
+              ["Units measured", fmtNum(u.length)],
+              ["Quietest unit", u.length?(Math.round(Math.min(...u.map(r=>r.utilPct)))+"%"):DASH],
+              ["Ranked quietest first", fmtNum(u.length)+" with hours"]]; } },
 };
 /* Which month took the most damage, across the units in view. */
 function worstDamageMonth(rows){
@@ -1095,9 +1157,29 @@ function renderTiles(){
     if(dc>0) html += tile("Cost while down", fmtMoneyShort(dc),
       "Charge-out rate × downtime, last "+TREND_MONTHS+" months", {alert:true});
   }
-  if(on.utilization){
-    const hrs=R.map(r=>r.ut?num(r.ut.periodHours):null).filter(v=>v!=null);
-    if(hrs.length) html += tile("Hours reported", fmtNum(sum(hrs)), hrs.length+" units reporting");
+  if(on.hours){
+    const posting=R.filter(r=>r.hoursTotal!=null&&r.hoursTotal>0);
+    const hrs=sum(posting.map(r=>r.hoursTotal));
+    html += tile("Hours posted", fmtNum(hrs),
+      "Last "+TREND_MONTHS+" months · "+fmtNum(posting.length)+" of "+fmtNum(n)+
+      " units posting"+staleNote("hours"));
+    // Charge-out over the window against the hours it bought. Only the units the
+    // rate report and the hours report both cover can answer this.
+    const both=R.filter(r=>r.costPerHour!=null);
+    if(both.length){
+      // Summed the same way each unit computes it: cost over the months that
+      // unit worked, not a flat 12, or idle units would skew the fleet figure.
+      const cost=sum(both.map(r=>r.monthlyCost*r.hs.months));
+      const h=sum(both.map(r=>r.hoursTotal));
+      if(h>0) html += tile("Cost per hour worked", "$"+(cost/h).toFixed(2),
+        fmtNum(both.length)+" units rated and posting hours");
+    }
+    const util=R.filter(r=>r.utilPct!=null);
+    if(util.length){
+      const u=sum(util.map(r=>r.utilPct))/util.length;
+      html += tile("Days posting hours", Math.round(u)+"%",
+        "Of days on site, averaged over "+fmtNum(util.length)+" units", {ring:u});
+    }
   }
 
   // Replacing the tiles destroys whatever had keyboard focus, which would strand
@@ -1363,6 +1445,25 @@ function renderTrends(){
       dataTable(["Month","Damage charged","Units"], rows)+'</div>';
     window.__damageAgg={agg, unitsPer, months};
   }
+
+  if(on.hours){
+    // Hours posted per month, straight off the buckets — no re-derivation, since
+    // the month is exactly the granularity the report publishes.
+    const agg={}, unitsPer={};
+    months.forEach(m=>{ agg[m]=0; unitsPer[m]=new Set(); });
+    R.forEach(r=>{
+      const by=(r.hr&&r.hr.hoursByMonth)||null;
+      if(!by) return;
+      months.forEach(m=>{ if(by[m]){ agg[m]+=by[m]; unitsPer[m].add(r.unit); } });
+    });
+    const series=months.map(m=>agg[m]);
+    const rows=months.map((m,i)=>[fmtMonth(m), fmtNum(series[i],1), String(unitsPer[m].size)]);
+    cards += '<div class="chartcard"><h3>Hours posted by month</h3>'+
+      '<div class="cap">Hours charged to the job per month, from the equipment hours export. The newest month is to date. Hover for the number of units.</div>'+
+      '<div class="plot" data-chart="hours">'+moneyChart(months, series, "#2DA2DB")+'<div class="ctip"></div></div>'+
+      dataTable(["Month","Hours posted","Units posting"], rows)+'</div>';
+    window.__hoursAgg={agg, unitsPer, months};
+  }
   box.innerHTML=cards;
   bindChartHover();
 }
@@ -1388,6 +1489,11 @@ function bindChartHover(){
         html='<b>'+esc(fmtMonth(m))+'</b>'+
           '<div class="r"><span>Charged</span><span>'+fmtMoney(A.agg[m]||0)+'</span></div>'+
           '<div class="r"><span>Units</span><span>'+A.unitsPer[m].size+'</span></div>';
+      } else if(kind==="hours"){
+        const A=window.__hoursAgg; if(!A) return;
+        html='<b>'+esc(fmtMonth(m))+'</b>'+
+          '<div class="r"><span>Hours</span><span>'+fmtNum(A.agg[m]||0,1)+'</span></div>'+
+          '<div class="r"><span>Units posting</span><span>'+A.unitsPer[m].size+'</span></div>';
       } else {
         const S=window.__spendSeries; if(!S) return;
         const i=S.months.indexOf(m); const v=S.series[i]||0;
@@ -1432,7 +1538,12 @@ function columns(){
   if(on.rental) cols.push(
     {key:"rentalMonthly", label:"Rental / mo", type:"money", grp:true},
     {key:"annivDate", label:"Billed through", type:"anniv"});
-  if(on.utilization) cols.push({key:"meterHours", label:"Hour meter", type:"num", grp:true});
+  if(on.hours){
+    cols.push({key:"hoursTotal", label:"Hours "+TREND_MONTHS+"mo", type:"num", grp:true});
+    cols.push({key:"hoursDays", label:"Days posting", type:"num"});
+    cols.push({key:"utilPct", label:"Days posting %", type:"pct"});
+    if(on.rates) cols.push({key:"costPerHour", label:"Cost / hr worked", type:"money"});
+  }
   return cols;
 }
 function renderHead(cols){
@@ -1479,10 +1590,6 @@ function cell(r,c){
   if(c.type==="anniv") return '<td class="'+cls.trim()+'">'+annivCell(r)+'</td>';
   if(c.key==="description") return '<td class="'+cls.trim()+'"'+cpAttr(r.description)+'>'+esc(r.description||DASH)+
     (r.description2?('<div class="d2">'+esc(r.description2)+'</div>'):'')+'</td>';
-  if(c.key==="meterHours"){
-    const mh=r.ut?num(r.ut.meterHours):null;
-    return '<td class="'+(cls.trim()+(mh==null?" muted":"")).trim()+'">'+esc(fmtNum(mh))+'</td>';
-  }
   let txt;
   if(c.type==="money") txt=fmtMoney(v);
   else if(c.type==="pct") txt=fmtPct(v);
@@ -1549,13 +1656,13 @@ function viewRows(){
   else if(ff==="hourly") v=v.filter(r=>r.hourlyRate!=null&&r.hourlyRate>0);
   else if(ff==="rented") v=v.filter(r=>r.isRented);
   else if(ff==="hasdown") v=v.filter(r=>(r.downDays||0)>0);
-  else if(ff==="hours") v=v.filter(r=>r.ut&&num(r.ut.periodHours)!=null);
+  else if(ff==="hours") v=v.filter(r=>r.hoursTotal!=null&&r.hoursTotal>0);
   const s=STATE.sort;
   if(s&&s.key){
     const dir=s.dir==="desc"?-1:1;
     const col=columns().find(c=>c.key===s.key);
     const numeric=col && ["num","pct","money"].includes(col.type);
-    const get=r=> s.key==="meterHours" ? (r.ut?num(r.ut.meterHours):null) : r[s.key];
+    const get=r=> r[s.key];
     v.sort((a,b)=>{
       if(numeric){
         const x=get(a), y=get(b);
@@ -1677,7 +1784,12 @@ function detReliability(r){
     kv("Damage "+TREND_MONTHS+"mo", r.damageCost==null?"":fmtMoney(r.damageCost)),
     kv("Damage incidents", r.damageIncidents==null?"":String(r.damageIncidents)),
     kv("Damage vs yr cost", r.damageShare==null?"":fmtPct(r.damageShare)),
-    kv("Hour meter", (r.ut&&num(r.ut.meterHours)!=null)?fmtNum(r.ut.meterHours):""),
+    kv("Hours "+TREND_MONTHS+"mo", r.hoursTotal!=null?fmtNum(r.hoursTotal):""),
+    kv("Days posting", (r.hoursDays!=null&&r.daysOnSite!=null)
+      ? (fmtNum(r.hoursDays)+" of "+fmtNum(r.daysOnSite)+" on site") : ""),
+    kv("Cost / hr worked", r.costPerHour!=null?("$"+r.costPerHour.toFixed(2)):""),
+    kv("Hours posted to job", (r.hs&&r.hs.job)?r.hs.job:""),
+    kv("Cost codes", (r.hs&&r.hs.costCodes!=null)?fmtNum(r.hs.costCodes):""),
   ].join("");
   if(!cells) return "";
   return '<div class="det-g"><h4>Reliability &amp; damage</h4><div class="det-kv">'+cells+'</div></div>';
@@ -1839,8 +1951,10 @@ function exportCsv(){
   if(on.rental) cols.push(["Vendor","vendor"],["PO",r=>r.rn?r.rn.po:""],
     ["Rental monthly","rentalMonthly"],["Billed through","annivDate"],["Days to renewal","annivDays"],
     ["Contract days",r=>r.rn?r.rn.contractDays:""],["On rent since",r=>r.rn?r.rn.acquiredDate:""]);
-  if(on.utilization) cols.push(["Hour meter",r=>r.ut?r.ut.meterHours:""],
-    ["Idle hours",r=>r.ut?r.ut.idleHours:""],["Period hours",r=>r.ut?r.ut.periodHours:""]);
+  if(on.hours) cols.push(["Hours "+TREND_MONTHS+"mo","hoursTotal"],
+    ["Hours this month","hoursThisMonth"],["Days posting","hoursDays"],
+    ["Days posting %","utilPct"],["Cost per hour worked","costPerHour"],
+    ["Hours posted to job",r=>r.hs?r.hs.job:""]);
   const get=(r,k)=>{ const val=typeof k==="function"?k(r):r[k]; return val==null?"":val; };
   const lines=[cols.map(c=>csvCell(c[0])).join(",")];
   v.forEach(r=>lines.push(cols.map(c=>csvCell(get(r,c[1]))).join(",")));

@@ -17,6 +17,7 @@ const worker = (await import("data:text/javascript;base64," + Buffer.from(src).t
 
 const ENV = { GH_TOKEN: "t", GH_REPO: "o/r", ADMIN_KEY: "ak", SUBMIT_KEY: "sk" };
 const b64 = s => Buffer.from(s, "utf8").toString("base64");
+let n = 0;
 
 function report(kind, extra = {}){
   return { kind, label: kind, file: kind + ".xlsx", rows: 1, units: 1,
@@ -51,6 +52,53 @@ async function publish(body, { existing = null, key = "ak", putStatus = 200, get
   const put = calls.find(c => c.method === "PUT");
   const committed = put ? JSON.parse(Buffer.from(put.body.content, "base64").toString("utf8")) : null;
   return { res, json, calls, put, committed };
+}
+
+/* ---------- the hours family: month -> hours bucket maps ---------- */
+{
+  const HOURS = {
+    hoursByMonth: { "2026-07": 132.5, "2026-08": 96 },
+    ownershipHoursByMonth: { "2026-08": 4 },
+    days: 21, first: "2026-07-02", last: "2026-08-29", costCodes: 2, job: "1127",
+  };
+  const { res, json, committed } = await publish({
+    extracted: [{ units: { U1: HOURS }, report: report("hours") }] });
+  assert.equal(res.status, 200, "the hours family must be publishable at all");
+  assert.equal(json.units, 1);
+  const blk = committed.units.U1.hours;          // the hours family's block
+  assert.deepEqual(blk.hoursByMonth, { "2026-07": 132.5, "2026-08": 96 },
+    "a month->hours bucket map must survive the block cleaner");
+  assert.deepEqual(blk.ownershipHoursByMonth, { "2026-08": 4 });
+  assert.equal(blk.days, 21);
+  assert.equal(blk.job, "1127");
+  n++;
+}
+{
+  // Junk inside a bucket map is dropped key by key, and a map left with nothing
+  // is dropped entirely rather than published as {}.
+  const { committed } = await publish({ extracted: [{ units: { U1: {
+    hoursByMonth: { "2026-08": 10, "not-a-month": 5, "2026-13": 9, "2026-09": "twelve",
+             "2026-10": Infinity, "2026-11": null },
+    ownershipHoursByMonth: { "nope": 1 },
+    operatingHoursByMonth: "not an object",
+  } }, report: report("hours") }] });
+  const blk = committed.units.U1.hours;
+  assert.deepEqual(blk.hoursByMonth, { "2026-08": 10 },
+    "only YYYY-MM keys with finite numbers survive");
+  assert.ok(!("ownershipHoursByMonth" in blk), "a map with nothing valid is dropped");
+  assert.ok(!("operatingHoursByMonth" in blk), "a non-object is not a bucket map");
+  n++;
+}
+{
+  // Publishing hours must leave the other families alone, like every family.
+  const existing = { builtAt: "", reports: [report("rates")], units: { U1: { rates: RATES } } };
+  const { committed } = await publish({
+    extracted: [{ units: { U1: { hoursByMonth: { "2026-08": 8 } } }, report: report("hours") }] }, { existing });
+  assert.deepEqual(committed.units.U1.rates, RATES, "rates must be untouched by an hours publish");
+  assert.deepEqual(committed.units.U1.hours.hoursByMonth, { "2026-08": 8 });
+  assert.deepEqual(committed.reports.map(r => r.kind), ["rates", "hours"],
+    "reports stay in spec order");
+  n++;
 }
 
 /* ---------- auth + validation ---------- */

@@ -25,23 +25,31 @@ const eq = (a, b, m) => { assert.equal(a, b, m); n++; };
 const GRID_GROUP = ["Equipment", "", "Date", "Job", "Foreman", "Cost Code", "Hours by Rate", "", ""];
 const GRID_SUB   = ["Code", "Description", "", "Code", "Name", "Code",
                     "Total (Rate 1)", "Ownership (Rate 2)", "Operating (Rate 3)"];
-eq(KPI.detectKind(GRID_GROUP, "EquipmentDetailGrid_1.xlsx"), null,
-   "the group-header row must not be claimed by any family");
+/* What matters is that it never lands in `transfers`, whose data a publish would
+   replace. Once the hours family exists the group row carries two of ITS signals
+   (Date, Cost Code) and detecting as `hours` is correct, not a mis-detection. */
+eq(KPI.detectKind(GRID_GROUP, "EquipmentDetailGrid_1.xlsx") === "transfers", false,
+   "the group-header row must never be claimed by the transfer family");
 eq(KPI.detectKind(GRID_SUB, "EquipmentDetailGrid_1.xlsx"), null,
    "the sub-header row has no unit column, so it matches nothing");
 
-/* A filename hint must not rescue a file that fails the floor: the hint is only
-   ever a tie-break, worth less than a single signal. */
-eq(KPI.detectKind(GRID_GROUP, "equipment_transfer_hours.xlsx"), null,
-   "a transfer-ish filename cannot promote a one-signal match");
+/* A filename hint must not drag it into transfers either: a hint is a tie-break,
+   worth less than a single signal. */
+eq(KPI.detectKind(GRID_GROUP, "equipment_transfer_hours.xlsx") === "transfers", false,
+   "a transfer-ish filename cannot promote a one-signal transfer match");
+
+/* Read together — what findHeader actually does — the two rows are a real header
+   and detect as the hours family. */
+eq(KPI.detectKind(KPI.mergeGroupRow(GRID_GROUP, GRID_SUB), "EquipmentDetailGrid_1.xlsx"),
+   "hours", "merged, the two header rows are the hours export");
 
 /* ---------- one signal is never enough, on any family ---------- */
 eq(KPI.detectKind(["Unit Number", "Vendor"], "anniversary.xlsx"), null,
    "one rental signal is not a rental report");
 eq(KPI.detectKind(["Unit Number", "Rate Group"], "rates.xlsx"), null,
    "one rates signal is not a rates report");
-eq(KPI.detectKind(["Unit Number", "Hour Meter"], "utilization.xlsx"), null,
-   "one utilization signal is not a utilization report");
+eq(KPI.detectKind(["Unit Number", "Effective Date"], "x.xlsx"), null,
+   "one date column is a signal for three families and enough for none");
 
 /* ---------- two still detects, so the floor is a floor and not a wall ---------- */
 eq(KPI.detectKind(["Unit Number", "Vendor", "Billed Through Date"], "x.xlsx"), "rental",

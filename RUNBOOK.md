@@ -119,7 +119,7 @@ Master **plus** these JDE reports:
 | **Anniversary Date** | vendor rental contracts: vendor, PO, rate, billed-through date, contract days | Rental commitment/month, renewals due in 30 days, units past billed-through, off-rent candidates |
 | **Equipment Transfer** | the **status event log** — every `Previous → Current` status change with its effective date | Downtime days, breakdowns, fleet availability, avg repair time (MTTR), repeat offenders, who's down right now, downtime-by-month trend |
 | **Damage Expenses** | a **cost ledger** — one row per charge line, many per unit, with the G/L date, amount and what broke | Damage spend, incidents, damage-by-month trend, damage as a share of a unit's yearly charge-out, the per-unit damage ledger |
-| *(optional)* utilization / hour meter | the weekly hours or "zero hours" export | Hour meter, idle vs working hours |
+| **Equipment hours** (`EquipmentDetailGrid`) | posted hours by day, job and cost code — a two-row header, summed into calendar months at import | Hours posted, cost per hour worked, days posting hours, hours by month |
 
 Nothing is required: with no reports imported the page still lists the fleet from
 the Equipment Master, and each report's columns, tiles and charts appear only once

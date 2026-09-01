@@ -418,7 +418,7 @@ async function loadKpiCardMeta(total){
   const units=(k&&k.units)?Object.keys(k.units).length:0;
   const base=total?(total.toLocaleString()+" units"):"";
   if(!reports.length){ el.textContent=[base,"no KPI reports imported yet"].filter(Boolean).join(" · "); return; }
-  const names={rates:"Rates", rental:"Rental", transfers:"Downtime", damage:"Damage", utilization:"Utilization"};
+  const names={rates:"Rates", rental:"Rental", transfers:"Downtime", damage:"Damage", hours:"Hours"};
   el.textContent=[base, reports.map(r=>names[r.kind]||r.kind).join(" · "),
     units?(units+" with report data"):""].filter(Boolean).join(" · ");
 }
