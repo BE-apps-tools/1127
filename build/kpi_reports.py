@@ -61,6 +61,14 @@ SITE_ALIASES = ["Project Number", "Project Transferred To", "Location",
 # name above it — Equipment Rates has four such rows).
 HEADER_SCAN = 12
 
+# A family must match at least this many of its own signal columns to be claimed.
+# One column is never enough: an unrecognised export with a single "Date" column
+# scored one hit against the transfer family and would have been published as a
+# transfer report, replacing the real downtime history with nothing usable. Every
+# genuine export matches 4 or more of its family's signals, so the floor is well
+# clear of anything real.
+MIN_SIGNALS = 2
+
 # Excel dates past this are data errors, not dates (one Anniversary export
 # carries a 2169 "billed through"). Kept out of the JSON rather than shown.
 MAX_YEAR = 2099
@@ -77,6 +85,7 @@ SPEC = {
     "serialAliases": SERIAL_ALIASES,
     "siteAliases": SITE_ALIASES,
     "headerScan": HEADER_SCAN,
+    "minSignals": MIN_SIGNALS,
     "maxYear": MAX_YEAR,
     "staleWarnDays": STALE_WARN_DAYS,
     "staleAlertDays": STALE_ALERT_DAYS,
@@ -398,16 +407,19 @@ def detect_kind(header, filename=""):
     """Best-matching report family for a header row, or None.
 
     Scored by how many of the family's signal columns are present; a filename
-    hint only breaks ties.
+    hint only breaks ties. A family needs MIN_SIGNALS matches to be claimed at
+    all, so a lone incidental column cannot hand an unrelated export to a family
+    whose data it would then replace.
     """
     base = os.path.basename(filename or "").lower()
+    floor = SPEC.get("minSignals", MIN_SIGNALS)
     best, best_score = None, 0
     for ks in SPEC["kinds"]:
         m = map_headers(header, ks["kind"])
         if m["unit"] is None and m["serial"] is None:
             continue
         hits = sum(1 for s in ks["signals"] if s in m["cols"])
-        if not hits:
+        if hits < min(floor, len(ks["signals"])):
             continue
         score = hits * 10 + (3 if any(h in base for h in ks["hints"]) else 0)
         if score > best_score:

@@ -11,7 +11,7 @@ import json
 import os
 import re
 
-from build.kpi_reports import SPEC
+from build.kpi_reports import SPEC, detect_kind
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CORE = os.path.join(ROOT, "kpi-core.js")
@@ -109,6 +109,32 @@ def test_as_of_field_is_a_real_date_field():
         if not f:
             continue                      # a report with no run-date column has no as-of
         assert ks["fields"][f]["type"] == "date", (ks["kind"], f)
+
+
+def test_a_single_incidental_column_cannot_claim_a_family():
+    """The real EquipmentDetailGrid export, which is none of the five families.
+
+    Its group-header row carries "Date" — one transfer signal — and "Equipment",
+    a unit alias. That was enough to detect it as the transfer report, so
+    publishing it would have replaced the real status history with nothing
+    usable. Two rows of header is also why nothing else matches: the measure
+    columns live on the row below.
+    """
+    header = ["Equipment", "", "Date", "Job", "Foreman", "Cost Code", "Hours by Rate", "", ""]
+    assert detect_kind(header, "EquipmentDetailGrid_1.xlsx") is None
+    # The sub-header row on its own has no unit column at all.
+    sub = ["Code", "Description", "", "Code", "Name", "Code",
+           "Total (Rate 1)", "Ownership (Rate 2)", "Operating (Rate 3)"]
+    assert detect_kind(sub, "EquipmentDetailGrid_1.xlsx") is None
+
+
+def test_every_family_can_still_clear_the_signal_floor():
+    # A floor above a family's own signal count would make it undetectable.
+    floor = SPEC["minSignals"]
+    assert floor >= 2, "one incidental column must never be enough"
+    for ks in SPEC["kinds"]:
+        assert len(ks["signals"]) >= floor, \
+            ks["kind"] + " has fewer signals than minSignals, so it can never be detected"
 
 
 def test_status_codes_cover_the_derived_sets():

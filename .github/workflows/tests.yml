@@ -54,6 +54,11 @@ jobs:
       - name: KPI merge parity (builder preview vs worker publish)
         run: node worker/tests/kpi_merge.test.mjs
 
+      # A single incidental column must not hand an unrelated export to a family
+      # whose data a publish would then replace.
+      - name: KPI family detection floor (kpi-core.js)
+        run: node worker/tests/kpi_detect.test.mjs
+
       # .xlsx part resolution: OOXML attribute order varies by writer, and the
       # real exports put Target before Id / r last. Positional regexes silently
       # read zero rows.
