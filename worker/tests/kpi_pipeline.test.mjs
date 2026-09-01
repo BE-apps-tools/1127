@@ -27,7 +27,8 @@ const golden = JSON.parse(await readFile(
   new URL("../../build/tests/fixtures/kpi_expected.json", import.meta.url), "utf8"));
 
 const M = { kpiFirstSheetRows: KPI.firstSheetRows, kpiFindHeader: KPI.findHeader,
-  kpiDetectKind: KPI.detectKind, kpiExtract: KPI.extract, kpiNormHeader: KPI.normHeader };
+  kpiDetectKind: KPI.detectKind, kpiExtract: KPI.extract, kpiNormHeader: KPI.normHeader,
+  kpiHeaderAt: KPI.headerAt };
 
 /** The page's own flow: parse a file, find its header, detect the family, extract. */
 async function importFile(name){
@@ -35,7 +36,10 @@ async function importFile(name){
   const file = new File([bytes], name);                    // what the file input hands the page
   const rows = await M.kpiFirstSheetRows(file);
   const hi = rows.length ? M.kpiFindHeader(rows) : 0;
-  const header = rows.length ? rows[hi].map(M.kpiNormHeader) : [];
+  // The effective header, merged with the group row above when there is one —
+  // the same call extract() makes. Reading the raw row would miss the hours
+  // export, whose column names span two rows.
+  const header = rows.length ? M.kpiHeaderAt(rows, hi) : [];
   const kind = M.kpiDetectKind(header, name);
   assert.ok(kind, `${name}: the page failed to recognise the report (headers: ${header.filter(Boolean).join(", ")})`);
   const ex = M.kpiExtract(rows, kind, name);

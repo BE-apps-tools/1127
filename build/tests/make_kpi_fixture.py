@@ -160,19 +160,38 @@ FIXTURES = [
           ("s", "JDOE"), "", "", ""],
      ]),
     # --- Utilization: the weekly hours export ---
-    ("kpi_util_mini.xlsx", "Utilization",
-     [],
-     ["Unit\nNumber", "Serial Number", "Hour Meter", "Meter Date", "Idle Hours",
-      "Working Hours", "Period Hours"],
+    # --- Equipment hours: a TWO-ROW header, the group row spanning the three
+    # rate columns exactly as the real EquipmentDetailGrid export writes it. The
+    # Foreman column is present and filled so the test can prove it is ignored —
+    # with a synthetic value, because the real column is employee names.
+    ("kpi_hours_mini.xlsx", "EquipmentDetailGrid",
+     [[("s", "Equipment"), "", ("s", "Date"), ("s", "Job"), ("s", "Foreman"),
+       ("s", "Cost Code"), ("s", "Hours by Rate"), "", ""]],
+     ["Code", "Description", "", "Code", "Name", "Code",
+      "Total (Rate 1)", "Ownership (Rate 2)", "Operating (Rate 3)"],
      [
-         [("s", "U1"), ("s", "S1"), ("n", "5200"), ("n", "46000"), ("n", "300"),
-          ("n", "900"), ("n", "1200")],
-         [("s", "U2"), ("s", "S2"), ("n", "800"), ("n", "46000"), ("n", "500"),
-          ("n", "100"), ("n", "600")],
-         # serial-only row (telematics style) -> keyed SN:S3
-         ["", ("s", "S3"), ("n", "120"), "", ("n", "20"), ("n", "100"), ("n", "120")],
+         # U1 across two months, two cost codes -> two buckets, costCodes = 2
+         [("s", "U1"), ("s", "Excavator, tracked"), ("n", "46112"), ("s", "1127"),
+          ("s", "Crew Lead A"), ("s", "04523128"), ("n", "9"), ("n", "0"), ("n", "0")],
+         [("s", "U1"), ("s", "Excavator, tracked"), ("n", "46113"), ("s", "1127"),
+          ("s", "Crew Lead A"), ("s", "04523128"), ("n", "7.5"), ("n", "0"), ("n", "0")],
+         [("s", "U1"), ("s", "Excavator, tracked"), ("n", "46145"), ("s", "1127"),
+          ("s", "Crew Lead B"), ("s", "04523999"), ("n", "4"), ("n", "0"), ("n", "0")],
+         # an ISO date string rather than a serial -> both must coerce
+         [("s", "U2"), ("s", "Generator 20kW"), ("s", "2026-05-04"), ("s", "1127"),
+          ("s", "Crew Lead A"), ("s", "04523128"), ("n", "12"), ("n", "3"), ("n", "0")],
+         # blank unit with no serial column in this export -> skipped
+         ["", ("s", "Dozer"), ("n", "46145"), ("s", "1127"),
+          ("s", "Crew Lead C"), ("s", "04523128"), ("n", "6"), ("n", "0"), ("n", "0")],
+         # undated row -> no bucket to go in, skipped
+         [("s", "U2"), ("s", "Generator 20kW"), "", ("s", "1127"),
+          ("s", "Crew Lead A"), ("s", "04523128"), ("n", "5"), ("n", "0"), ("n", "0")],
+         # zero hours on a real date -> a dated line with nothing to add
+         [("s", "U2"), ("s", "Generator 20kW"), ("n", "46146"), ("s", "1127"),
+          ("s", "Crew Lead A"), ("s", "04523128"), ("n", "0"), ("n", "0"), ("n", "0")],
          # no unit and no serial -> skipped
-         ["", "", ("n", "1"), "", "", "", ""],
+         ["", "", ("n", "46146"), ("s", "1127"), "", ("s", "04523128"),
+          ("n", "3"), ("n", "0"), ("n", "0")],
      ]),
 ]
 

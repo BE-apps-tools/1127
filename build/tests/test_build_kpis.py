@@ -19,14 +19,17 @@ RATES = os.path.join(FX, "kpi_rates_mini.xlsx")
 RENTAL = os.path.join(FX, "kpi_rental_mini.xlsx")
 TRANSFERS = os.path.join(FX, "kpi_transfers_mini.xlsx")
 DAMAGE = os.path.join(FX, "kpi_damage_mini.xlsx")
-UTIL = os.path.join(FX, "kpi_util_mini.xlsx")
+HOURS = os.path.join(FX, "kpi_hours_mini.xlsx")
 EM = os.path.join(FX, "mini.xlsx")
 CASES = json.load(open(os.path.join(FX, "kpi_coerce_cases.json"), encoding="utf-8"))
 
 
 def header_of(path):
+    """The effective header, merged with the group row above when there is one —
+    exactly what extract() sees. Reading the raw row instead would miss the
+    hours export, whose column names span two rows."""
     rows = list(sheet_rows(path))
-    return [norm_header(h) for h in rows[K.find_header(rows)]]
+    return K.header_at(rows, K.find_header(rows))
 
 
 def events_of(path, unit):
@@ -92,7 +95,7 @@ def test_detect_kind_by_headers():
     assert K.detect_kind(header_of(RATES), RATES) == "rates"
     assert K.detect_kind(header_of(RENTAL), RENTAL) == "rental"
     assert K.detect_kind(header_of(TRANSFERS), TRANSFERS) == "transfers"
-    assert K.detect_kind(header_of(UTIL), UTIL) == "utilization"
+    assert K.detect_kind(header_of(HOURS), HOURS) == "hours"
     assert K.detect_kind(header_of(DAMAGE), DAMAGE) == "damage"
 
 
@@ -304,8 +307,8 @@ def test_merge_does_not_mutate_the_extract_result():
 
 
 def test_merge_keeps_reports_in_spec_order():
-    b = K.merge({}, [K.read_report(UTIL), K.read_report(RENTAL), K.read_report(RATES)])
-    assert [r["kind"] for r in b["reports"]] == ["rates", "rental", "utilization"]
+    b = K.merge({}, [K.read_report(HOURS), K.read_report(RENTAL), K.read_report(RATES)])
+    assert [r["kind"] for r in b["reports"]] == ["rates", "rental", "hours"]
 
 
 # ------------------------------------------------------------------ build()
@@ -313,7 +316,7 @@ def test_build_end_to_end(tmp_path):
     src = tmp_path / "source"
     src.mkdir()
     out = tmp_path / "data"
-    for f in (RATES, RENTAL, TRANSFERS, UTIL):
+    for f in (RATES, RENTAL, TRANSFERS, HOURS):
         shutil.copy(f, src / os.path.basename(f))
     shutil.copy(EM, src / "Equipment Master V1.9.xlsx")     # owned by build_data, must be ignored
 
@@ -323,7 +326,7 @@ def test_build_end_to_end(tmp_path):
     finally:
         os.environ.pop("BUILD_TS", None)
 
-    assert sorted(res["reports"]) == ["rates", "rental", "transfers", "utilization"]
+    assert sorted(res["reports"]) == ["hours", "rates", "rental", "transfers"]
     assert res["skipped"] == []
     bundle = json.load(open(out / "kpis.json", encoding="utf-8"))
     assert bundle["builtAt"] == "2026-08-31T12:00:00Z"

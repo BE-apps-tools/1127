@@ -14,7 +14,7 @@
    Everything is exposed as globalThis.KPI at the bottom; nothing else is global.
 */
 /* KPI-REPORT-SPEC-START */
-const KPI_SPEC = {"downStatuses":["DN","DS"],"excludeFromAvailability":["MS","LG"],"headerScan":12,"kinds":[{"fields":{"billingType":{"aliases":["Billing Type"],"type":"str"},"getComponent":{"aliases":["GET"],"type":"num"},"hourlyBillingRate":{"aliases":["Hourly Billing Rate","Hourly Rate","Rate Per Hour"],"type":"num"},"monthlyBillingRate":{"aliases":["Monthly Billing Rate","Monthly Rate","Monthly Charge"],"type":"num"},"monthlyNonHourlyOwnership":{"aliases":["Monthly Non-Hourly Ownership","Monthly Non Hourly Ownership"],"type":"num"},"monthlyOwnership":{"aliases":["Monthly Ownership"],"type":"num"},"oilComponent":{"aliases":["Oil / Grease","Oil/Grease","Oil & Grease"],"type":"num"},"ownershipComponent":{"aliases":["Ownership Component","Ownership"],"type":"num"},"pmComponent":{"aliases":["Preventative Maintenance","Preventive Maintenance","PM"],"type":"num"},"projectNumber":{"aliases":["Project Number","Project","Job Number"],"type":"str"},"rateBegin":{"aliases":["Begin Date","Effective From"],"type":"date"},"rateEnd":{"aliases":["End Date","Effective To"],"type":"date"},"rateGroup":{"aliases":["Rate Group"],"type":"str"},"rateGroupDesc":{"aliases":["Rate Group Description","Rate Description"],"type":"str"},"repairComponent":{"aliases":["Corrective Repair","Repair"],"type":"num"},"tiresComponent":{"aliases":["Tires / U.C.","Tires / UC","Tires","Tires/U.C."],"type":"num"}},"hints":["rate","rates","equipment rates","charge","billing"],"kind":"rates","label":"Equipment rates (charge-out)","mode":"record","signals":["monthlyBillingRate","monthlyOwnership","rateGroup","monthlyNonHourlyOwnership","hourlyBillingRate"]},{"fields":{"acquiredDate":{"aliases":["Acquired Date","Acquisition Date","Start Date"],"type":"date"},"bareRentalRate":{"aliases":["Bare Rental Rate","Bare Rate"],"type":"num"},"billedThroughDate":{"aliases":["Billed Through Date","Billed Through","Anniversary Date","Next Billing Date"],"type":"date"},"billingType":{"aliases":["Billing Type"],"type":"str"},"contractDays":{"aliases":["Contract Days","Billing Cycle Days","Cycle Days"],"type":"int"},"eqStatus":{"aliases":["EQ St","EQ Status","Equipment Status"],"type":"str"},"hourlyRate":{"aliases":["Total Hourly Rate","Hourly Rental Rate"],"type":"num"},"monthlyNonHourlyRate":{"aliases":["Monthly Non-Hourly Rate","Monthly Non Hourly Rate"],"type":"num"},"po":{"aliases":["PO#","PO #","PO Number","Purchase Order"],"type":"str"},"totalNonHourlyRate":{"aliases":["Total Non-Hourly Rate","Total Non Hourly Rate","Total Monthly Rate"],"type":"num"},"vendor":{"aliases":["Vendor","Supplier","Rental Vendor","Lessor"],"type":"str"}},"hints":["anniversary","rental","rent","contract","vendor"],"kind":"rental","label":"Rental contracts (anniversary)","mode":"record","signals":["billedThroughDate","totalNonHourlyRate","bareRentalRate","monthlyNonHourlyRate","vendor","contractDays"]},{"asOfField":"date","backfillField":{"aliases":["Transfer Status","Status of Transfer"],"values":["Newly Acquired"]},"eventDateField":"date","eventStatusField":"status","fields":{"date":{"aliases":["Effective Date","Transfer Date","Date"],"type":"date"},"from":{"aliases":["Project Transferred From","Transferred From","From Project"],"type":"str"},"prev":{"aliases":["Previous Status","Prior Status","From Status"],"type":"str"},"remark":{"aliases":["Request Remark","Remark","Comment","Reason"],"type":"str"},"status":{"aliases":["Current Status","New Status","To Status"],"type":"str"}},"hints":["transfer","status","history","movement"],"kind":"transfers","label":"Transfer / status history","mode":"events","signals":["status","prev","date","from"],"unitFields":{"eqClass":{"aliases":["Major Equipment Class","Equipment Class","Class"],"type":"str"},"transferTrade":{"aliases":["Current Trade"],"type":"str"}}},{"asOfField":"date","fields":{"amount":{"aliases":["Actual Cost Amount","Cost Amount","Amount","Actual Cost"],"type":"num"},"caseNumber":{"aliases":["Incident Case Number","Case Number","Incident Number"],"type":"str"},"damageArea":{"aliases":["Damage Area Code","Damage Area"],"type":"str"},"date":{"aliases":["G/L Date","GL Date","Transaction Date","Posting Date"],"type":"date"},"doc":{"aliases":["Document Number","Document #","Doc Number"],"type":"str"},"docType":{"aliases":["Document Type","Doc Type"],"type":"str"},"payee":{"aliases":["Journal Entry Explanation","Payee","Paid To"],"type":"str"},"po":{"aliases":["PO #","PO#","PO Number"],"type":"str"},"remark":{"aliases":["Remark","Description of Work","Explanation"],"type":"str"}},"hints":["damage","expense","expenses","repair","incident"],"kind":"damage","label":"Damage expenses","lineAmountField":"amount","lineDateField":"date","lineDocField":"doc","mode":"ledger","signals":["amount","date","doc","damageArea","caseNumber"]},{"asOfField":"meterDate","fields":{"engineHours":{"aliases":["Engine Hours","Total Hours","Total Engine Hours","Run Hours"],"type":"num"},"idleHours":{"aliases":["Idle Hours","Idling Hours","Idle Time","Idle"],"type":"num"},"meterDate":{"aliases":["Meter Date","Reading Date","Meter Reading Date","As Of","As Of Date"],"type":"date"},"meterHours":{"aliases":["Hour Meter","Hour Meter Reading","Meter Reading","Current Meter Reading","Current Hours","Hours"],"type":"num"},"periodHours":{"aliases":["Period Hours","Hours This Period","Monthly Hours","Hours Used","Hours (Period)","Reported Hours"],"type":"num"},"targetHours":{"aliases":["Target Hours","Utilization Target","Target Utilization"],"type":"num"},"workHours":{"aliases":["Working Hours","Work Hours","Productive Hours","Operating Hours"],"type":"num"}},"hints":["utilization","utilisation","hour meter","hourmeter","zero hours","telematics","hours"],"kind":"utilization","label":"Utilization / hour meter","mode":"record","signals":["meterHours","engineHours","idleHours","workHours","periodHours"]}],"maxYear":2099,"serialAliases":["Serial Number","Serial #","Serial","Serial No","VIN"],"siteAliases":["Project Number","Project Transferred To","Location","Branch/Plant","Project","Job Number"],"staleAlertDays":3,"staleWarnDays":1,"statusLabels":{"AC":"Available but Consigned","AV":"Available","DN":"Down","DS":"Down - In Shop","LG":"Legal Hold","MS":"Missing/stolen","NR":"Not Ready","WK":"Working"},"unitAliases":["Unit Number","Unit #","Unit","Unit No","Unit Nbr","Equipment Number","Equipment #","Equipment","Equip Number","Equip #","Asset Number","Asset #"],"workingStatuses":["WK"]};
+const KPI_SPEC = {"downStatuses":["DN","DS"],"excludeFromAvailability":["MS","LG"],"headerScan":12,"kinds":[{"fields":{"billingType":{"aliases":["Billing Type"],"type":"str"},"getComponent":{"aliases":["GET"],"type":"num"},"hourlyBillingRate":{"aliases":["Hourly Billing Rate","Hourly Rate","Rate Per Hour"],"type":"num"},"monthlyBillingRate":{"aliases":["Monthly Billing Rate","Monthly Rate","Monthly Charge"],"type":"num"},"monthlyNonHourlyOwnership":{"aliases":["Monthly Non-Hourly Ownership","Monthly Non Hourly Ownership"],"type":"num"},"monthlyOwnership":{"aliases":["Monthly Ownership"],"type":"num"},"oilComponent":{"aliases":["Oil / Grease","Oil/Grease","Oil & Grease"],"type":"num"},"ownershipComponent":{"aliases":["Ownership Component","Ownership"],"type":"num"},"pmComponent":{"aliases":["Preventative Maintenance","Preventive Maintenance","PM"],"type":"num"},"projectNumber":{"aliases":["Project Number","Project","Job Number"],"type":"str"},"rateBegin":{"aliases":["Begin Date","Effective From"],"type":"date"},"rateEnd":{"aliases":["End Date","Effective To"],"type":"date"},"rateGroup":{"aliases":["Rate Group"],"type":"str"},"rateGroupDesc":{"aliases":["Rate Group Description","Rate Description"],"type":"str"},"repairComponent":{"aliases":["Corrective Repair","Repair"],"type":"num"},"tiresComponent":{"aliases":["Tires / U.C.","Tires / UC","Tires","Tires/U.C."],"type":"num"}},"hints":["rate","rates","equipment rates","charge","billing"],"kind":"rates","label":"Equipment rates (charge-out)","mode":"record","signals":["monthlyBillingRate","monthlyOwnership","rateGroup","monthlyNonHourlyOwnership","hourlyBillingRate"]},{"fields":{"acquiredDate":{"aliases":["Acquired Date","Acquisition Date","Start Date"],"type":"date"},"bareRentalRate":{"aliases":["Bare Rental Rate","Bare Rate"],"type":"num"},"billedThroughDate":{"aliases":["Billed Through Date","Billed Through","Anniversary Date","Next Billing Date"],"type":"date"},"billingType":{"aliases":["Billing Type"],"type":"str"},"contractDays":{"aliases":["Contract Days","Billing Cycle Days","Cycle Days"],"type":"int"},"eqStatus":{"aliases":["EQ St","EQ Status","Equipment Status"],"type":"str"},"hourlyRate":{"aliases":["Total Hourly Rate","Hourly Rental Rate"],"type":"num"},"monthlyNonHourlyRate":{"aliases":["Monthly Non-Hourly Rate","Monthly Non Hourly Rate"],"type":"num"},"po":{"aliases":["PO#","PO #","PO Number","Purchase Order"],"type":"str"},"totalNonHourlyRate":{"aliases":["Total Non-Hourly Rate","Total Non Hourly Rate","Total Monthly Rate"],"type":"num"},"vendor":{"aliases":["Vendor","Supplier","Rental Vendor","Lessor"],"type":"str"}},"hints":["anniversary","rental","rent","contract","vendor"],"kind":"rental","label":"Rental contracts (anniversary)","mode":"record","signals":["billedThroughDate","totalNonHourlyRate","bareRentalRate","monthlyNonHourlyRate","vendor","contractDays"]},{"asOfField":"date","backfillField":{"aliases":["Transfer Status","Status of Transfer"],"values":["Newly Acquired"]},"eventDateField":"date","eventStatusField":"status","fields":{"date":{"aliases":["Effective Date","Transfer Date","Date"],"type":"date"},"from":{"aliases":["Project Transferred From","Transferred From","From Project"],"type":"str"},"prev":{"aliases":["Previous Status","Prior Status","From Status"],"type":"str"},"remark":{"aliases":["Request Remark","Remark","Comment","Reason"],"type":"str"},"status":{"aliases":["Current Status","New Status","To Status"],"type":"str"}},"hints":["transfer","status","history","movement"],"kind":"transfers","label":"Transfer / status history","mode":"events","signals":["status","prev","date","from"],"unitFields":{"eqClass":{"aliases":["Major Equipment Class","Equipment Class","Class"],"type":"str"},"transferTrade":{"aliases":["Current Trade"],"type":"str"}}},{"asOfField":"date","fields":{"amount":{"aliases":["Actual Cost Amount","Cost Amount","Amount","Actual Cost"],"type":"num"},"caseNumber":{"aliases":["Incident Case Number","Case Number","Incident Number"],"type":"str"},"damageArea":{"aliases":["Damage Area Code","Damage Area"],"type":"str"},"date":{"aliases":["G/L Date","GL Date","Transaction Date","Posting Date"],"type":"date"},"doc":{"aliases":["Document Number","Document #","Doc Number"],"type":"str"},"docType":{"aliases":["Document Type","Doc Type"],"type":"str"},"payee":{"aliases":["Journal Entry Explanation","Payee","Paid To"],"type":"str"},"po":{"aliases":["PO #","PO#","PO Number"],"type":"str"},"remark":{"aliases":["Remark","Description of Work","Explanation"],"type":"str"}},"hints":["damage","expense","expenses","repair","incident"],"kind":"damage","label":"Damage expenses","lineAmountField":"amount","lineDateField":"date","lineDocField":"doc","mode":"ledger","signals":["amount","date","doc","damageArea","caseNumber"]},{"asOfField":"date","bucketCountField":"costCode","bucketDateField":"date","bucketKeepFields":["job"],"bucketSumFields":["hours","ownershipHours","operatingHours"],"fields":{"costCode":{"aliases":["Cost Code Code","Cost Code","Cost Code Number"],"type":"str"},"date":{"aliases":["Date","Work Date","Posted Date","Transaction Date"],"type":"date"},"hours":{"aliases":["Hours by Rate Total (Rate 1)","Total (Rate 1)","Hours by Rate Total","Total Hours Posted","Hours Posted"],"type":"num"},"job":{"aliases":["Job Code","Job Number Code"],"type":"str"},"operatingHours":{"aliases":["Hours by Rate Operating (Rate 3)","Operating (Rate 3)","Hours by Rate Operating"],"type":"num"},"ownershipHours":{"aliases":["Hours by Rate Ownership (Rate 2)","Ownership (Rate 2)","Hours by Rate Ownership"],"type":"num"}},"hints":["hours","detailgrid","equipmentdetail","equipment detail","timecard","utilization","utilisation"],"kind":"hours","label":"Equipment hours (posted)","mode":"buckets","signals":["hours","date","costCode","job","ownershipHours","operatingHours"]}],"maxYear":2099,"minSignals":2,"serialAliases":["Serial Number","Serial #","Serial","Serial No","VIN"],"siteAliases":["Project Number","Project Transferred To","Location","Branch/Plant","Project","Job Number"],"staleAlertDays":3,"staleWarnDays":1,"statusLabels":{"AC":"Available but Consigned","AV":"Available","DN":"Down","DS":"Down - In Shop","LG":"Legal Hold","MS":"Missing/stolen","NR":"Not Ready","WK":"Working"},"unitAliases":["Unit Number","Unit #","Unit","Unit No","Unit Nbr","Equipment Number","Equipment #","Equipment","Equipment Code","Equip Number","Equip #","Asset Number","Asset #"],"workingStatuses":["WK"]};
 /* KPI-REPORT-SPEC-END */
 const KPI_KINDS = KPI_SPEC.kinds.map(k => k.kind);
 const kindSpec = k => KPI_SPEC.kinds.find(x => x.kind === k);
@@ -199,29 +199,65 @@ function kpiMapHeaders(header, kind){
 /* These exports carry a report title (and sometimes the project name) above the
    header row, so find it by scoring the first rows on alias matches. Mirrors
    kpi_reports.find_header. */
-function kpiFindHeader(rows){
+function kpiAllAliases(){
   const wanted=[KPI_SPEC.unitAliases, KPI_SPEC.serialAliases];
   KPI_SPEC.kinds.forEach(ks=>{
     Object.keys(ks.fields).forEach(t=>wanted.push(ks.fields[t].aliases));
     Object.keys(ks.unitFields||{}).forEach(t=>wanted.push(ks.unitFields[t].aliases));
   });
+  return wanted;
+}
+function kpiHeaderScore(header){
+  const norm=header.map(h=>kpiNormHeader(h).toLowerCase());
+  if(!norm.some(Boolean)) return 0;
+  return kpiAllAliases().filter(a=>kpiFind(norm,a)!=null).length;
+}
+/* Mirrors kpi_reports._merge_group_row: a spanning group label is written once
+   and the rest of its span left empty, so it is carried forward across them. */
+function kpiMergeGroupRow(group, sub){
+  const out=[]; let carried="";
+  const n=Math.max(group.length, sub.length);
+  for(let i=0;i<n;i++){
+    const g=i<group.length?kpiNormHeader(group[i]):"";
+    const b=i<sub.length?kpiNormHeader(sub[i]):"";
+    if(g) carried=g;
+    const parts=[carried,b].filter(Boolean);
+    out.push(parts.length?parts.join(" "):"");
+  }
+  return out;
+}
+/* Mirrors kpi_reports.header_at: merge with the row above only when that beats
+   the row alone, so a report title above a single-row header is never glued on. */
+function kpiHeaderAt(rows,i){
+  const row=(i<rows.length?rows[i]:[])||[];
+  const plain=row.map(kpiNormHeader);
+  if(i===0) return plain;
+  const merged=kpiMergeGroupRow(rows[i-1]||[], row);
+  return kpiHeaderScore(merged)>kpiHeaderScore(plain) ? merged : plain;
+}
+/* Index of the LAST header row: one export splits its header over two rows, and
+   data always starts at the row after the index returned. */
+function kpiFindHeader(rows){
   let best=0, bestScore=0;
-  rows.slice(0, KPI_SPEC.headerScan).forEach((row,i)=>{
-    const norm=row.map(h=>kpiNormHeader(h).toLowerCase());
-    if(!norm.some(Boolean)) return;
-    const score=wanted.filter(a=>kpiFind(norm,a)!=null).length;
+  const n=Math.min(rows.length, KPI_SPEC.headerScan);
+  for(let i=0;i<n;i++){
+    const score=kpiHeaderScore(kpiHeaderAt(rows,i));
     if(score>bestScore){ best=i; bestScore=score; }
-  });
+  }
   return best;
 }
+/* Mirrors kpi_reports.detect_kind, including the MIN_SIGNALS floor: a family
+   needs more than one incidental column match before it can claim a file, or an
+   unrelated export lands in a family whose data publishing would replace. */
 function kpiDetectKind(header, filename){
   const base=String(filename||"").toLowerCase();
+  const floor=KPI_SPEC.minSignals||2;
   let best=null, bestScore=0;
   KPI_SPEC.kinds.forEach(ks=>{
     const m=kpiMapHeaders(header, ks.kind);
     if(m.unit==null && m.serial==null) return;
     const hits=ks.signals.filter(s=>s in m.cols).length;
-    if(!hits) return;
+    if(hits < Math.min(floor, ks.signals.length)) return;
     const score=hits*10+(ks.hints.some(h=>base.includes(h))?3:0);
     if(score>bestScore){ best=ks.kind; bestScore=score; }
   });
@@ -265,7 +301,7 @@ function kpiTimeline(events){
 function kpiExtract(rows, kind, filename){
   if(!rows.length) throw new Error("Sheet is empty");
   const hi=kpiFindHeader(rows);
-  const header=rows[hi].map(kpiNormHeader);
+  const header=kpiHeaderAt(rows,hi);
   const m=kpiMapHeaders(header, kind);
   if(m.unit==null && m.serial==null) throw new Error("No unit or serial column found. Headers: "+header.filter(Boolean).join(", ").slice(0,200));
   const targets=Object.keys(m.cols);
@@ -273,6 +309,7 @@ function kpiExtract(rows, kind, filename){
   const ks=kindSpec(kind);
   const eventsMode = ks.mode==="events";
   const ledgerMode = ks.mode==="ledger";
+  const bucketsMode = ks.mode==="buckets";
   const bfValues = new Set(((ks.backfillField||{}).values)||[]);
   const asOfField = ks.asOfField||"";
   const units={}; const dates=[]; let rowCount=0;
@@ -306,6 +343,23 @@ function kpiExtract(rows, kind, filename){
       // the page from these lines, so nothing is pre-summed here.
       if(!rec[ks.lineDateField] || rec[ks.lineAmountField]==null) continue;
       (blk.items=blk.items||[]).push(rec);
+    } else if(bucketsMode){
+      // Summed into calendar months as the rows are read — see the note on the
+      // family for why this one pre-sums. An undated line has no bucket.
+      const d=rec[ks.bucketDateField];
+      if(!d) continue;
+      (ks.bucketKeepFields||[]).forEach(f=>{ if(rec[f]) blk[f]=rec[f]; });
+      const acc=blk._acc||(blk._acc={months:{}, codes:new Set(), days:new Set()});
+      const mk=d.slice(0,7);
+      ks.bucketSumFields.forEach(f=>{
+        const v=rec[f];
+        if(v==null) return;
+        const mm=acc.months[mk]||(acc.months[mk]={});
+        mm[f]=(mm[f]||0)+v;
+      });
+      const cf=ks.bucketCountField;
+      if(cf && rec[cf]) acc.codes.add(String(rec[cf]));
+      acc.days.add(d);
     } else {
       Object.assign(blk, rec);
     }
@@ -329,6 +383,32 @@ function kpiExtract(rows, kind, filename){
       total+=items.length;
     });
     rowCount=total;                                    // charge lines kept, not rows read
+  } else if(bucketsMode){
+    let total=0;
+    Object.keys(units).forEach(key=>{
+      const blk=units[key], acc=blk._acc;
+      delete blk._acc;
+      if(!acc || !Object.keys(acc.months).length){ delete units[key]; return; }
+      // One month map per measure, and only when that measure has anything in
+      // it: this export carries Ownership and Operating as 0.00 on every line.
+      let measures=0;
+      ks.bucketSumFields.forEach(f=>{
+        const per={};
+        Object.keys(acc.months).sort().forEach(mk=>{
+          const v=acc.months[mk][f];
+          if(v) per[mk]=Math.round(v*100)/100;
+        });
+        // "<field>ByMonth" — see the note in kpi_reports.extract.
+        if(Object.keys(per).length){ blk[f+"ByMonth"]=per; measures++; }
+      });
+      if(!measures){ delete units[key]; return; }       // posted only zeros
+      const days=[...acc.days].sort();
+      blk.days=days.length;
+      blk.first=days[0]; blk.last=days[days.length-1];
+      if(acc.codes.size) blk.costCodes=acc.codes.size;
+      total+=Object.keys(acc.months).length;            // buckets, not measure entries
+    });
+    rowCount=total;                                    // month buckets kept, not rows read
   }
   // "As of" is when the data was true: only a backward-looking field counts.
   const past=dates.filter(d=>d<=TODAY).sort();
@@ -381,6 +461,10 @@ const FIELD_LABELS = {
   date:"Effective date", status:"Status", prev:"Previous status", from:"Transferred from",
   remark:"Remark", eqClass:"Equipment class", transferTrade:"Trade on transfer",
   amount:"Amount", doc:"Document #", docType:"Document type", payee:"Payee",
+  hours:"Hours posted", ownershipHours:"Ownership hours", operatingHours:"Operating hours",
+  hoursByMonth:"Hours by month", ownershipHoursByMonth:"Ownership hours by month",
+  operatingHoursByMonth:"Operating hours by month",
+  costCode:"Cost code", job:"Job",
   damageArea:"Damage area", caseNumber:"Incident case #",
   meterHours:"Hour meter", meterDate:"Meter date", engineHours:"Engine hours",
   idleHours:"Idle hours", workHours:"Working hours", periodHours:"Period hours",
@@ -399,6 +483,7 @@ const KPI_CORE = {
   readXlsx: kpiReadXlsx, parseShared: kpiParseShared, sheetRows: kpiSheetRows,
   attr: kpiAttr, relMap: kpiRelMap, sheetRelId: kpiSheetRelId, firstSheetRows: kpiFirstSheetRows,
   find: kpiFind, mapHeaders: kpiMapHeaders, findHeader: kpiFindHeader,
+  headerAt: kpiHeaderAt, mergeGroupRow: kpiMergeGroupRow,
   detectKind: kpiDetectKind, reportSite: kpiReportSite, timeline: kpiTimeline,
   extract: kpiExtract, merge: kpiMerge,
   FIELD_LABELS,

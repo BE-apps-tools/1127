@@ -11,7 +11,11 @@ import json
 import os
 import re
 
-from build.kpi_reports import SPEC
+from build.kpi_reports import SPEC, detect_kind, header_at
+
+
+def merge_header(two_rows):
+    return header_at(two_rows, 1)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CORE = os.path.join(ROOT, "kpi-core.js")
@@ -73,10 +77,45 @@ def test_core_labels_every_field():
 
 
 def test_modes_are_known():
-    # record = one row per unit; events = a status timeline; ledger = cost lines.
+    # record  = one row per unit
+    # events  = a status timeline
+    # ledger  = cost lines, kept line by line
+    # buckets = many lines per unit, summed into calendar months
     # Both ports switch on this, so an unknown mode would silently extract nothing.
     for ks in SPEC["kinds"]:
-        assert ks.get("mode") in ("record", "events", "ledger"), (ks["kind"], ks.get("mode"))
+        assert ks.get("mode") in ("record", "events", "ledger", "buckets"), \
+            (ks["kind"], ks.get("mode"))
+
+
+def test_bucket_families_declare_their_bucket_fields():
+    for ks in SPEC["kinds"]:
+        if ks.get("mode") != "buckets":
+            continue
+        assert ks["fields"][ks["bucketDateField"]]["type"] == "date", \
+            ks["kind"] + ": the bucket date must be a date to bucket by month"
+        assert ks["bucketSumFields"], ks["kind"] + ": nothing to sum"
+        for f in ks["bucketSumFields"]:
+            assert ks["fields"][f]["type"] == "num", (ks["kind"], f, "must be numeric to sum")
+        cf = ks.get("bucketCountField")
+        if cf:
+            assert cf in ks["fields"], (ks["kind"], cf)
+
+
+def test_no_family_extracts_employee_names():
+    """Named individuals stay out of a publicly readable data file.
+
+    The damage report's Transaction Originator and the hours export's Foreman are
+    both employee names that drive no KPI. Enabling either would be one alias
+    line, so this asserts nobody adds one by accident.
+    """
+    banned = ("originator", "foreman", "employee name", "operator name",
+              "requested by", "entered by")
+    for ks in SPEC["kinds"]:
+        for target, f in ks["fields"].items():
+            for a in f["aliases"]:
+                low = " ".join(a.split()).lower()
+                assert not any(b in low for b in banned), \
+                    ks["kind"] + "." + target + " would extract employee names: " + a
 
 
 def test_ledger_families_declare_their_line_fields():
@@ -109,6 +148,47 @@ def test_as_of_field_is_a_real_date_field():
         if not f:
             continue                      # a report with no run-date column has no as-of
         assert ks["fields"][f]["type"] == "date", (ks["kind"], f)
+
+
+def test_the_hours_export_never_lands_in_the_transfer_family():
+    """The real EquipmentDetailGrid export, and the mis-detection that mattered.
+
+    Its group-header row carries "Date" — one transfer signal — and "Equipment",
+    a unit alias. One hit used to be enough, so the file was detected as the
+    transfer report; publishing replaces a whole family, so it would have wiped
+    the real status history. What it must never be is `transfers`.
+    """
+    group = ["Equipment", "", "Date", "Job", "Foreman", "Cost Code", "Hours by Rate", "", ""]
+    sub = ["Code", "Description", "", "Code", "Name", "Code",
+           "Total (Rate 1)", "Ownership (Rate 2)", "Operating (Rate 3)"]
+    assert detect_kind(group, "EquipmentDetailGrid_1.xlsx") != "transfers"
+    # A transfer-ish filename must not drag it there either: a hint is a
+    # tie-break, worth less than a signal.
+    assert detect_kind(group, "Equipment_Transfer_hours.xlsx") != "transfers"
+    # The sub-header row on its own has no unit column, so it is nothing.
+    assert detect_kind(sub, "EquipmentDetailGrid_1.xlsx") is None
+    # Read together — which is what find_header does — the two rows are a real
+    # header and detect as the hours family.
+    assert detect_kind(merge_header([group, sub]), "EquipmentDetailGrid_1.xlsx") == "hours"
+
+
+def test_one_signal_is_never_enough_for_any_family():
+    # "Effective Date" is a signal for transfers, damage and hours alike, so a
+    # header carrying only it must claim none of them.
+    assert detect_kind(["Unit Number", "Effective Date"], "x.xlsx") is None
+    assert detect_kind(["Unit Number", "Vendor"], "anniversary.xlsx") is None
+    assert detect_kind(["Unit Number", "Rate Group"], "rates.xlsx") is None
+    # Without a unit or serial there is nothing to attach records to.
+    assert detect_kind(["Current Status", "Previous Status", "Effective Date"], "x.xlsx") is None
+
+
+def test_every_family_can_still_clear_the_signal_floor():
+    # A floor above a family's own signal count would make it undetectable.
+    floor = SPEC["minSignals"]
+    assert floor >= 2, "one incidental column must never be enough"
+    for ks in SPEC["kinds"]:
+        assert len(ks["signals"]) >= floor, \
+            ks["kind"] + " has fewer signals than minSignals, so it can never be detected"
 
 
 def test_status_codes_cover_the_derived_sets():

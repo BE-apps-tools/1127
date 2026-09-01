@@ -18,7 +18,7 @@
  * Equipment Master inventory:
  *   POST /inventory  -> ADMIN: commit browser-parsed inventory JSON to main
  *                       (data/meta.json, data/sites.json, data/sites/<code>.json).
- * Asset KPI reports (rates / rental / transfers / utilization):
+ * Asset KPI reports (rates / rental / transfers / damage / hours):
  *   POST /kpis       -> ADMIN: merge browser-parsed report blocks into
  *                       data/kpis.json, replacing only the families supplied.
  * Admin team access (repo-based user list — no Cloudflare needed to manage it):
@@ -737,7 +737,8 @@ async function postAdmins(req, env, h){
  * POST /kpis — ADMIN: merge browser-parsed KPI report blocks into data/kpis.json.
  * Families: `rates` (Equipment Rates), `rental` (Anniversary Date), `transfers`
  * (Equipment Transfer status history — an events array per unit), `damage`
- * (Damage Expenses — a cost-ledger `items` array per unit), `utilization`.
+ * (Damage Expenses — a cost-ledger `items` array per unit), and `hours`
+ * (posted equipment hours — a month->hours bucket map per unit).
  * Body: { extracted: [ { report:{kind,label,file,rows,units,asOf,columns}, units:{key:{field:value}} } ] }
  *
  * Mirrors build/kpi_reports.py `merge`: each supplied family REPLACES that
@@ -746,7 +747,7 @@ async function postAdmins(req, env, h){
  * different reports without clobbering the other. The spreadsheets are parsed in
  * the browser and never uploaded — only the extracted values arrive here.
  * Requires GH_TOKEN with Contents: Read+write. */
-const KPI_KINDS = ["rates", "rental", "transfers", "damage", "utilization"];
+const KPI_KINDS = ["rates", "rental", "transfers", "damage", "hours"];
 const KPI_KEY_RE = /^(SN:)?[\x20-\x7E]{1,60}$/;     // unit # or "SN:<serial>", printable ASCII
 const KPI_FIELD_RE = /^[A-Za-z][A-Za-z0-9]{0,30}$/;
 const KPI_MAX_UNITS = 20000;                        // a jobsite fleet is hundreds; this is a runaway guard
@@ -775,15 +776,42 @@ function kpiCleanRow(e, kind){
   return out;
 }
 
-/* Keep only well-formed values: a number, a trimmed string, or the `events`
- * array of the transfer history. Anything else is dropped rather than trusted. */
+/* A month -> number map, as the bucket families publish. Keys must be YYYY-MM
+ * and values finite numbers; anything else in the object is dropped rather than
+ * trusted, and an empty result is treated as no field at all. */
+const KPI_MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+const KPI_MAX_BUCKETS = 240;                       // 20 years of months, far past any report
+function kpiCleanBuckets(v){
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const out = {};
+  let n = 0;
+  for (const mk of Object.keys(v).sort()){
+    if (n >= KPI_MAX_BUCKETS) break;
+    if (!KPI_MONTH_RE.test(mk)) continue;
+    const x = v[mk];
+    if (typeof x !== "number" || !Number.isFinite(x)) continue;
+    out[mk] = x; n++;
+  }
+  return n ? out : null;
+}
+
+/* Keep only well-formed values: a number, a trimmed string, the `events`/`items`
+ * array of a timeline or ledger, or a month->number bucket map. Anything else is
+ * dropped rather than trusted. */
+const KPI_BUCKET_FIELDS = new Set([
+  "hoursByMonth", "ownershipHoursByMonth", "operatingHoursByMonth"]);
 function kpiCleanBlock(rec, kind){
   const out = {};
   let n = 0;
   for (const [k, v] of Object.entries(rec || {})){
     if (n >= KPI_MAX_FIELDS) break;
     if (!KPI_FIELD_RE.test(k)) continue;
-    if (k === "events" || k === "items"){
+    if (KPI_BUCKET_FIELDS.has(k)){
+      // Handled exclusively: a bucket field is a month map or it is nothing. If
+      // it fell through, a string here would be published as a string.
+      const b = kpiCleanBuckets(v);
+      if (b) { out[k] = b; n++; }
+    } else if (k === "events" || k === "items"){
       if (!Array.isArray(v)) continue;
       const rows = v.slice(0, KPI_MAX_EVENTS).map(e => kpiCleanRow(e, kind)).filter(Boolean);
       if (!rows.length) continue;

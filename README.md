@@ -20,7 +20,7 @@ change requests — which become auto-reconciling GitHub Issues.
   **Equipment Transfer** (a status event log → downtime, MTTR, availability,
   repeat offenders), **Damage Expenses** (a cost ledger → damage spend, incidents,
   damage as a share of a unit's yearly cost) and an optional
-  **utilization / hour-meter** export. Reports
+  **Equipment hours** export. Reports
   are recognised by their **column headers** (not filenames, and the header row
   need not be row 1), and each family's columns, tiles and trend charts appear
   only once that report is imported.

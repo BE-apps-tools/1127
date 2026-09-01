@@ -67,6 +67,52 @@
     }
    }
   },
+  "kpi_hours_mini.xlsx": {
+   "report": {
+    "asOf": "2026-05-04",
+    "columns": [
+     "costCode",
+     "date",
+     "hours",
+     "job",
+     "operatingHours",
+     "ownershipHours"
+    ],
+    "file": "kpi_hours_mini.xlsx",
+    "kind": "hours",
+    "label": "Equipment hours (posted)",
+    "rows": 4,
+    "site": "",
+    "units": 2
+   },
+   "units": {
+    "U1": {
+     "costCodes": 2,
+     "days": 3,
+     "first": "2026-03-31",
+     "hoursByMonth": {
+      "2026-03": 9.0,
+      "2026-04": 7.5,
+      "2026-05": 4.0
+     },
+     "job": "1127",
+     "last": "2026-05-03"
+    },
+    "U2": {
+     "costCodes": 1,
+     "days": 1,
+     "first": "2026-05-04",
+     "hoursByMonth": {
+      "2026-05": 12.0
+     },
+     "job": "1127",
+     "last": "2026-05-04",
+     "ownershipHoursByMonth": {
+      "2026-05": 3.0
+     }
+    }
+   }
+  },
   "kpi_rates_mini.xlsx": {
    "report": {
     "asOf": "",
@@ -321,49 +367,6 @@
       }
      ],
      "serial": "S5"
-    }
-   }
-  },
-  "kpi_util_mini.xlsx": {
-   "report": {
-    "asOf": "2025-12-09",
-    "columns": [
-     "idleHours",
-     "meterDate",
-     "meterHours",
-     "periodHours",
-     "workHours"
-    ],
-    "file": "kpi_util_mini.xlsx",
-    "kind": "utilization",
-    "label": "Utilization / hour meter",
-    "rows": 3,
-    "site": "",
-    "units": 3
-   },
-   "units": {
-    "SN:S3": {
-     "idleHours": 20.0,
-     "meterHours": 120.0,
-     "periodHours": 120.0,
-     "serial": "S3",
-     "workHours": 100.0
-    },
-    "U1": {
-     "idleHours": 300.0,
-     "meterDate": "2025-12-09",
-     "meterHours": 5200.0,
-     "periodHours": 1200.0,
-     "serial": "S1",
-     "workHours": 900.0
-    },
-    "U2": {
-     "idleHours": 500.0,
-     "meterDate": "2025-12-09",
-     "meterHours": 800.0,
-     "periodHours": 600.0,
-     "serial": "S2",
-     "workHours": 100.0
     }
    }
   }

@@ -109,6 +109,40 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
   .tile .sub{font-size:11px;color:var(--medium-gray);}
   .tile .meter+.sub{margin-top:6px;}
   .tile .grow{flex:1;min-width:0;}
+  /* A tile that drills into the table is a button: it has to look pressable and
+     take focus, without the surrounding cards shifting when it does. */
+  button.tile{font:inherit;text-align:left;cursor:pointer;position:relative;
+    transition:border-color .15s ease,box-shadow .15s ease;}
+  button.tile:hover{border-color:var(--energy-blue);box-shadow:var(--shadow-lift);}
+  button.tile:focus-visible{outline:2px solid var(--energy-blue);outline-offset:2px;}
+  button.tile.on{border-color:var(--energy-blue);border-left:4px solid var(--energy-blue);}
+  .tile-go{position:absolute;right:14px;bottom:14px;width:7px;height:7px;
+    border-right:2px solid var(--light-gray);border-bottom:2px solid var(--light-gray);
+    transform:rotate(-45deg);transition:border-color .15s ease,right .15s ease;}
+  button.tile:hover .tile-go{border-color:var(--energy-blue);right:10px;}
+
+  /* ---------- what the KPIs cover, and the drill-down above the table ---------- */
+  .scopebar{display:none;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;
+    font-size:12.5px;color:var(--medium-gray);}
+  .scopebar .sc-k{font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;
+    font-size:9px;letter-spacing:0.07em;background:var(--dark-blue);color:var(--white);
+    border-radius:999px;padding:3px 9px;flex:0 0 auto;}
+  .scopebar .sc-t{flex:1 1 260px;min-width:0;}
+  .scopebar strong{color:var(--dark-blue);}
+  .drillbar{display:none;background:var(--white);border:1px solid var(--light-gray);
+    border-left:4px solid var(--energy-blue);border-radius:var(--r-sm);
+    padding:13px 16px;margin-bottom:14px;box-shadow:var(--shadow);}
+  .drillbar .dr-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .drillbar .dr-k{font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;
+    font-size:9px;letter-spacing:0.07em;color:var(--medium-gray);flex:0 0 auto;}
+  .drillbar .dr-t{flex:1 1 260px;min-width:0;font-size:13px;color:var(--dark-gray);}
+  .drillbar .dr-t strong{color:var(--dark-blue);}
+  .drillbar .dr-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));
+    gap:10px 20px;margin-top:12px;padding-top:12px;border-top:1px solid var(--bright-gray);}
+  .drillbar .dr-stats>div{font-size:14px;font-weight:bold;color:var(--dark-blue);min-width:0;
+    overflow-wrap:anywhere;font-variant-numeric:tabular-nums;}
+  .drillbar .dr-stats .k{display:block;font-size:9px;font-weight:bold;text-transform:uppercase;
+    letter-spacing:0.05em;color:var(--medium-gray);margin-bottom:2px;}
   .meter{height:6px;background:var(--bright-gray);border-radius:3px;overflow:hidden;}
   .meter>span{display:block;height:100%;background:var(--energy-blue);border-radius:3px;width:0;transition:width .9s ease;}
   .meter.blue>span{background:var(--dark-blue);} .meter.light>span{background:var(--light-blue);}
@@ -335,8 +369,8 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
 </g>
 </svg></a>
     <a class="rail-item" href="index.html"><span class="rail-ic ic-hub"></span><span class="rail-lbl">Dashboard</span></a>
-    <a class="rail-item" href="inventory.html" title="Equipment Tracking"><span class="rail-ic ic-assets"></span><span class="rail-lbl">Equipment Tracking</span></a>
     <a class="rail-item active" href="kpis.html"><span class="rail-ic ic-kpi"></span><span class="rail-lbl">KPIs</span></a>
+    <a class="rail-item" href="inventory.html" title="Equipment Tracking"><span class="rail-ic ic-assets"></span><span class="rail-lbl">Equipment Tracking</span></a>
     <a id="railDeliveries" class="rail-item" href="deliveries.html"><span class="rail-ic ic-deliv"></span><span class="rail-lbl">Deliveries</span></a>
     <a id="railReceiving" class="rail-item" href="deliveries.html?view=receiving" style="display:none"><span class="rail-ic ic-recv"></span><span class="rail-lbl">Receiving</span></a>
     <a class="rail-item" href="admin.html"><span class="rail-ic ic-admin"></span><span class="rail-lbl">Admin</span></a>
@@ -376,6 +410,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
       </div>
 
       <div class="prevbar" id="prevBar" role="status"></div>
+      <div class="scopebar" id="scopeBar" role="status"></div>
       <section class="tiles" id="tiles" aria-label="Site KPIs"></section>
       <section class="trends" id="trends" aria-label="Equipment trends"></section>
 
@@ -393,6 +428,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
         <select id="fClass" aria-label="Equipment class"><option value="">All classes</option></select>
         <select id="fFocus" aria-label="Focus">
           <option value="">All units</option>
+          <option value="working">Working now (WK)</option>
           <option value="downnow">Down right now (DN or DS)</option>
           <option value="dn">Down on site (DN)</option>
           <option value="ds">In the shop (DS)</option>
@@ -404,11 +440,16 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
           <option value="downcost">Highest cost while down</option>
           <option value="damaged">Damaged (highest cost)</option>
           <option value="damageshare">Damage over 10% of yearly cost</option>
+          <option value="hourly">Hourly-billed units</option>
+          <option value="rented">On vendor rental</option>
+          <option value="hasdown">Had downtime (12 mo)</option>
+          <option value="hours">Reporting hours</option>
           <option value="nodata">No report data</option>
         </select>
         <button class="btn small secondary" id="exportCsv">Export CSV</button>
       </div>
 
+      <div class="drillbar" id="drillBar" role="status"></div>
       <div class="table-scroll" id="tableScroll">
         <table>
           <thead><tr id="headRow"></tr></thead>
@@ -473,6 +514,8 @@ const TRADE_NONE = "__none__";
 
 const STATE = { site:"", assets:[], kpis:{reports:[],units:{}}, meta:null, siteIndex:[],
   rows:[], sort:null, page:1, open:new Set(),
+  // set by a tile click: which tile you drilled into, and the ranking it asked for
+  drill:null, rank:null,
   // in-memory preview: `published` holds the real bundle while a preview is shown
   published:null, previewKinds:[] };
 // Where the admin KPI builder leaves a parsed bundle for this page to preview.
@@ -640,6 +683,30 @@ function damageByMonth(items, months){
   });
   return idx;
 }
+/* Posted hours over a window, from the month buckets the hours report publishes.
+   Bucketed at import (see the note on the family in build/kpi_reports.py), so the
+   window is honoured to the month, not the day — a rolling 12 months here means
+   the 12 calendar months the trend charts already use. */
+function hoursStats(hr, months){
+  if(!hr) return null;
+  const by=hr.hoursByMonth||{};
+  const keys=Object.keys(by);
+  if(!keys.length) return null;
+  const inWin=months.filter(m=>by[m]!=null);
+  const total=sum(inWin.map(m=>by[m]));
+  const all=sum(keys.map(m=>by[m]));
+  const peak=inWin.length?Math.max(...inWin.map(m=>by[m])):null;
+  const last=months[months.length-1];
+  return {
+    total, all, months:inWin.length, peak,
+    thisMonth: by[last]!=null ? by[last] : 0,
+    perMonth: inWin.length ? total/inWin.length : null,
+    days: num(hr.days), first: hr.first||"", last: hr.last||"",
+    costCodes: num(hr.costCodes), job: hr.job||"",
+    ownership: sum(Object.keys(hr.ownershipHoursByMonth||{}).map(m=>hr.ownershipHoursByMonth[m])),
+    operating: sum(Object.keys(hr.operatingHoursByMonth||{}).map(m=>hr.operatingHoursByMonth[m])),
+  };
+}
 /* External rental commitment per month (vendor-billed, not the internal rate). */
 function rentalMonthlyOf(rn){
   if(!rn) return null;
@@ -680,19 +747,21 @@ function kpiFor(a){
   return U[String(a.unit||"")] || (a.serial ? U["SN:"+String(a.serial)] : null) || null;
 }
 function buildRows(){
-  const winFrom = monthStartDn(monthList(TREND_MONTHS)[0]);
+  const winMonths = monthList(TREND_MONTHS);
+  const winFrom = monthStartDn(winMonths[0]);
   STATE.rows = STATE.assets.map(a=>{
     const k=kpiFor(a)||{};
-    const tr=k.transfers||null, rt=k.rates||null, rn=k.rental||null, ut=k.utilization||null;
+    const tr=k.transfers||null, rt=k.rates||null, rn=k.rental||null, hr=k.hours||null;
     const dm=k.damage||null;
     const st = tr ? timelineStats(tr.events, winFrom) : null;
     const dg = dm ? damageStats(dm.items, winFrom) : null;
+    const hs = hoursStats(hr, winMonths);
     const monthly = monthlyCostOf(rt);
     const rental = rentalMonthlyOf(rn);
     const dailyRate = monthly!=null ? monthly/DAYS_PER_MONTH : null;
     const annivDays = rn && rn.billedThroughDate ? daysUntil(rn.billedThroughDate) : null;
     return {
-      asset:a, kpi:k, tr, rt, rn, ut, dm, st,
+      asset:a, kpi:k, tr, rt, rn, hr, dm, st, hs,
       unit:String(a.unit||""), serial:String(a.serial||""),
       description:String(a.description||""), description2:String(a.description2||""),
       status:String(a.status||""), trade:String(a.trade||""), assigned:assignedOf(a),
@@ -729,10 +798,31 @@ function buildRows(){
       damageShare: (dg && monthly!=null && monthly>0) ? 100*dg.total/(monthly*12) : null,
       // cross-report: what the job paid while the unit sat broken
       downCost: (dailyRate!=null && st && st.downDays) ? dailyRate*st.downDays : null,
+      // Posted hours, and what an hour of work actually cost: the charge-out the
+      // job carried over the window divided by the hours it got for it. Only
+      // meaningful where both reports cover the unit.
+      hoursTotal: hs ? hs.total : null,
+      hoursThisMonth: hs ? hs.thisMonth : null,
+      hoursPerMonth: hs ? hs.perMonth : null,
+      hoursDays: hs ? hs.days : null,
+      // Charge-out for the months this unit actually posted hours, divided by
+      // those hours. Using the full 12 months would divide a year of cost by
+      // three months of work for a unit that only ran in the spring, and report
+      // an hourly cost four times the real one.
+      costPerHour: (hs && hs.total>0 && monthly!=null && hs.months>0)
+        ? (monthly*hs.months)/hs.total : null,
+
       hasKpi: KPI_KINDS.some(kk=>k[kk]),
     };
   });
-  STATE.rows.forEach(r=>{ r.daysOnSite = r.arrived ? daysSince(r.arrived) : null; });
+  STATE.rows.forEach(r=>{
+    r.daysOnSite = r.arrived ? daysSince(r.arrived) : null;
+    // Share of the days on site that carried posted hours. A blunt read, and the
+    // only utilization these reports can support: the hours export says which
+    // days were charged, not how many hours a day was available.
+    r.utilPct = (r.hs && r.hs.days!=null && r.daysOnSite>0)
+      ? Math.min(100, 100*r.hs.days/r.daysOnSite) : null;
+  });
 }
 /* Which report families have data for the shown site — drives the freshness banner,
    which tiles appear, and which table columns exist at all. */
@@ -803,18 +893,176 @@ function staleNote(kind){
   const st=staleness(reportFor(kind));
   return st.level ? (" · " + ageText(st.age)) : "";
 }
+/* One place to read a rank value, so a drill's ranking key does not have to be a
+   visible column the way a header-click sort does. */
+function rankVal(r,key){
+  return num(r[key]);
+}
+
+/* ---------- tile drill-downs ----------
+   Every tile that stands for a set of units can be clicked to see them. A drill
+   names three things: the `focus` predicate the table already knows how to
+   apply (every value here exists in #fFocus), the `rank` to order the results
+   by — the measure that tile actually reports, which is why "Down right now"
+   and "Spend on down units" share a population but not an order — and `stats`,
+   the short breakdown shown above the results so the drill answers "what is
+   this made of", not just "which units".
+
+   Keys are slugs of the tile labels, so they read plainly in a shared URL. */
+const DRILLS = {
+  "working": { focus:"working", rank:{key:"daysOnSite",dir:"desc"},
+    // Every stats function describes its own population inside the scope, not
+    // the scope itself — so this has to filter to WK exactly as the tile does.
+    stats:R=>{ const w=R.filter(r=>String(r.status||"").startsWith("WK"));
+      const d=w.map(r=>r.daysOnSite).filter(v=>v!=null);
+      return [["Working", fmtNum(w.length)], ["Not working", fmtNum(R.length-w.length)],
+              ["Longest on site", d.length?fmtNum(Math.max(...d))+" d":DASH],
+              ["Avg on site", d.length?fmtNum(sum(d)/d.length)+" d":DASH]]; } },
+  "units-on-site": { focus:"", rank:null,
+    stats:R=>[["Units", fmtNum(R.length)],
+              ["With report data", fmtNum(R.filter(r=>r.hasKpi).length)],
+              ["No report data", fmtNum(R.filter(r=>!r.hasKpi).length)]] },
+  "monthly-spend": { focus:"cost", rank:{key:"monthlyCost",dir:"desc"},
+    stats:R=>{ const c=R.filter(r=>r.monthlyCost!=null), t=sum(c.map(r=>r.monthlyCost));
+      return [["Monthly", fmtMoney(t)], ["Rated units", fmtNum(c.length)],
+              ["Average", c.length?fmtMoney(t/c.length):DASH],
+              ["Dearest unit", c.length?fmtMoney(Math.max(...c.map(r=>r.monthlyCost))):DASH]]; } },
+  "yearly-spend": { focus:"cost", rank:{key:"yearlyCost",dir:"desc"},
+    stats:R=>{ const c=R.filter(r=>r.monthlyCost!=null), t=sum(c.map(r=>r.monthlyCost));
+      return [["Annualized", fmtMoney(t*12)], ["Monthly run-rate", fmtMoney(t)],
+              ["Rated units", fmtNum(c.length)]]; } },
+  "avg-hourly-rate": { focus:"hourly", rank:{key:"hourlyRate",dir:"desc"},
+    stats:R=>{ const h=R.filter(r=>r.hourlyRate!=null&&r.hourlyRate>0);
+      const m=R.filter(r=>r.maintPerHour!=null&&r.maintPerHour>0);
+      return [["Hourly-billed units", fmtNum(h.length)],
+              ["Average rate", h.length?("$"+(sum(h.map(r=>r.hourlyRate))/h.length).toFixed(2)):DASH],
+              ["Highest", h.length?("$"+Math.max(...h.map(r=>r.hourlyRate)).toFixed(2)):DASH],
+              ["Avg maintenance / hr", m.length?("$"+(sum(m.map(r=>r.maintPerHour))/m.length).toFixed(2)):DASH]]; } },
+  "rental-commitment": { focus:"rented", rank:{key:"rentalMonthly",dir:"desc"},
+    stats:R=>{ const t=R.filter(r=>r.isRented);
+      const m=t.filter(r=>r.rentalMonthly!=null&&r.rentalMonthly>0), v=sum(m.map(r=>r.rentalMonthly));
+      const vend=new Set(t.map(r=>r.vendor).filter(Boolean));
+      return [["Per month", m.length?fmtMoney(v):DASH], ["Rented units", fmtNum(t.length)],
+              ["On a monthly rate", fmtNum(m.length)],
+              ["Billed hourly", fmtNum(t.length-m.length)],
+              ["Vendors", fmtNum(vend.size)],
+              ["Annualized", m.length?fmtMoney(v*12):DASH]]; } },
+  "down-right-now": { focus:"downnow", rank:{key:"daysInState",dir:"desc"},
+    stats:R=>{ const d=R.filter(r=>r.isDown);
+      return [["Down now", fmtNum(d.length)],
+              ["On site (DN)", fmtNum(d.filter(r=>r.curStatus==="DN").length)],
+              ["In shop (DS)", fmtNum(d.filter(r=>r.curStatus==="DS").length)],
+              ["Longest down", d.length?fmtNum(Math.max(...d.map(r=>r.daysInState||0)))+" d":DASH]]; } },
+  "spend-on-down-units": { focus:"downnow", rank:{key:"monthlyCost",dir:"desc"},
+    stats:R=>{ const d=R.filter(r=>r.isDown), b=sum(d.map(r=>r.monthlyCost));
+      return [["Charge-out / mo", fmtMoney(b)], ["Units down", fmtNum(d.length)],
+              ["Per day", fmtMoney(b/DAYS_PER_MONTH)],
+              ["Dearest down unit", d.length?fmtMoney(Math.max(...d.map(r=>r.monthlyCost||0))):DASH]]; } },
+  "downtime-days": { focus:"hasdown", rank:{key:"downDays",dir:"desc"},
+    stats:R=>{ const t=R.filter(r=>(r.downDays||0)>0);
+      return [["Down days", fmtNum(sum(t.map(r=>r.downDays)))],
+              ["Units affected", fmtNum(t.length)],
+              ["Worst unit", t.length?fmtNum(Math.max(...t.map(r=>r.downDays)))+" d":DASH],
+              ["Breakdowns", fmtNum(sum(t.map(r=>r.downEvents)))]]; } },
+  "fleet-availability": { focus:"hasdown", rank:{key:"availPct",dir:"asc"},
+    stats:R=>{ const t=R.filter(r=>r.st);
+      const obs=sum(t.map(r=>r.st.observedDays)), dd=sum(t.map(r=>r.downDays));
+      return [["Availability", obs>0?((100*(obs-dd)/obs).toFixed(1)+"%"):DASH],
+              ["Unit-days tracked", fmtNum(obs)], ["Down days", fmtNum(dd)],
+              ["Ranked worst first", fmtNum(R.filter(r=>(r.downDays||0)>0).length)+" with downtime"]]; } },
+  "avg-repair-time": { focus:"hasdown", rank:{key:"mttrDays",dir:"desc"},
+    stats:R=>{ const m=R.map(r=>r.mttrDays).filter(v=>v!=null);
+      return [["Mean repair", m.length?fmtNum(sum(m)/m.length,1)+" d":DASH],
+              ["Units with a finished repair", fmtNum(m.length)],
+              ["Slowest", m.length?fmtNum(Math.max(...m),1)+" d":DASH]]; } },
+  "repeat-offenders": { focus:"repeat", rank:{key:"downEvents",dir:"desc"},
+    stats:R=>{ const t=R.filter(r=>(r.downEvents||0)>=REPEAT_DOWNS);
+      return [["Repeat offenders", fmtNum(t.length)],
+              ["Breakdowns between them", fmtNum(sum(t.map(r=>r.downEvents)))],
+              ["Down days", fmtNum(sum(t.map(r=>r.downDays)))],
+              ["Charge-out while down", fmtMoney(sum(t.map(r=>r.downCost)))]]; } },
+  "damage-spend": { focus:"damaged", rank:{key:"damageCost",dir:"desc"},
+    stats:R=>{ const h=R.filter(r=>r.damageCost!=null&&r.damageCost!==0);
+      const t=sum(h.map(r=>r.damageCost)), inc=sum(h.map(r=>r.damageIncidents));
+      return [["Damage spend", fmtMoney(t)], ["Units damaged", fmtNum(h.length)],
+              ["Incidents", fmtNum(inc)],
+              ["Worst month", worstDamageMonth(h)],
+              ["Worst unit", h.length?fmtMoney(Math.max(...h.map(r=>r.damageCost))):DASH]]; } },
+  "damage-incidents": { focus:"damaged", rank:{key:"damageIncidents",dir:"desc"},
+    stats:R=>{ const h=R.filter(r=>r.damageCost!=null&&r.damageCost!==0);
+      const t=sum(h.map(r=>r.damageCost)), inc=sum(h.map(r=>r.damageIncidents));
+      return [["Incidents", fmtNum(inc)], ["Units damaged", fmtNum(h.length)],
+              ["Avg per incident", inc?fmtMoney(t/inc):DASH],
+              ["Charge lines", fmtNum(sum(h.map(r=>r.damageLines)))]]; } },
+  "cost-while-down": { focus:"downcost", rank:{key:"downCost",dir:"desc"},
+    stats:R=>{ const t=R.filter(r=>r.downCost!=null&&r.downCost>0);
+      return [["Charge-out while down", fmtMoney(sum(t.map(r=>r.downCost)))],
+              ["Units", fmtNum(t.length)],
+              ["Down days behind it", fmtNum(sum(t.map(r=>r.downDays)))],
+              ["Worst unit", t.length?fmtMoney(Math.max(...t.map(r=>r.downCost))):DASH]]; } },
+  "hours-posted": { focus:"hours", rank:{key:"hoursTotal",dir:"desc"},
+    stats:R=>{ const h=R.filter(r=>r.hoursTotal!=null&&r.hoursTotal>0);
+      const t=sum(h.map(r=>r.hoursTotal));
+      return [["Hours posted", fmtNum(t)], ["Units posting", fmtNum(h.length)],
+              ["Busiest unit", h.length?fmtNum(Math.max(...h.map(r=>r.hoursTotal)))+" h":DASH],
+              ["Avg per unit", h.length?fmtNum(t/h.length)+" h":DASH],
+              ["This month", fmtNum(sum(h.map(r=>r.hoursThisMonth)))+" h"]]; } },
+  "cost-per-hour-worked": { focus:"hours", rank:{key:"costPerHour",dir:"desc"},
+    stats:R=>{ const b=R.filter(r=>r.costPerHour!=null);
+      const cost=sum(b.map(r=>r.monthlyCost*r.hs.months)), h=sum(b.map(r=>r.hoursTotal));
+      return [["Cost per hour", h>0?("$"+(cost/h).toFixed(2)):DASH],
+              ["Units rated and posting", fmtNum(b.length)],
+              ["Charge-out while working", fmtMoney(cost)],
+              ["Hours bought", fmtNum(h)],
+              ["Dearest hour", b.length?("$"+Math.max(...b.map(r=>r.costPerHour)).toFixed(2)):DASH]]; } },
+  "days-posting-hours": { focus:"hours", rank:{key:"utilPct",dir:"asc"},
+    stats:R=>{ const u=R.filter(r=>r.utilPct!=null);
+      return [["Avg days posting", u.length?(Math.round(sum(u.map(r=>r.utilPct))/u.length)+"%"):DASH],
+              ["Units measured", fmtNum(u.length)],
+              ["Quietest unit", u.length?(Math.round(Math.min(...u.map(r=>r.utilPct)))+"%"):DASH],
+              ["Ranked quietest first", fmtNum(u.length)+" with hours"]]; } },
+};
+/* Which month took the most damage, across the units in view. */
+function worstDamageMonth(rows){
+  const months=monthList(TREND_MONTHS), tot={};
+  months.forEach(m=>tot[m]=0);
+  rows.forEach(r=>{ if(!r.dm) return;
+    const per=damageByMonth(r.dm.items, months);
+    months.forEach(m=>{ tot[m]+=per[m]||0; });
+  });
+  let best=null;
+  months.forEach(m=>{ if(best==null||tot[m]>tot[best]) best=m; });
+  return (best!=null && tot[best]>0) ? (fmtMonth(best)+" · "+fmtMoneyShort(tot[best])) : DASH;
+}
+const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+
+/* A tile with a matching entry in DRILLS becomes a real <button>, so it is
+   clickable, tabbable and announced as a control for free. A placeholder tile
+   (no report imported, value "—") leads nowhere and stays a plain <div>. */
 function tile(lbl,val,sub,opt){
   const o=opt||{};
-  return '<div class="tile">'+(o.ring!=null?ringSvg(o.ring):"")+'<div class="grow">'+
+  const id=slug(lbl);
+  const nav = val!==DASH && DRILLS[id];
+  const inner=(o.ring!=null?ringSvg(o.ring):"")+'<div class="grow">'+
     '<div class="lbl">'+esc(lbl)+'</div>'+
     '<div class="num'+(o.alert?" alert":"")+(val===DASH?" muted":"")+'">'+esc(val)+'</div>'+
     (o.meter!=null?('<div class="meter '+(o.meterCls||"")+'"><span data-w="'+Math.max(0,Math.min(100,Math.round(o.meter)))+'"></span></div>'):"")+
-    (sub?('<div class="sub">'+esc(sub)+'</div>'):"")+'</div></div>';
+    (sub?('<div class="sub">'+esc(sub)+'</div>'):"")+'</div>';
+  if(!nav) return '<div class="tile">'+inner+'</div>';
+  DRILL_LABELS[id]=lbl;
+  return '<button type="button" class="tile tile-nav'+(STATE.drill===id?" on":"")+'" data-drill="'+esc(id)+'"'+
+    ' aria-label="'+esc(lbl+": "+val+". Show these units.")+'">'+inner+
+    '<span class="tile-go" aria-hidden="true"></span></button>';
 }
 function sum(list){ return list.filter(v=>v!=null&&!isNaN(v)).reduce((s,v)=>s+v,0); }
 function renderTiles(){
-  const box=$("#tiles"), R=STATE.rows, n=R.length;
+  const box=$("#tiles"), R=scopeRows(), n=R.length;
+  if(!STATE.rows.length){ box.innerHTML=""; renderScopeBar(0); return; }
+  renderScopeBar(n);
   if(!n){ box.innerHTML=""; return; }
+  // activeKinds reads the whole site on purpose: which reports exist should not
+  // depend on the filter, or tiles would appear and vanish as you narrow. A
+  // scope with no damaged units shows "$0 · 0 units", which is the useful answer.
   const on=activeKinds();
   const working=R.filter(r=>String(r.status||"").startsWith("WK")).length;
   const pctOf=v=>n?100*v/n:0;
@@ -840,9 +1088,21 @@ function renderTiles(){
   }
 
   if(on.rental){
+    // A monthly commitment can only be summed from units that HAVE a monthly
+    // rate. Hourly-billed rentals carry none — the vendor bills the hours, and
+    // all three monthly fields come through as 0 — so adding them in silently
+    // reported $0 for real rentals. Name what the number covers instead.
     const rented=R.filter(r=>r.isRented);
-    const rmo=sum(rented.map(r=>r.rentalMonthly));
-    html += tile("Rental commitment", fmtMoneyShort(rmo)+"/mo", rented.length+" unit"+(rented.length===1?"":"s")+" on vendor rental"+staleNote("rental"));
+    const onMonthly=rented.filter(r=>r.rentalMonthly!=null&&r.rentalMonthly>0);
+    const byHour=rented.length-onMonthly.length;
+    const rmo=sum(onMonthly.map(r=>r.rentalMonthly));
+    html += tile("Rental commitment", onMonthly.length?(fmtMoneyShort(rmo)+"/mo"):DASH,
+      onMonthly.length
+        ? (fmtNum(onMonthly.length)+" of "+fmtNum(rented.length)+" rented on a monthly rate"+
+           (byHour?(" · "+fmtNum(byHour)+" billed hourly"):"")+staleNote("rental"))
+        : (rented.length
+            ? (fmtNum(rented.length)+" rented, all billed hourly — no monthly rate to total")
+            : "No units on vendor rental"));
   } else {
     html += tile("Rental commitment", DASH, "Drop the Anniversary Date report in the admin KPI builder");
   }
@@ -897,12 +1157,41 @@ function renderTiles(){
     if(dc>0) html += tile("Cost while down", fmtMoneyShort(dc),
       "Charge-out rate × downtime, last "+TREND_MONTHS+" months", {alert:true});
   }
-  if(on.utilization){
-    const hrs=R.map(r=>r.ut?num(r.ut.periodHours):null).filter(v=>v!=null);
-    if(hrs.length) html += tile("Hours reported", fmtNum(sum(hrs)), hrs.length+" units reporting");
+  if(on.hours){
+    const posting=R.filter(r=>r.hoursTotal!=null&&r.hoursTotal>0);
+    const hrs=sum(posting.map(r=>r.hoursTotal));
+    html += tile("Hours posted", fmtNum(hrs),
+      "Last "+TREND_MONTHS+" months · "+fmtNum(posting.length)+" of "+fmtNum(n)+
+      " units posting"+staleNote("hours"));
+    // Charge-out over the window against the hours it bought. Only the units the
+    // rate report and the hours report both cover can answer this.
+    const both=R.filter(r=>r.costPerHour!=null);
+    if(both.length){
+      // Summed the same way each unit computes it: cost over the months that
+      // unit worked, not a flat 12, or idle units would skew the fleet figure.
+      const cost=sum(both.map(r=>r.monthlyCost*r.hs.months));
+      const h=sum(both.map(r=>r.hoursTotal));
+      if(h>0) html += tile("Cost per hour worked", "$"+(cost/h).toFixed(2),
+        fmtNum(both.length)+" units rated and posting hours");
+    }
+    const util=R.filter(r=>r.utilPct!=null);
+    if(util.length){
+      const u=sum(util.map(r=>r.utilPct))/util.length;
+      html += tile("Days posting hours", Math.round(u)+"%",
+        "Of days on site, averaged over "+fmtNum(util.length)+" units", {ring:u});
+    }
   }
 
+  // Replacing the tiles destroys whatever had keyboard focus, which would strand
+  // anyone driving this from the keyboard mid-drill. Put it back on the same tile
+  // — without scrolling, so the jump to the results still wins.
+  const focused=document.activeElement;
+  const refocus=(focused&&box.contains(focused)&&focused.dataset)?focused.dataset.drill:null;
   box.innerHTML=html;
+  if(refocus){
+    const again=box.querySelector('[data-drill="'+refocus.replace(/"/g,'\\"')+'"]');
+    if(again) again.focus({preventScroll:true});
+  }
   requestAnimationFrame(()=>{
     box.querySelectorAll(".meter>span").forEach(el=>el.style.width=(Number(el.getAttribute("data-w"))||0)+"%");
     box.querySelectorAll(".ring-fg").forEach(fg=>{
@@ -910,6 +1199,81 @@ function renderTiles(){
       fg.style.strokeDashoffset=(125.66*(1-(parseInt(v,10)||0)/100)).toFixed(1);
     });
   });
+}
+
+/* ---------- what the tiles are describing ----------
+   The tiles silently changing meaning when a filter is set would be worse than
+   not filtering them at all, so the scope is always stated in words. */
+function renderScopeBar(n){
+  const el=$("#scopeBar"), total=STATE.rows.length, parts=scopeParts();
+  if(!total){ el.style.display="none"; return; }
+  el.style.display="flex";
+  if(!parts.length){
+    el.innerHTML='<span class="sc-t">KPIs below cover all <strong>'+fmtNum(total)+
+      '</strong> units on site.</span>';
+    return;
+  }
+  el.innerHTML='<span class="sc-k">Filtered</span>'+
+    '<span class="sc-t">KPIs below cover <strong>'+fmtNum(n)+'</strong> of '+fmtNum(total)+
+    ' units &mdash; '+esc(parts.join(" · "))+'.</span>'+
+    '<button class="btn small secondary" id="scopeClear" type="button">Show all units</button>';
+  $("#scopeClear").addEventListener("click", clearScope);
+}
+function clearScope(){
+  $("#q").value="";
+  ["#fTrade","#fStatus","#fBilling","#fClass"].forEach(sel=>{ $(sel).value=""; });
+  STATE.page=1;
+  renderTiles(); renderTrends(); renderTable(); syncUrl();
+}
+
+/* ---------- tile drill-down ----------
+   Clicking a tile answers "which units is this?" without leaving the page: the
+   table narrows to that population, ranked by the measure the tile reports, and
+   a bar above it carries the breakdown plus the way back. */
+function applyDrill(id,{push=true}={}){
+  const d=DRILLS[id];
+  if(!d) return;
+  STATE.drill=id;
+  STATE.rank=d.rank||null;
+  STATE.sort=null;                       // a drill's ranking is the point of it
+  STATE.page=1;
+  $("#fFocus").value=d.focus||"";
+  renderTiles(); renderTable();
+  if(push) syncUrl();
+  const el=$("#drillBar");
+  if(el) el.scrollIntoView({block:"start", behavior:"smooth"});
+}
+function clearDrill(){
+  STATE.drill=null; STATE.rank=null; STATE.page=1;
+  $("#fFocus").value="";
+  renderTiles(); renderTable(); syncUrl();
+  const t=$("#tiles"); if(t) t.scrollIntoView({block:"start", behavior:"smooth"});
+}
+/* The drill's own label, so the bar names the tile you came from. */
+const DRILL_LABELS = {};
+function renderDrillBar(shown,total){
+  const el=$("#drillBar"), id=STATE.drill, d=id?DRILLS[id]:null;
+  if(!d){ el.style.display="none"; el.innerHTML=""; return; }
+  const label=DRILL_LABELS[id]||id.replace(/-/g," ");
+  let stats=[];
+  try{ stats=d.stats?d.stats(scopeRows()):[]; }catch(e){ stats=[]; }
+  el.style.display="block";
+  el.innerHTML='<div class="dr-head">'+
+      '<span class="dr-k">Showing</span>'+
+      '<span class="dr-t">'+esc(label)+' &mdash; <strong>'+fmtNum(shown)+'</strong> unit'+
+        (shown===1?"":"s")+' of '+fmtNum(total)+' in view, ranked '+
+        esc(rankWords(d.rank))+'</span>'+
+      '<button class="btn small secondary" id="drillClear" type="button">Back to all units</button>'+
+    '</div>'+
+    (stats.length?('<div class="dr-stats">'+stats.map(p=>
+      '<div><span class="k">'+esc(p[0])+'</span>'+esc(p[1])+'</div>').join("")+'</div>'):"");
+  $("#drillClear").addEventListener("click", clearDrill);
+}
+function rankWords(rank){
+  if(!rank) return "by unit number";
+  const col=columns().find(c=>c.key===rank.key);
+  const name=(col&&col.label)||FIELD_LABELS[rank.key]||rank.key;
+  return (rank.dir==="asc"?"lowest ":"highest ")+String(name).toLowerCase()+" first";
 }
 
 /* ============================================================
@@ -1019,7 +1383,7 @@ function dataTable(head, rows){
     '</tbody></table></div></details>';
 }
 function renderTrends(){
-  const box=$("#trends"), on=activeKinds(), R=STATE.rows;
+  const box=$("#trends"), on=activeKinds(), R=scopeRows();
   if(!R.length){ box.innerHTML=""; return; }
   const months=monthList(TREND_MONTHS);
   let cards="";
@@ -1081,6 +1445,25 @@ function renderTrends(){
       dataTable(["Month","Damage charged","Units"], rows)+'</div>';
     window.__damageAgg={agg, unitsPer, months};
   }
+
+  if(on.hours){
+    // Hours posted per month, straight off the buckets — no re-derivation, since
+    // the month is exactly the granularity the report publishes.
+    const agg={}, unitsPer={};
+    months.forEach(m=>{ agg[m]=0; unitsPer[m]=new Set(); });
+    R.forEach(r=>{
+      const by=(r.hr&&r.hr.hoursByMonth)||null;
+      if(!by) return;
+      months.forEach(m=>{ if(by[m]){ agg[m]+=by[m]; unitsPer[m].add(r.unit); } });
+    });
+    const series=months.map(m=>agg[m]);
+    const rows=months.map((m,i)=>[fmtMonth(m), fmtNum(series[i],1), String(unitsPer[m].size)]);
+    cards += '<div class="chartcard"><h3>Hours posted by month</h3>'+
+      '<div class="cap">Hours charged to the job per month, from the equipment hours export. The newest month is to date. Hover for the number of units.</div>'+
+      '<div class="plot" data-chart="hours">'+moneyChart(months, series, "#2DA2DB")+'<div class="ctip"></div></div>'+
+      dataTable(["Month","Hours posted","Units posting"], rows)+'</div>';
+    window.__hoursAgg={agg, unitsPer, months};
+  }
   box.innerHTML=cards;
   bindChartHover();
 }
@@ -1106,6 +1489,11 @@ function bindChartHover(){
         html='<b>'+esc(fmtMonth(m))+'</b>'+
           '<div class="r"><span>Charged</span><span>'+fmtMoney(A.agg[m]||0)+'</span></div>'+
           '<div class="r"><span>Units</span><span>'+A.unitsPer[m].size+'</span></div>';
+      } else if(kind==="hours"){
+        const A=window.__hoursAgg; if(!A) return;
+        html='<b>'+esc(fmtMonth(m))+'</b>'+
+          '<div class="r"><span>Hours</span><span>'+fmtNum(A.agg[m]||0,1)+'</span></div>'+
+          '<div class="r"><span>Units posting</span><span>'+A.unitsPer[m].size+'</span></div>';
       } else {
         const S=window.__spendSeries; if(!S) return;
         const i=S.months.indexOf(m); const v=S.series[i]||0;
@@ -1150,7 +1538,12 @@ function columns(){
   if(on.rental) cols.push(
     {key:"rentalMonthly", label:"Rental / mo", type:"money", grp:true},
     {key:"annivDate", label:"Billed through", type:"anniv"});
-  if(on.utilization) cols.push({key:"meterHours", label:"Hour meter", type:"num", grp:true});
+  if(on.hours){
+    cols.push({key:"hoursTotal", label:"Hours "+TREND_MONTHS+"mo", type:"num", grp:true});
+    cols.push({key:"hoursDays", label:"Days posting", type:"num"});
+    cols.push({key:"utilPct", label:"Days posting %", type:"pct"});
+    if(on.rates) cols.push({key:"costPerHour", label:"Cost / hr worked", type:"money"});
+  }
   return cols;
 }
 function renderHead(cols){
@@ -1197,10 +1590,6 @@ function cell(r,c){
   if(c.type==="anniv") return '<td class="'+cls.trim()+'">'+annivCell(r)+'</td>';
   if(c.key==="description") return '<td class="'+cls.trim()+'"'+cpAttr(r.description)+'>'+esc(r.description||DASH)+
     (r.description2?('<div class="d2">'+esc(r.description2)+'</div>'):'')+'</td>';
-  if(c.key==="meterHours"){
-    const mh=r.ut?num(r.ut.meterHours):null;
-    return '<td class="'+(cls.trim()+(mh==null?" muted":"")).trim()+'">'+esc(fmtNum(mh))+'</td>';
-  }
   let txt;
   if(c.type==="money") txt=fmtMoney(v);
   else if(c.type==="pct") txt=fmtPct(v);
@@ -1211,9 +1600,21 @@ function cell(r,c){
 }
 
 /* ---------- filter / sort ---------- */
-function viewRows(){
+/* ---------- scope vs focus ----------
+   Two kinds of filter, and the difference decides what the tiles describe.
+
+   SCOPE — search, trade, status, billing type, equipment class — narrows which
+   fleet you are looking at. Every tile and chart is computed over exactly this
+   set, so filtering to hourly-billed units gives you the KPIs for those units.
+
+   FOCUS is the opposite: it picks out the units behind one KPI, and it is what a
+   tile click sets. It is deliberately NOT part of the scope — if it were, every
+   tile would end up describing its own selection ("Repeat offenders: 7 of 7")
+   instead of the fleet you are measuring. */
+const SCOPE_FILTERS = ["#q","#fTrade","#fStatus","#fBilling","#fClass"];
+function scopeRows(){
   const q=$("#q").value.trim().toLowerCase();
-  const tf=$("#fTrade").value, sf=$("#fStatus").value, ff=$("#fFocus").value;
+  const tf=$("#fTrade").value, sf=$("#fStatus").value;
   const bf=$("#fBilling").value, cf=$("#fClass").value;
   let v=STATE.rows.slice();
   if(bf) v=v.filter(r=>r.billingType===bf);
@@ -1221,6 +1622,23 @@ function viewRows(){
   if(tf===TRADE_NONE) v=v.filter(r=>!r.trade);
   else if(tf) v=v.filter(r=>r.trade===tf);
   if(sf) v=v.filter(r=>r.status===sf);
+  if(q) v=v.filter(r=>[r.unit,r.serial,r.description,r.description2,r.assigned,r.vendor,r.eqClass].some(x=>String(x||"").toLowerCase().includes(q)));
+  return v;
+}
+/* What the scope filters are set to, in words, for the tile caption. */
+function scopeParts(){
+  const out=[];
+  const q=$("#q").value.trim();                       if(q) out.push('matching "'+q+'"');
+  const tf=$("#fTrade").value;
+  if(tf===TRADE_NONE) out.push("no trade assigned"); else if(tf) out.push(tf);
+  const sf=$("#fStatus").value;                       if(sf) out.push(sf);
+  const bf=$("#fBilling").value;                      if(bf) out.push(bf==="Hourly"?"hourly-billed":"non-hourly");
+  const cf=$("#fClass").value;                        if(cf) out.push(cf);
+  return out;
+}
+function viewRows(){
+  const ff=$("#fFocus").value;
+  let v=scopeRows();
   if(ff==="downnow") v=v.filter(r=>r.isDown);
   else if(ff==="dn") v=v.filter(r=>r.curStatus==="DN");
   else if(ff==="ds") v=v.filter(r=>r.curStatus==="DS");
@@ -1233,13 +1651,18 @@ function viewRows(){
   else if(ff==="damaged") v=v.filter(r=>r.damageCost!=null&&r.damageCost!==0);
   else if(ff==="damageshare") v=v.filter(r=>r.damageShare!=null&&r.damageShare>=DAMAGE_SHARE_PCT);
   else if(ff==="nodata") v=v.filter(r=>!r.hasKpi);
-  if(q) v=v.filter(r=>[r.unit,r.serial,r.description,r.description2,r.assigned,r.vendor,r.eqClass].some(x=>String(x||"").toLowerCase().includes(q)));
+  // Populations a tile stands for that were not previously filterable.
+  else if(ff==="working") v=v.filter(r=>String(r.status||"").startsWith("WK"));
+  else if(ff==="hourly") v=v.filter(r=>r.hourlyRate!=null&&r.hourlyRate>0);
+  else if(ff==="rented") v=v.filter(r=>r.isRented);
+  else if(ff==="hasdown") v=v.filter(r=>(r.downDays||0)>0);
+  else if(ff==="hours") v=v.filter(r=>r.hoursTotal!=null&&r.hoursTotal>0);
   const s=STATE.sort;
   if(s&&s.key){
     const dir=s.dir==="desc"?-1:1;
     const col=columns().find(c=>c.key===s.key);
     const numeric=col && ["num","pct","money"].includes(col.type);
-    const get=r=> s.key==="meterHours" ? (r.ut?num(r.ut.meterHours):null) : r[s.key];
+    const get=r=> r[s.key];
     v.sort((a,b)=>{
       if(numeric){
         const x=get(a), y=get(b);
@@ -1249,6 +1672,17 @@ function viewRows(){
         return dir*(x-y);
       }
       return dir*String(get(a)==null?"":get(a)).localeCompare(String(get(b)==null?"":get(b)), undefined, {numeric:true, sensitivity:"base"});
+    });
+  } else if(STATE.rank){
+    // Set by a tile click: rank by the measure that tile reports. A column
+    // header click sets STATE.sort, which is checked first and so wins.
+    const rk=STATE.rank, d=rk.dir==="asc"?1:-1;
+    v.sort((a,b)=>{
+      const x=rankVal(a,rk.key), y=rankVal(b,rk.key);
+      if(x==null&&y==null) return 0;
+      if(x==null) return 1;                   // blanks last, either direction
+      if(y==null) return -1;
+      return d*(x-y);
     });
   } else if(ff==="damaged"||ff==="damageshare"){
     const k=ff==="damaged"?"damageCost":"damageShare";
@@ -1350,7 +1784,12 @@ function detReliability(r){
     kv("Damage "+TREND_MONTHS+"mo", r.damageCost==null?"":fmtMoney(r.damageCost)),
     kv("Damage incidents", r.damageIncidents==null?"":String(r.damageIncidents)),
     kv("Damage vs yr cost", r.damageShare==null?"":fmtPct(r.damageShare)),
-    kv("Hour meter", (r.ut&&num(r.ut.meterHours)!=null)?fmtNum(r.ut.meterHours):""),
+    kv("Hours "+TREND_MONTHS+"mo", r.hoursTotal!=null?fmtNum(r.hoursTotal):""),
+    kv("Days posting", (r.hoursDays!=null&&r.daysOnSite!=null)
+      ? (fmtNum(r.hoursDays)+" of "+fmtNum(r.daysOnSite)+" on site") : ""),
+    kv("Cost / hr worked", r.costPerHour!=null?("$"+r.costPerHour.toFixed(2)):""),
+    kv("Hours posted to job", (r.hs&&r.hs.job)?r.hs.job:""),
+    kv("Cost codes", (r.hs&&r.hs.costCodes!=null)?fmtNum(r.hs.costCodes):""),
   ].join("");
   if(!cells) return "";
   return '<div class="det-g"><h4>Reliability &amp; damage</h4><div class="det-kv">'+cells+'</div></div>';
@@ -1430,6 +1869,7 @@ function renderTable(){
   const cols=columns();
   renderHead(cols);
   const v=viewRows(), total=v.length, pc=pageCount(total);
+  renderDrillBar(total, scopeRows().length);
   if(STATE.page>pc) STATE.page=pc;
   const start=(STATE.page-1)*perPage(), shown=v.slice(start,start+perPage());
   const body=$("#kpiBody"), empty=$("#kpiEmpty");
@@ -1511,8 +1951,10 @@ function exportCsv(){
   if(on.rental) cols.push(["Vendor","vendor"],["PO",r=>r.rn?r.rn.po:""],
     ["Rental monthly","rentalMonthly"],["Billed through","annivDate"],["Days to renewal","annivDays"],
     ["Contract days",r=>r.rn?r.rn.contractDays:""],["On rent since",r=>r.rn?r.rn.acquiredDate:""]);
-  if(on.utilization) cols.push(["Hour meter",r=>r.ut?r.ut.meterHours:""],
-    ["Idle hours",r=>r.ut?r.ut.idleHours:""],["Period hours",r=>r.ut?r.ut.periodHours:""]);
+  if(on.hours) cols.push(["Hours "+TREND_MONTHS+"mo","hoursTotal"],
+    ["Hours this month","hoursThisMonth"],["Days posting","hoursDays"],
+    ["Days posting %","utilPct"],["Cost per hour worked","costPerHour"],
+    ["Hours posted to job",r=>r.hs?r.hs.job:""]);
   const get=(r,k)=>{ const val=typeof k==="function"?k(r):r[k]; return val==null?"":val; };
   const lines=[cols.map(c=>csvCell(c[0])).join(",")];
   v.forEach(r=>lines.push(cols.map(c=>csvCell(get(r,c[1]))).join(",")));
@@ -1646,6 +2088,7 @@ function syncUrl(){
   const t=$("#fTrade").value; if(t) p.set("trade",t);
   const s=$("#fStatus").value; if(s) p.set("status",s);
   const f=$("#fFocus").value; if(f) p.set("focus",f);
+  if(STATE.drill) p.set("drill",STATE.drill);
   const bt=$("#fBilling").value; if(bt) p.set("billing",bt);
   const cl=$("#fClass").value; if(cl) p.set("class",cl);
   if(STATE.sort&&STATE.sort.key) p.set("sort",STATE.sort.key+":"+(STATE.sort.dir||"asc"));
@@ -1656,7 +2099,7 @@ function syncUrl(){
 function readUrl(){
   const p=new URLSearchParams(location.search);
   const out={ site:p.get("site")||"", q:p.get("q")||"", trade:p.get("trade")||"",
-    status:p.get("status")||"", focus:p.get("focus")||"",
+    status:p.get("status")||"", focus:p.get("focus")||"", drill:p.get("drill")||"",
     billing:p.get("billing")||"", cls:p.get("class")||"",
     page:parseInt(p.get("page")||"1",10)||1,
   };
@@ -1666,6 +2109,7 @@ function readUrl(){
 }
 async function selectSite(code,{push=true}={}){
   STATE.site=code; STATE.page=1; STATE.open.clear();
+  STATE.drill=null; STATE.rank=null;
   if(code) cacheSet(SITE_KEY,String(code)); else nsDel(SITE_KEY);
   $("#siteSelect").value=code;
   await loadSite(code);
@@ -1679,8 +2123,24 @@ async function selectSite(code,{push=true}={}){
 function bind(){
   $("#siteSelect").addEventListener("change", e=>selectSite(e.target.value));
   let qT=null;
-  $("#q").addEventListener("input", ()=>{ clearTimeout(qT); qT=setTimeout(()=>{ STATE.page=1; renderTable(); syncUrl(); },160); });
-  ["#fTrade","#fStatus","#fFocus","#fBilling","#fClass"].forEach(sel=>$(sel).addEventListener("change", ()=>{ STATE.page=1; renderTable(); syncUrl(); }));
+  // A scope filter changes what the tiles and charts are measuring, so they are
+  // redrawn too — not just the table. Measured at ~12ms for both over 881 units,
+  // against the table's own ~120ms, so this is free.
+  const onScope=()=>{ STATE.page=1; renderTiles(); renderTrends(); renderTable(); syncUrl(); };
+  $("#q").addEventListener("input", ()=>{ clearTimeout(qT); qT=setTimeout(onScope,160); });
+  ["#fTrade","#fStatus","#fBilling","#fClass"].forEach(sel=>$(sel).addEventListener("change", onScope));
+  // Focus picks out the units behind one KPI, so it moves the table only. Choosing
+  // it by hand leaves any tile drill-down behind.
+  $("#fFocus").addEventListener("change", ()=>{
+    STATE.drill=null; STATE.rank=null; STATE.page=1;
+    renderTiles(); renderTable(); syncUrl();
+  });
+  $("#tiles").addEventListener("click", e=>{
+    const b=e.target.closest("[data-drill]");
+    if(!b) return;
+    // Clicking the tile you are already in goes back, so it toggles.
+    if(STATE.drill===b.dataset.drill) clearDrill(); else applyDrill(b.dataset.drill);
+  });
   $("#exportCsv").addEventListener("click", exportCsv);
   $("#pgSize").addEventListener("change", ()=>{ STATE.page=1; renderTable(); syncUrl(); });
   $("#pgFirst").addEventListener("click", ()=>gotoPage(1));
@@ -1692,6 +2152,7 @@ function bind(){
     const k=th.dataset.sort;
     if(STATE.sort&&STATE.sort.key===k) STATE.sort.dir = STATE.sort.dir==="desc"?"asc":"desc";
     else STATE.sort={key:k, dir:"asc"};
+    STATE.rank=null;                       // an explicit sort replaces a drill's ranking
     STATE.page=1; renderTable(); syncUrl();
   });
   $("#kpiBody").addEventListener("click", e=>{
@@ -1723,6 +2184,14 @@ async function init(){
   if(u.billing){ $("#fBilling").value=u.billing; }
   if(u.cls){ $("#fClass").value=u.cls; }
   if(u.page>1) STATE.page=u.page;
+  // A drill implies its own focus and ranking, so it is applied last and wins.
+  if(u.drill && DRILLS[u.drill]){
+    const p=STATE.page;
+    applyDrill(u.drill,{push:false});
+    STATE.page=p;
+  }
+  renderTiles();
+  renderTrends();
   renderTable();
   syncUrl();
   // A bundle handed over by the builder overlays the published one, in this
