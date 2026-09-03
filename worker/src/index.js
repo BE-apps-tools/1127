@@ -21,6 +21,12 @@
  * Asset KPI reports (rates / rental / transfers / damage / hours):
  *   POST /kpis       -> ADMIN: merge browser-parsed report blocks into
  *                       data/kpis.json, replacing only the families supplied.
+ * KPI explainer (read-only; the only route that talks to a model):
+ *   POST /ask        -> ADMIN: relay a question to Claude and stream the answer
+ *                       back as SSE. Holds ANTHROPIC_API_KEY, pins the system
+ *                       prompt and the tool list, executes nothing and touches
+ *                       no repo. The tool loop runs in the browser, where the
+ *                       KPI engine already is, so the model never calculates.
  * Admin team access (repo-based user list — no Cloudflare needed to manage it):
  *   POST /admin/verify -> check a key, return {ok, name} (used by the sign-in UI).
  *   GET  /admins       -> ADMIN: list admins ({name, added}; never hashes).
@@ -34,6 +40,12 @@
  *   GH_TOKEN, GH_REPO, SUBMIT_KEY, ALLOWED_ORIGIN, TEAMS_WEBHOOK_URL (optional),
  *   ADMIN_KEY  (private "master" key; gates the /req*, /inventory and /admins
  *              write routes — NOT in any page. Set once at deploy; always works.)
+ *   ANTHROPIC_API_KEY (optional; without it /ask returns 503 and the KPI page
+ *              simply never shows the Explain panel)
+ *   ASK_MODEL  (optional, not a secret; overrides the model /ask uses)
+ *
+ * NOTE: this Worker now has one npm dependency (@anthropic-ai/sdk, used only by
+ * /ask). Run `npm install` in worker/ before `wrangler deploy`.
  *
  * Admin auth model: the master ADMIN_KEY secret always works (checked first, no
  * GitHub call). ADDITIONAL admins live in data/admins.json in the repo as
@@ -148,6 +160,8 @@ export default {
       return postAccess(req, env, h);
     } else if (path === "/kpis" && req.method === "POST"){
       return postKpis(req, env, h);
+    } else if (path === "/ask" && req.method === "POST"){
+      return postAsk(req, env, h);
     } else if (path === "/receiving" && req.method === "POST"){
       return postReceiving(req, env, h);
     } else if (path === "/receiving/slip" && req.method === "POST"){
@@ -1031,12 +1045,265 @@ async function postAccess(req, env, h){
   return json({ ok: true, required: !!view }, 200, h);
 }
 
+/* ============================ ask: the read-only KPI explainer ============================
+ * The portal is a static site, so this Worker is the only place an API key can
+ * live. It is a relay and nothing more: it holds the key, pins the system prompt
+ * and the tool list, and streams Claude's answer back. It never reads or writes
+ * the repo on this route, and it never executes a tool.
+ *
+ * The agent loop runs in the browser, which is where the KPI engine already is.
+ * The page owns the maths (deriveKpi and friends); the model only chooses which
+ * KPI to look at and puts the answer in plain English. That split is the whole
+ * safety property: the model is never asked to calculate, so it cannot invent a
+ * figure — every number it says came out of a tool result the page computed.
+ *
+ * Read-only by construction, not by instruction:
+ *   - no GH_TOKEN use anywhere in this route
+ *   - the tools below only read; there is no write tool to call
+ *   - `system` and `tools` are set here and are never accepted from the client,
+ *     so a crafted request cannot hand the model a different job or a new tool
+ */
+const ASK_MODEL_DEFAULT = "claude-opus-5";
+const ASK_MAX_TURNS = 40;          // one question with tool round-trips is ~6 turns
+const ASK_MAX_BYTES = 400000;      // a ledger tool result is a few KB; this is generous
+// Deliberately short outputs: this is a chat panel, not a report generator. It
+// also caps what a single question can cost.
+const ASK_MAX_TOKENS = 8000;
+const ASK_BLOCK_TYPES = new Set([
+  "text", "tool_use", "tool_result", "thinking", "redacted_thinking", "fallback"]);
+
+/* The tools the page implements. Declared here so the cached prefix is stable and
+ * a client cannot add one — and pinned to the page's implementations by
+ * worker/tests/ask_tools.test.mjs, which fails if either side drifts. */
+const ASK_TOOLS = [
+  {
+    name: "list_kpis",
+    description:
+      "List every KPI the page can currently show, with its plain-English meaning, its " +
+      "formula, and its current value for the units in view. Call this first for any " +
+      "question about what a KPI means or which KPIs exist. It is cheap and it tells you " +
+      "which KPIs have data at all.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "explain_kpi",
+    description:
+      "The full working behind one KPI: its formula, how many units are counted, every " +
+      "population deliberately excluded and what each would have added, and the biggest " +
+      "contributing units with their own inputs and arithmetic. This is the tool for " +
+      "'how did you land on that number' and 'why is it so high'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        kpi_id: { type: "string", description: "A KPI id from list_kpis, e.g. cost-while-down" },
+        top: { type: "integer", description: "How many contributing units to return (default 10, max 50)" },
+      },
+      required: ["kpi_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "find_units",
+    description:
+      "Look up units by category and rank them by a measure. Use it to answer 'which units', " +
+      "'what is the worst', 'how many are down'. Returns a capped list, plus the total that " +
+      "matched so you can say how many there were in total.",
+    input_schema: {
+      type: "object",
+      properties: {
+        focus: { type: "string", description:
+          "One of: working, downnow, hasdown, repeat, damaged, downcost, cost, hourly, rented, hours, util, nodata" },
+        billing: { type: "string", description: "Hourly or Non Hourly" },
+        trade: { type: "string", description: "Trade name, exact" },
+        search: { type: "string", description: "Free text over unit number, serial and description" },
+        sort: { type: "string", description: "A field to rank by, e.g. downDays, monthlyCost, damageCost, utilAvg" },
+        dir: { type: "string", description: "desc (default) or asc" },
+        limit: { type: "integer", description: "How many units to return (default 20, max 100)" },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "unit_detail",
+    description:
+      "Everything the reports say about one unit: status, downtime history, rates, damage " +
+      "charges, posted hours and utilization, plus what it contributes to each money KPI. " +
+      "Use it when the question is about a specific machine.",
+    input_schema: {
+      type: "object",
+      properties: { unit: { type: "string", description: "Unit number, or SN:<serial>" } },
+      required: ["unit"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "data_coverage",
+    description:
+      "Which reports are loaded, when each was last refreshed, how many units each covers, " +
+      "and what the current filter is. Call this before saying a number is out of date, and " +
+      "whenever a question cannot be answered so you can say exactly which report is missing.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
+  },
+];
+
+const ASK_SYSTEM = `You explain equipment KPIs to the people who run a construction jobsite: superintendents, project managers and their managers. They know their equipment. They do not know how this software computes anything, and they should not have to.
+
+Your job is understanding, not reporting. The screen already shows the numbers. You explain what a number means, how it was arrived at, why it is the size it is, and what it does not say.
+
+## The one rule that matters
+
+Every number you state must have come from a tool result in this conversation. You never calculate, never estimate, never round from memory, and never carry a figure over from an earlier answer without checking it again. If you have not called a tool for a number, you do not know it.
+
+You have no arithmetic to do. The page computes every KPI and hands you the finished working. Your job is to read that working back in plain terms.
+
+If the tools cannot answer something, say so directly and say which report would be needed. "The transfer report is what tracks downtime, and it hasn't been imported for this site, so I can't tell you" is a good answer. Guessing is not.
+
+## How to answer
+
+Lead with the answer in one sentence. Then explain how it was reached, in the order a person would ask:
+
+1. What the number counts, in words a foreman would use.
+2. How many units are behind it — never quote a figure without its population.
+3. What was deliberately left out and why, when that changes how the number reads.
+4. The one or two units driving it, if a handful dominate.
+
+Write short paragraphs. Plain words. Say "billed by the hour", not "hourly billing classification". No headings, no tables. Use "- " for a list only when you are genuinely listing things. Bold with **double asterisks** for a figure that matters, sparingly.
+
+Give the reader the number's limits when they matter, without being asked. If someone asks about cost while down, they should learn in the same answer that hourly units are excluded and why.
+
+## Two things about this data you must get right
+
+**Money is only counted where money is actually charged.** A unit billed a flat monthly rate costs the job money on a day it sits broken. A unit billed by the hour does not: broken means no hours worked, which means no charge. Their downtime is just as real; it simply is not billed. Never add the two together, and never let anyone read "cost while down" as the total price of downtime.
+
+**A unit only appears in a KPI if a report covers it.** The reports cover different, overlapping slices of the fleet. A KPI counts only the units it can see, and a unit missing from a report is unknown, not zero. So two KPIs with different populations are not directly comparable, and you should say so rather than let someone divide one by the other.
+
+## What you cannot do
+
+You read. You do not change anything, import anything, or run any report — there is no tool for it and no way to do it. If someone asks you to, tell them plainly that you can only read and explain, and point them at the admin KPI builder for imports.
+
+You also do not give advice that the data cannot support. Explaining that one machine accounts for a fifth of the damage bill is reading the data. Recommending they get rid of it is not — that depends on things the reports do not know.
+
+## Awkward questions
+
+If a number looks wrong, say so and show why from the working rather than defending it. This system has shipped at least one badly wrong figure before — cost while down was once eight times too high because it charged hourly units for downtime they never billed. Being the assistant that spots the next one is more use than being the one that explains it away.`;
+
+/* Keep only the shapes we produced or expect back. `system` and `tools` are
+ * never taken from the client; neither is the model. */
+function askCleanMessages(raw){
+  if (!Array.isArray(raw) || !raw.length || raw.length > ASK_MAX_TURNS) return null;
+  const out = [];
+  for (const m of raw){
+    if (!m || typeof m !== "object" || Array.isArray(m)) return null;
+    if (m.role !== "user" && m.role !== "assistant") return null;
+    if (typeof m.content === "string"){
+      if (!m.content.trim()) return null;
+      out.push({ role: m.role, content: m.content });
+      continue;
+    }
+    if (!Array.isArray(m.content) || !m.content.length) return null;
+    for (const b of m.content){
+      if (!b || typeof b !== "object" || !ASK_BLOCK_TYPES.has(b.type)) return null;
+    }
+    out.push({ role: m.role, content: m.content });
+  }
+  if (out[0].role !== "user") return null;
+  if (JSON.stringify(out).length > ASK_MAX_BYTES) return null;
+  return out;
+}
+
+function sse(event, data){
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+async function postAsk(req, env, h){
+  if (!(await checkAdmin(req, env)).ok) return json({ error: "admin only" }, 401, h);
+  if (!env.ANTHROPIC_API_KEY){
+    return json({ error: "Explain is not configured — set the ANTHROPIC_API_KEY secret on the Worker." }, 503, h);
+  }
+  let b; try { b = await req.json(); } catch { return json({ error: "bad json" }, 400, h); }
+  const messages = askCleanMessages(b && b.messages);
+  if (!messages) return json({ error: "bad messages" }, 400, h);
+
+  const { default: Anthropic } = await import("@anthropic-ai/sdk");
+  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+  const params = {
+    model: String(env.ASK_MODEL || ASK_MODEL_DEFAULT),
+    max_tokens: ASK_MAX_TOKENS,
+    thinking: { type: "adaptive" },
+    // The prompt and the tool list never change, so cache them: after the first
+    // question of a session almost all of the input is a cache read.
+    system: [{ type: "text", text: ASK_SYSTEM, cache_control: { type: "ephemeral" } }],
+    tools: ASK_TOOLS,
+    messages,
+  };
+
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const enc = new TextEncoder();
+  const send = (event, data) => writer.write(enc.encode(sse(event, data)));
+
+  let sentAny = false;
+  async function run(useFallbacks){
+    const stream = useFallbacks
+      ? client.beta.messages.stream({
+          ...params,
+          // On a policy decline the API re-runs the same request on a fallback
+          // model inside the same call, rather than returning nothing.
+          betas: ["server-side-fallback-2026-07-01"],
+          fallbacks: "default",
+        })
+      : client.messages.stream(params);
+    for await (const ev of stream){
+      if (ev.type === "content_block_delta" && ev.delta.type === "text_delta"){
+        sentAny = true;
+        await send("text", { t: ev.delta.text });
+      } else if (ev.type === "content_block_start" && ev.content_block.type === "tool_use"){
+        // Lets the panel say "looking up cost while down…" instead of stalling.
+        await send("tool", { name: ev.content_block.name });
+      }
+    }
+    return stream.finalMessage();
+  }
+
+  (async () => {
+    try {
+      let msg;
+      try {
+        msg = await run(true);
+      } catch (e) {
+        // The fallbacks beta may not be enabled on this account. Losing the
+        // rescue is acceptable; losing every answer is not — so retry plain,
+        // but only while nothing has been streamed to the reader yet.
+        if (sentAny) throw e;
+        msg = await run(false);
+      }
+      // A policy decline arrives as a 200 with no usable content; without this the
+      // panel would show an empty answer and look broken.
+      if (msg.stop_reason === "refusal"){
+        await send("error", { error: "Claude declined to answer that one. Try rephrasing it as a question about the fleet data." });
+      } else {
+        await send("done", { stop_reason: msg.stop_reason, content: msg.content, usage: msg.usage, model: msg.model });
+      }
+    } catch (e) {
+      await send("error", { error: String((e && e.message) || e).slice(0, 300) });
+    } finally {
+      try { await writer.close(); } catch { /* client hung up */ }
+    }
+  })();
+
+  return new Response(readable, {
+    headers: { ...h, "Content-Type": "text/event-stream", "Cache-Control": "no-store" },
+  });
+}
+
 /* ============================ health (config diagnostics; no secrets exposed) ============================ */
 async function health(env, h){
   const out = {
     hasToken: !!env.GH_TOKEN, hasRepo: !!env.GH_REPO, repo: env.GH_REPO || null,
     hasSubmitKey: !!env.SUBMIT_KEY, hasAdminKey: !!env.ADMIN_KEY,
     hasTeamsWebhook: !!String(env.TEAMS_WEBHOOK_URL || "").trim(),   // never the URL itself
+    hasAnthropicKey: !!String(env.ANTHROPIC_API_KEY || "").trim(),   // gates the /ask explainer
+    askModel: String(env.ASK_MODEL || ASK_MODEL_DEFAULT),
     allowedOrigin: env.ALLOWED_ORIGIN || null, github: null,
   };
   if (env.GH_TOKEN && env.GH_REPO){
@@ -1050,4 +1317,5 @@ async function health(env, h){
 }
 
 // Exported for the contract test (Python port mirrors these).
-export const _internals = { buildTitle, buildMarker, buildBody, parseMarker, reqTitle, reqMarker, reqBody, lineStatus, lineDelivered, linePickedUp, lineHandled, sha256hex, CANON };
+export const _internals = { buildTitle, buildMarker, buildBody, parseMarker, reqTitle, reqMarker, reqBody, lineStatus, lineDelivered, linePickedUp, lineHandled, sha256hex, CANON,
+  askCleanMessages, ASK_TOOLS, ASK_SYSTEM, ASK_MAX_TURNS, ASK_MAX_BYTES, ASK_MODEL_DEFAULT };

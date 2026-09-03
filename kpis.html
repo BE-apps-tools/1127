@@ -185,6 +185,49 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
   .work .wk-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
     padding:12px 16px;border-top:1px solid var(--bright-gray);}
   .work .wk-note{flex:1 1 200px;min-width:0;font-size:11.5px;color:var(--medium-gray);}
+  /* The explainer. Deliberately quiet: it sits under the tiles and reads as part
+     of the page, not as a chatbot bolted onto it. */
+  .ask{background:var(--white);border:1px solid var(--light-gray);
+    border-left:4px solid var(--energy-blue);border-radius:var(--r-sm);
+    margin-bottom:14px;box-shadow:var(--shadow);}
+  .ask .ask-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    padding:12px 16px;border-bottom:1px solid var(--bright-gray);}
+  .ask .ask-k{font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;
+    font-size:9px;letter-spacing:0.07em;background:var(--energy-blue);color:var(--white);
+    border-radius:999px;padding:3px 9px;flex:0 0 auto;}
+  .ask .ask-t{flex:1 1 240px;min-width:0;font-size:12.5px;color:var(--medium-gray);}
+  .ask .ask-log{max-height:460px;overflow-y:auto;padding:4px 16px;}
+  .ask .ask-log:empty{display:none;}
+  .ask .msg{padding:11px 0;border-bottom:1px solid var(--bright-gray);}
+  .ask .msg:last-child{border-bottom:none;}
+  .ask .who{font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;
+    font-size:8.5px;letter-spacing:0.06em;color:var(--medium-gray);margin-bottom:5px;}
+  .ask .msg.you .who{color:var(--dark-blue);}
+  .ask .body{font-size:13.5px;line-height:1.6;color:var(--dark-gray);overflow-wrap:anywhere;}
+  .ask .body strong{color:var(--dark-blue);}
+  .ask .body p{margin:0 0 9px;}
+  .ask .body p:last-child{margin-bottom:0;}
+  .ask .body ul{margin:0 0 9px;padding-left:18px;}
+  .ask .body li{margin-bottom:4px;}
+  .ask .msg.you .body{color:var(--dark-blue);font-weight:bold;}
+  .ask .steps{margin-top:7px;font-size:11.5px;color:var(--medium-gray);
+    font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;letter-spacing:0.04em;}
+  .ask .msg.err .body{color:var(--alert);}
+  .ask .ask-seeds{display:flex;gap:7px;flex-wrap:wrap;padding:11px 16px 0;}
+  .ask .ask-seeds:empty{display:none;}
+  .ask .seed{font-size:11.5px;color:var(--dark-blue);background:var(--white);
+    border:1px solid var(--light-blue);border-radius:999px;padding:5px 11px;
+    cursor:pointer;font-family:Arial, Helvetica, sans-serif;text-align:left;}
+  .ask .seed:hover{background:var(--light-blue);}
+  .ask .ask-form{display:flex;gap:8px;padding:12px 16px;align-items:center;}
+  .ask .ask-form input{flex:1 1 auto;min-width:0;font-family:Arial, Helvetica, sans-serif;
+    font-size:13.5px;padding:9px 12px;border:1px solid var(--light-gray);
+    border-radius:var(--r-sm);color:var(--dark-gray);background:var(--white);}
+  .ask .ask-form input:focus{outline:2px solid var(--energy-blue);outline-offset:1px;}
+  .ask .ask-foot{padding:0 16px 12px;font-size:11px;color:var(--medium-gray);}
+  .ask .dots::after{content:"";animation:askdots 1.2s steps(4,end) infinite;}
+  @keyframes askdots{0%{content:"";}25%{content:".";}50%{content:"..";}75%{content:"...";}}
+  @media (prefers-reduced-motion: reduce){ .ask .dots::after{content:"...";animation:none;} }
   .meter{height:6px;background:var(--bright-gray);border-radius:3px;overflow:hidden;}
   .meter>span{display:block;height:100%;background:var(--energy-blue);border-radius:3px;width:0;transition:width .9s ease;}
   .meter.blue>span{background:var(--dark-blue);} .meter.light>span{background:var(--light-blue);}
@@ -454,6 +497,27 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
       <div class="prevbar" id="prevBar" role="status"></div>
       <div class="scopebar" id="scopeBar" role="status"></div>
       <section class="tiles" id="tiles" aria-label="Site KPIs"></section>
+
+      <!-- Read-only KPI explainer. Hidden entirely unless an admin key is present:
+           the Worker gates /ask on it, so showing the panel to anyone else would
+           only offer them a button that returns 401. -->
+      <section class="ask" id="askPanel" style="display:none;" aria-label="Ask about these numbers">
+        <div class="ask-head">
+          <span class="ask-k">Explain</span>
+          <span class="ask-t">Ask about any number on this page &mdash; what it means, or how it was worked out.</span>
+          <button class="btn small secondary" id="askClear" type="button">Clear</button>
+        </div>
+        <div class="ask-log" id="askLog" role="log" aria-live="polite"></div>
+        <div class="ask-seeds" id="askSeeds"></div>
+        <form class="ask-form" id="askForm">
+          <input type="text" id="askInput" autocomplete="off" enterkeyhint="send"
+            aria-label="Ask a question about these KPIs"
+            placeholder="Why are we spending this much on down equipment?">
+          <button class="btn small" id="askSend" type="submit">Ask</button>
+        </form>
+        <div class="ask-foot" id="askFoot">Reads the reports already loaded. It cannot change anything.</div>
+      </section>
+
       <section class="trends" id="trends" aria-label="Equipment trends"></section>
 
       <div class="toolbar">
@@ -1576,12 +1640,19 @@ function renderWork(){
           (STATE_WORK.all?("Show top "+WORK_TOP+" only"):("Show all "+fmtNum(m.rows.length)+" units"))+'</button>'
         : "")+
       '<button class="btn small secondary" id="wkCopy" type="button">Copy the working</button>'+
+      (askOn() ? '<button class="btn small secondary" id="wkAsk" type="button">Explain in plain English</button>' : "")+
       '<span class="wk-note">Paste it into a spreadsheet or an email &mdash; every row, its inputs and the total.</span>'+
     '</div>';
 
   const all=$("#wkAll");
   if(all) all.addEventListener("click", ()=>{ STATE_WORK.all=!STATE_WORK.all; renderWork(); });
   $("#wkCopy").addEventListener("click", e=>copyWorking(m, label, e.currentTarget));
+  const ask=$("#wkAsk");
+  if(ask) ask.addEventListener("click", ()=>{
+    const p=$("#askPanel");
+    if(p) p.scrollIntoView({block:"start", behavior:"smooth"});
+    askSubmit("How did you land on the "+label.toLowerCase()+" number, and what should I know about it?");
+  });
 }
 
 /* The whole ledger as tab-separated text: it pastes straight into Excel, which is
@@ -1618,6 +1689,343 @@ function copyWorking(m, label, btn){
 
 /* KPI-WORK-END */
 
+/* ============================================================
+   The KPI explainer — read-only.
+
+   The Worker holds the API key, pins the prompt and declares the tools; the
+   loop runs here, because this is where the KPI engine already is. The model
+   chooses which KPI to look at and writes the answer in plain English; every
+   number it says came out of one of the five functions below, all of which are
+   the same code the tiles and the working panel use.
+
+   That is the point of the split: the model is never asked to calculate, so it
+   has nothing to get wrong arithmetically. It also cannot change anything —
+   there is no write tool here to call, and the Worker touches no repo on /ask.
+
+   Values are handed over already formatted ($39,408, not 39408.42) so the
+   answer quotes exactly what the screen shows rather than re-rounding it.
+   ============================================================ */
+/* KPI-ASK-TOOLS-START */
+const ASK_IMPL = {
+  list_kpis(){
+    const R=scopeRows();
+    return {
+      unitsInView:R.length, unitsOnSite:STATE.rows.length,
+      filter: scopeParts().length ? scopeParts().join(" · ") : "none — all units on site",
+      kpis: Object.keys(DERIVE).map(id=>{
+        const d=DERIVE[id];
+        let m=null; try{ m=deriveKpi(id,R); }catch(e){}
+        return {
+          id, label: DRILL_LABELS[id] || id.replace(/-/g," "),
+          means: d.words, formula: d.eq,
+          // A KPI whose report was never imported counts nobody. Say so, so the
+          // answer is "that report isn't loaded" and not a confident zero.
+          available: !!(m && m.inCount>0),
+          value: (m && m.inCount>0) ? fmtWork(m.total,m.fmt) : null,
+          unitsCounted: m ? m.inCount : 0,
+        };
+      }),
+    };
+  },
+  explain_kpi(a){
+    const id=String((a&&a.kpi_id)||"");
+    const R=scopeRows();
+    let m=null; try{ m=deriveKpi(id,R); }catch(e){}
+    if(!m) return { error:'No KPI with id "'+id+'". Call list_kpis for the valid ids.' };
+    const top=Math.max(1,Math.min(50,Number(a&&a.top)||10));
+    return {
+      id, label: DRILL_LABELS[id] || id.replace(/-/g," "),
+      formula:m.eq, means:m.words, kind:m.kind,
+      value: fmtWork(m.total,m.fmt),
+      unitsCounted:m.inCount, unitsInView:R.length,
+      rankedBy: m.asc ? "lowest first" : "highest first",
+      excluded: m.drops.map(g=>({
+        units:g.n, reason:g.why,
+        wouldHaveAdded: g.would!=null ? fmtWork(g.would,m.fmt) : null,
+      })),
+      contributors: m.rows.slice(0,top).map(row=>{
+        const out={ unit:row.r.unit||row.r.serial, description:row.r.description };
+        m.inputs.forEach(i=>{ let v=null; try{ v=i.get(row.r); }catch(e){}
+          out[i.label]=fmtWork(v,i.fmt); });
+        out.contributes = m.kind==="ratio"
+          ? fmtWork(row.den>0?row.v/row.den:null, m.fmt)
+          : fmtWork(row.v, m.kind==="count"?"num":m.fmt);
+        if(row.share!=null) out.shareOfTotal=row.share.toFixed(1)+"%";
+        return out;
+      }),
+      contributorsNotShown: Math.max(0, m.rows.length-top),
+    };
+  },
+  find_units(a){
+    const o=a||{};
+    let v=scopeRows();
+    const focus=String(o.focus||"");
+    if(focus){
+      if(!FOCUS_PRED[focus]) return { error:'Unknown focus "'+focus+'". Valid: '+Object.keys(FOCUS_PRED).join(", ") };
+      v=v.filter(FOCUS_PRED[focus]);
+    }
+    if(o.billing) v=v.filter(r=>r.billingType===String(o.billing));
+    if(o.trade) v=v.filter(r=>r.trade===String(o.trade));
+    if(o.search){ const q=String(o.search).toLowerCase();
+      v=v.filter(r=>[r.unit,r.serial,r.description,r.vendor,r.eqClass]
+        .some(x=>String(x||"").toLowerCase().includes(q))); }
+    const matched=v.length;
+    const key=String(o.sort||"");
+    if(key){
+      const dir=String(o.dir||"desc")==="asc"?1:-1;
+      v=v.slice().sort((x,y)=>{
+        const p=num(x[key]), q=num(y[key]);
+        if(p==null&&q==null) return 0;
+        if(p==null) return 1; if(q==null) return -1;   // blanks last either way
+        return dir*(p-q);
+      });
+    }
+    const lim=Math.max(1,Math.min(100,Number(o.limit)||20));
+    return {
+      matched, returned:Math.min(matched,lim), outOf:scopeRows().length,
+      rankedBy: key ? (key+", "+(String(o.dir||"desc")==="asc"?"lowest":"highest")+" first") : "unit number",
+      units: v.slice(0,lim).map(r=>({
+        unit:r.unit, description:r.description,
+        status:r.status, billing:r.billingType||null, trade:r.trade||null,
+        daysOnSite:r.daysOnSite,
+        downDays:r.downDays, breakdowns:r.downEvents,
+        monthlyRate:r.monthlyCost!=null?fmtMoney(r.monthlyCost):null,
+        costWhileDown:r.downCost!=null?fmtMoney(r.downCost):null,
+        damage:r.damageCost!=null?fmtMoney(r.damageCost):null,
+        hoursPosted:r.hoursTotal,
+        utilization:r.utilAvg!=null?Math.round(r.utilAvg)+"%":null,
+      })),
+    };
+  },
+  unit_detail(a){
+    const want=String((a&&a.unit)||"").trim();
+    if(!want) return { error:"No unit given." };
+    const low=want.toLowerCase();
+    const r=STATE.rows.find(x=>String(x.unit).toLowerCase()===low)
+         || STATE.rows.find(x=>String(x.serial).toLowerCase()===low)
+         || STATE.rows.find(x=>("sn:"+String(x.serial).toLowerCase())===low);
+    if(!r) return { error:'No unit "'+want+'" on this site. Use find_units to look one up.' };
+    return {
+      unit:r.unit, serial:r.serial, description:r.description, extra:r.description2||null,
+      status:r.status, statusMeans:(KPI_SPEC.statusLabels||{})[r.curStatus]||null,
+      trade:r.trade||"unassigned", equipmentClass:r.eqClass||null,
+      arrivedOnSite:r.arrived||null, daysOnSite:r.daysOnSite,
+      billing:r.billingType||"not stated in the rate report",
+      chargeRunsWhileIdle:r.chargeRunsWhileIdle,
+      monthlyRate:r.monthlyCost!=null?fmtMoney(r.monthlyCost):null,
+      hourlyRate:r.hourlyRate!=null?("$"+r.hourlyRate.toFixed(2)):null,
+      rented:r.isRented, vendor:r.vendor||null,
+      monthlyRental:r.rentalMonthly!=null?fmtMoney(r.rentalMonthly):null,
+      currentlyDown:r.isDown, currentStatusCode:r.curStatus||null,
+      daysInCurrentStatus:r.daysInState,
+      downDays12mo:r.downDays, breakdowns12mo:r.downEvents,
+      meanRepairDays:r.mttrDays!=null?Number(r.mttrDays.toFixed(1)):null,
+      costWhileDown:r.downCost!=null?fmtMoney(r.downCost):null,
+      costWhileDownNote: r.chargeRunsWhileIdle ? null
+        : "Billed by the hour, so its downtime is not charged and it is excluded from cost-while-down.",
+      damage12mo:r.damageCost!=null?fmtMoney(r.damageCost):null,
+      damageIncidents:r.damageIncidents, lastDamage:r.damageLast||null,
+      hoursPosted12mo:r.hoursTotal, daysPostingHours:r.hoursDays,
+      costPerHourWorked:r.costPerHour!=null?("$"+r.costPerHour.toFixed(2)):null,
+      utilizationWeeklyAvg:r.utilAvg!=null?Math.round(r.utilAvg)+"%":null,
+      utilizationWeeksReported:r.utilWeeks,
+      reportsCovering: KPI_KINDS.filter(k=>r.kpi&&r.kpi[k]),
+    };
+  },
+  data_coverage(){
+    return {
+      site:STATE.site||null,
+      equipmentMaster:(STATE.meta&&STATE.meta.sourceVersion)||null,
+      unitsOnSite:STATE.rows.length,
+      unitsInView:scopeRows().length,
+      filter: scopeParts().length ? scopeParts().join(" · ") : "none — all units on site",
+      rollingWindowMonths:TREND_MONTHS,
+      reports:(KPI_SPEC.kinds||[]).map(ks=>{
+        const rep=reportFor(ks.kind);
+        const st=staleness(rep);
+        return {
+          report:ks.label, kind:ks.kind,
+          loaded:!!rep,
+          unitsCovered:STATE.rows.filter(r=>r.kpi&&r.kpi[ks.kind]).length,
+          lastRefreshed:rep?(rep.importedAt||"").slice(0,10):null,
+          age:rep?ageText(st.age):null,
+          outOfDate:!!st.level,
+          runForSite:rep?(rep.site||null):null,
+        };
+      }),
+    };
+  },
+};
+/* KPI-ASK-TOOLS-END */
+
+const ASK_MAX_STEPS = 8;                    // tool round-trips before we stop
+const ASK_STATE = { msgs:[], busy:false };
+
+function askOn(){ return !!nsGet("bac_admin_key"); }
+
+/* Minimal markdown: paragraphs, "- " lists and **bold**. The prompt asks for
+   nothing else, and a full renderer would be a bigger attack surface than the
+   feature is worth. Everything is escaped first. */
+function askFormat(text){
+  const lines=String(text||"").replace(/\r/g,"").split("\n");
+  let html="", list=false;
+  const inline=s=>esc(s).replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>");
+  for(const raw of lines){
+    const t=raw.trim();
+    if(/^[-*]\s+/.test(t)){
+      if(!list){ html+="<ul>"; list=true; }
+      html+="<li>"+inline(t.replace(/^[-*]\s+/,""))+"</li>";
+      continue;
+    }
+    if(list){ html+="</ul>"; list=false; }
+    if(t) html+="<p>"+inline(t)+"</p>";
+  }
+  if(list) html+="</ul>";
+  return html || "<p>"+inline(text)+"</p>";
+}
+function askBubble(who,cls){
+  const log=$("#askLog");
+  const el=document.createElement("div");
+  el.className="msg"+(cls?(" "+cls):"");
+  el.innerHTML='<div class="who">'+esc(who)+'</div><div class="body"></div>'+
+    '<div class="steps" style="display:none;"></div>';
+  log.appendChild(el);
+  log.scrollTop=log.scrollHeight;
+  return el;
+}
+function askSetBody(el,html){
+  el.querySelector(".body").innerHTML=html;
+  const log=$("#askLog"); log.scrollTop=log.scrollHeight;
+}
+function askSetSteps(el,words){
+  const s=el.querySelector(".steps");
+  if(!words){ s.style.display="none"; return; }
+  s.style.display="block"; s.textContent=words;
+}
+
+/* One turn: post the history, stream the answer back, return the final message. */
+async function askTurn(bubble, onText){
+  const r=await fetch(wbase()+"/ask",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","x-admin-key":nsGet("bac_admin_key")||""},
+    body:JSON.stringify({ messages:ASK_STATE.msgs }),
+  });
+  if(!r.ok || !r.body){
+    let msg="Couldn't reach the explainer ("+r.status+")";
+    try{ const j=await r.json(); if(j&&j.error) msg=j.error; }catch(e){}
+    throw new Error(msg);
+  }
+  const reader=r.body.getReader(), dec=new TextDecoder();
+  let buf="", done=null, text="", err=null;
+  for(;;){
+    const {value,done:fin}=await reader.read();
+    if(fin) break;
+    buf+=dec.decode(value,{stream:true});
+    // SSE frames are separated by a blank line; keep any partial tail in buf.
+    const frames=buf.split("\n\n"); buf=frames.pop();
+    for(const f of frames){
+      const ev=(f.match(/^event: (.*)$/m)||[])[1];
+      const dl=(f.match(/^data: (.*)$/m)||[])[1];
+      if(!ev||!dl) continue;
+      let d; try{ d=JSON.parse(dl); }catch(e){ continue; }
+      if(ev==="text"){ text+=d.t; onText(text); }
+      else if(ev==="tool"){ askSetSteps(bubble,"Looking up "+String(d.name||"").replace(/_/g," ")); }
+      else if(ev==="done"){ done=d; }
+      else if(ev==="error"){ err=d.error||"Something went wrong."; }
+    }
+  }
+  if(err) throw new Error(err);
+  if(!done) throw new Error("The answer was cut off. Try asking again.");
+  return done;
+}
+
+async function askSubmit(question){
+  if(ASK_STATE.busy) return;
+  const q=String(question||"").trim();
+  if(!q) return;
+  ASK_STATE.busy=true;
+  $("#askSend").disabled=true; $("#askInput").disabled=true;
+  askSetBody(askBubble("You","you"), askFormat(q));
+  $("#askInput").value="";
+  ASK_STATE.msgs.push({ role:"user", content:q });
+
+  const bubble=askBubble("Explain");
+  askSetBody(bubble,'<p class="dots">Reading the reports</p>');
+  try{
+    for(let step=0; step<ASK_MAX_STEPS; step++){
+      const msg=await askTurn(bubble, t=>askSetBody(bubble,askFormat(t)));
+      // Echo the assistant turn back verbatim — content blocks included, since
+      // the tool_use ids and any thinking blocks have to survive the round trip.
+      ASK_STATE.msgs.push({ role:"assistant", content:msg.content });
+      const calls=(msg.content||[]).filter(b=>b.type==="tool_use");
+      if(!calls.length){ askSetSteps(bubble,null); break; }
+      const results=calls.map(c=>{
+        let out;
+        try{
+          const fn=ASK_IMPL[c.name];
+          out = fn ? fn(c.input||{}) : { error:"No such tool: "+c.name };
+        }catch(e){ out={ error:String((e&&e.message)||e) }; }
+        return { type:"tool_result", tool_use_id:c.id, content:JSON.stringify(out) };
+      });
+      ASK_STATE.msgs.push({ role:"user", content:results });
+      if(step===ASK_MAX_STEPS-1){
+        askSetSteps(bubble,null);
+        askSetBody(bubble,askFormat("That question needed more lookups than I'm allowed in one go. Try asking it about one KPI at a time."));
+      }
+    }
+  }catch(e){
+    bubble.className="msg err";
+    askSetSteps(bubble,null);
+    askSetBody(bubble,askFormat(String((e&&e.message)||e)));
+    // Drop the dead turn so the next question doesn't replay a broken history.
+    while(ASK_STATE.msgs.length && ASK_STATE.msgs[ASK_STATE.msgs.length-1].role!=="user") ASK_STATE.msgs.pop();
+    ASK_STATE.msgs.pop();
+  }finally{
+    ASK_STATE.busy=false;
+    $("#askSend").disabled=false; $("#askInput").disabled=false;
+    renderAskSeeds();
+  }
+}
+
+/* Starter questions, drawn from what is actually on screen: the tile being
+   drilled if there is one, otherwise the money tiles a manager asks about. */
+function renderAskSeeds(){
+  const el=$("#askSeeds");
+  if(!el) return;
+  const seeds=[];
+  if(STATE.drill){
+    const label=(DRILL_LABELS[STATE.drill]||STATE.drill.replace(/-/g," ")).toLowerCase();
+    seeds.push("How did you land on the "+label+" number?");
+    seeds.push("What does "+label+" actually mean?");
+  } else {
+    seeds.push("Why are we spending this much on down equipment?");
+    seeds.push("What does cost while down include, and what does it leave out?");
+    seeds.push("Which units are costing us the most and why?");
+  }
+  seeds.push("How current is this data?");
+  el.innerHTML=seeds.map(s=>'<button class="seed" type="button">'+esc(s)+'</button>').join("");
+  el.querySelectorAll(".seed").forEach(b=>
+    b.addEventListener("click",()=>askSubmit(b.textContent)));
+}
+function renderAskPanel(){
+  const el=$("#askPanel");
+  if(!el) return;
+  if(!askOn() || !STATE.rows.length){ el.style.display="none"; return; }
+  el.style.display="block";
+  if(!$("#askLog").children.length) renderAskSeeds();
+}
+function askClear(){
+  ASK_STATE.msgs=[];
+  $("#askLog").innerHTML="";
+  renderAskSeeds();
+}
+function bindAsk(){
+  const f=$("#askForm");
+  if(!f) return;
+  f.addEventListener("submit",e=>{ e.preventDefault(); askSubmit($("#askInput").value); });
+  $("#askClear").addEventListener("click",askClear);
+}
+
 const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
 
 /* A tile with a matching entry in DRILLS becomes a real <button>, so it is
@@ -1641,6 +2049,7 @@ function tile(lbl,val,sub,opt){
 function sum(list){ return list.filter(v=>v!=null&&!isNaN(v)).reduce((s,v)=>s+v,0); }
 function renderTiles(){
   const box=$("#tiles"), R=scopeRows(), n=R.length;
+  renderAskPanel();          // every re-render path passes through here
   if(!STATE.rows.length){ box.innerHTML=""; renderScopeBar(0); return; }
   renderScopeBar(n);
   if(!n){ box.innerHTML=""; return; }
@@ -2245,28 +2654,37 @@ function scopeParts(){
   const cf=$("#fClass").value;                        if(cf) out.push(cf);
   return out;
 }
+/* The focus populations, one predicate each. Lifted out of viewRows so the
+   explainer's find_units tool can filter by the same names the dropdown uses
+   without touching the DOM — two copies of these would drift, and the tool
+   would then describe a population the table does not show. */
+/* KPI-FOCUS-START */
+const FOCUS_PRED = {
+  downnow: r=>r.isDown,
+  dn:      r=>r.curStatus==="DN",
+  ds:      r=>r.curStatus==="DS",
+  down7:   r=>(r.downDays||0)>LONG_DOWN_DAYS,
+  repeat:  r=>(r.downEvents||0)>=REPEAT_DOWNS,
+  anniv30: r=>r.annivDays!=null&&r.annivDays>=0&&r.annivDays<=RENEW_SOON_DAYS,
+  annivpast: r=>r.annivDays!=null&&r.annivDays<0,
+  cost:    r=>r.monthlyCost!=null,
+  downcost:r=>r.downCost!=null&&r.downCost>0,
+  damaged: r=>r.damageCost!=null&&r.damageCost!==0,
+  damageshare: r=>r.damageShare!=null&&r.damageShare>=DAMAGE_SHARE_PCT,
+  nodata:  r=>!r.hasKpi,
+  // Populations a tile stands for that were not previously filterable.
+  working: r=>String(r.status||"").startsWith("WK"),
+  hourly:  r=>r.hourlyRate!=null&&r.hourlyRate>0,
+  rented:  r=>r.isRented,
+  hasdown: r=>(r.downDays||0)>0,
+  hours:   r=>r.hoursTotal!=null&&r.hoursTotal>0,
+  util:    r=>r.utilAvg!=null,
+};
+/* KPI-FOCUS-END */
 function viewRows(){
   const ff=$("#fFocus").value;
   let v=scopeRows();
-  if(ff==="downnow") v=v.filter(r=>r.isDown);
-  else if(ff==="dn") v=v.filter(r=>r.curStatus==="DN");
-  else if(ff==="ds") v=v.filter(r=>r.curStatus==="DS");
-  else if(ff==="down7") v=v.filter(r=>(r.downDays||0)>LONG_DOWN_DAYS);
-  else if(ff==="repeat") v=v.filter(r=>(r.downEvents||0)>=REPEAT_DOWNS);
-  else if(ff==="anniv30") v=v.filter(r=>r.annivDays!=null&&r.annivDays>=0&&r.annivDays<=RENEW_SOON_DAYS);
-  else if(ff==="annivpast") v=v.filter(r=>r.annivDays!=null&&r.annivDays<0);
-  else if(ff==="cost") v=v.filter(r=>r.monthlyCost!=null);
-  else if(ff==="downcost") v=v.filter(r=>r.downCost!=null&&r.downCost>0);
-  else if(ff==="damaged") v=v.filter(r=>r.damageCost!=null&&r.damageCost!==0);
-  else if(ff==="damageshare") v=v.filter(r=>r.damageShare!=null&&r.damageShare>=DAMAGE_SHARE_PCT);
-  else if(ff==="nodata") v=v.filter(r=>!r.hasKpi);
-  // Populations a tile stands for that were not previously filterable.
-  else if(ff==="working") v=v.filter(r=>String(r.status||"").startsWith("WK"));
-  else if(ff==="hourly") v=v.filter(r=>r.hourlyRate!=null&&r.hourlyRate>0);
-  else if(ff==="rented") v=v.filter(r=>r.isRented);
-  else if(ff==="hasdown") v=v.filter(r=>(r.downDays||0)>0);
-  else if(ff==="hours") v=v.filter(r=>r.hoursTotal!=null&&r.hoursTotal>0);
-  else if(ff==="util") v=v.filter(r=>r.utilAvg!=null);
+  if(FOCUS_PRED[ff]) v=v.filter(FOCUS_PRED[ff]);
   const s=STATE.sort;
   if(s&&s.key){
     const dir=s.dir==="desc"?-1:1;
@@ -2778,6 +3196,7 @@ function bind(){
     if(key) toggleDetail(key);
   });
   bindCopy();
+  bindAsk();
   window.addEventListener("resize", syncDetailWidth);
 }
 async function init(){

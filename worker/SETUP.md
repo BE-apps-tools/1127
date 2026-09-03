@@ -152,6 +152,48 @@ Notes:
 - Covered by `worker/tests/teams.test.mjs` (`node worker/tests/teams.test.mjs`),
   which runs the real route with `fetch` stubbed. Also runs in CI.
 
+## 8. Enable the KPI explainer (Asset KPIs → `/ask`) — optional
+
+The Asset KPIs page can answer questions about its own numbers in plain English:
+*what does this KPI mean*, *how did you land on that*, *why is it that high*. It is
+**read-only** — it reads the reports already loaded in the browser and cannot
+change, import or publish anything.
+
+How it is put together, because the split is the safety property:
+
+- The **Worker** holds the API key, pins the system prompt and declares the five
+  tools. It executes nothing and touches no repo on this route.
+- The **agent loop runs in the browser**, where the KPI engine already lives. The
+  page computes every figure with the same code behind the tiles and the working
+  panel; the model only chooses which KPI to look at and writes the answer.
+- So the model is never asked to calculate. Every number it states came out of a
+  tool result, already formatted — it cannot invent one.
+
+Setup:
+
+1. **Add the dependency and the key.** This Worker now has one npm dependency
+   (`@anthropic-ai/sdk`, used only by `/ask`):
+   ```bash
+   cd worker
+   npm install
+   npx wrangler secret put ANTHROPIC_API_KEY   # from console.anthropic.com
+   npx wrangler deploy
+   ```
+   `wrangler.toml` already carries `compatibility_flags = ["nodejs_compat"]`, which
+   the SDK needs. **`npm install` before every deploy from a fresh clone** — without
+   it the bundle step fails.
+2. **Nothing to wire in the page.** The panel appears under the KPI tiles for
+   signed-in admins only, because `/ask` is gated on `ADMIN_KEY` — showing it to
+   anyone else would just offer them a button that returns 401.
+3. **Check it.** `GET /health` reports `hasAnthropicKey` and `askModel`. Leave the
+   secret unset and `/ask` returns 503 and the panel never appears, so this is
+   safe to skip entirely.
+
+Cost: a question with a couple of tool round-trips runs roughly 10–20K input and
+1–2K output tokens. The prompt and tool list are cached, so most of the input on
+later questions is a cache read. Set the non-secret `ASK_MODEL` var to change
+model without a code change; the default is Claude Opus 5.
+
 ## Optional hardening
 
 The endpoint is public (protected by origin + submit-key). For more, add

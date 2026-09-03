@@ -2,6 +2,11 @@ name = "asset-portal"
 main = "src/index.js"
 compatibility_date = "2025-01-01"
 
+# The Anthropic SDK (used only by the read-only /ask KPI explainer) expects a few
+# node builtins. Every other route is plain fetch and needs nothing.
+# Run `npm install` in this directory before `wrangler deploy`.
+compatibility_flags = ["nodejs_compat"]
+
 # Non-secret variables live here so they survive every (Git-connected) redeploy.
 # (Previously set only in the dashboard, they were wiped on each `wrangler deploy`.)
 [vars]

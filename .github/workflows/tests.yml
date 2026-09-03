@@ -75,3 +75,9 @@ jobs:
       # can defend.
       - name: KPI derivations reconcile to the tiles (kpis.html)
         run: node --test worker/tests/kpi_work.test.mjs
+
+      # The read-only explainer: the Worker's declared tools and the page's
+      # implementations have to stay paired, the tools must stay pure reads, and
+      # the relay must never accept a prompt or a tool list from the client.
+      - name: KPI explainer tools and payload guard (worker + kpis.html)
+        run: node --test worker/tests/ask_tools.test.mjs

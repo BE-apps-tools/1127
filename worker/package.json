@@ -1,0 +1,13 @@
+{
+  "name": "asset-portal-worker",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker for the asset portal. The only dependency is the Anthropic SDK, used by the read-only /ask KPI explainer; every other route is plain fetch. Run npm install before wrangler deploy.",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "test": "node --test tests/"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.123.0"
+  }
+}
