@@ -143,6 +143,48 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
     overflow-wrap:anywhere;font-variant-numeric:tabular-nums;}
   .drillbar .dr-stats .k{display:block;font-size:9px;font-weight:bold;text-transform:uppercase;
     letter-spacing:0.05em;color:var(--medium-gray);margin-bottom:2px;}
+  /* The working behind a KPI: the formula, who counts, and the per-unit
+     arithmetic that visibly adds up to the tile. */
+  .work{background:var(--white);border:1px solid var(--light-gray);
+    border-left:4px solid var(--dark-blue);border-radius:var(--r-sm);
+    padding:0;margin-bottom:14px;box-shadow:var(--shadow);}
+  .work .wk-head{padding:14px 16px 13px;border-bottom:1px solid var(--bright-gray);}
+  .work .wk-k{font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;
+    font-size:9px;letter-spacing:0.07em;color:var(--medium-gray);}
+  .work .wk-eq{margin-top:7px;font-size:13.5px;color:var(--dark-gray);
+    font-variant-numeric:tabular-nums;overflow-wrap:anywhere;}
+  .work .wk-eq b{color:var(--dark-blue);font-size:16px;}
+  .work .wk-w{margin:8px 0 0;font-size:12.5px;line-height:1.5;color:var(--medium-gray);max-width:78ch;}
+  .work .wk-led{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+    gap:1px;background:var(--bright-gray);border-bottom:1px solid var(--bright-gray);}
+  .work .wk-led>div{background:var(--white);padding:11px 16px;min-width:0;}
+  .work .wk-led .n{font-size:14px;font-weight:bold;color:var(--dark-blue);
+    font-variant-numeric:tabular-nums;}
+  .work .wk-led .n.out{color:var(--medium-gray);}
+  .work .wk-led .why{font-size:11.5px;line-height:1.45;color:var(--medium-gray);
+    margin-top:2px;overflow-wrap:anywhere;}
+  .work .wk-led .amt{font-size:11px;color:var(--alert);margin-top:3px;font-weight:bold;}
+  .work .wk-scroll{overflow-x:auto;}
+  .work table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  /* The page's table header is dark blue; match it rather than fight it, and take
+     the text to white so the labels are readable on that ground. */
+  .work th{font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;
+    font-size:8.5px;letter-spacing:0.05em;color:var(--white);text-align:right;
+    padding:9px 12px;border-bottom:1px solid var(--light-gray);white-space:nowrap;}
+  .work th.l,.work td.l{text-align:left;}
+  .work td{padding:8px 12px;text-align:right;border-bottom:1px solid var(--bright-gray);
+    white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--dark-gray);}
+  .work td.l{white-space:normal;min-width:150px;}
+  .work td.u{font-weight:bold;color:var(--dark-blue);}
+  .work td.c{font-weight:bold;color:var(--dark-blue);}
+  .work tr.rest td{color:var(--medium-gray);font-style:italic;}
+  .work tr.tot td{border-top:2px solid var(--dark-blue);border-bottom:none;
+    font-weight:bold;color:var(--dark-blue);font-size:13.5px;padding-top:10px;padding-bottom:12px;}
+  .work .bar{display:inline-block;height:7px;background:var(--energy-blue);
+    border-radius:2px;vertical-align:middle;min-width:1px;}
+  .work .wk-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    padding:12px 16px;border-top:1px solid var(--bright-gray);}
+  .work .wk-note{flex:1 1 200px;min-width:0;font-size:11.5px;color:var(--medium-gray);}
   .meter{height:6px;background:var(--bright-gray);border-radius:3px;overflow:hidden;}
   .meter>span{display:block;height:100%;background:var(--energy-blue);border-radius:3px;width:0;transition:width .9s ease;}
   .meter.blue>span{background:var(--dark-blue);} .meter.light>span{background:var(--light-blue);}
@@ -444,12 +486,14 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
           <option value="rented">On vendor rental</option>
           <option value="hasdown">Had downtime (12 mo)</option>
           <option value="hours">Reporting hours</option>
+          <option value="util">Utilization tracked</option>
           <option value="nodata">No report data</option>
         </select>
         <button class="btn small secondary" id="exportCsv">Export CSV</button>
       </div>
 
       <div class="drillbar" id="drillBar" role="status"></div>
+      <div class="work" id="kpiWork" style="display:none;"></div>
       <div class="table-scroll" id="tableScroll">
         <table>
           <thead><tr id="headRow"></tr></thead>
@@ -683,6 +727,20 @@ function damageByMonth(items, months){
   });
   return idx;
 }
+/* Average weekly utilization as the report states it: a 0..1 ratio per week,
+   which can exceed 1 in an overtime week, so nothing here clamps it. Weeks the
+   report left blank are unknown and excluded rather than counted as zero. */
+function utilAvgOf(ut){
+  if(!ut || !ut.byPeriod) return null;
+  const v=Object.keys(ut.byPeriod).map(k=>num(ut.byPeriod[k])).filter(x=>x!=null);
+  return v.length ? 100*sum(v)/v.length : null;
+}
+/* The newest week's reading, so a unit that has gone quiet is visible. */
+function utilLastOf(ut){
+  if(!ut || !ut.byPeriod) return null;
+  const ks=Object.keys(ut.byPeriod).sort();
+  return ks.length ? 100*num(ut.byPeriod[ks[ks.length-1]]) : null;
+}
 /* Posted hours over a window, from the month buckets the hours report publishes.
    Bucketed at import (see the note on the family in build/kpi_reports.py), so the
    window is honoured to the month, not the day — a rolling 12 months here means
@@ -752,6 +810,7 @@ function buildRows(){
   STATE.rows = STATE.assets.map(a=>{
     const k=kpiFor(a)||{};
     const tr=k.transfers||null, rt=k.rates||null, rn=k.rental||null, hr=k.hours||null;
+    const ut=k.utilization||null;
     const dm=k.damage||null;
     const st = tr ? timelineStats(tr.events, winFrom) : null;
     const dg = dm ? damageStats(dm.items, winFrom) : null;
@@ -761,7 +820,7 @@ function buildRows(){
     const dailyRate = monthly!=null ? monthly/DAYS_PER_MONTH : null;
     const annivDays = rn && rn.billedThroughDate ? daysUntil(rn.billedThroughDate) : null;
     return {
-      asset:a, kpi:k, tr, rt, rn, hr, dm, st, hs,
+      asset:a, kpi:k, tr, rt, rn, hr, dm, st, hs, ut,
       unit:String(a.unit||""), serial:String(a.serial||""),
       description:String(a.description||""), description2:String(a.description2||""),
       status:String(a.status||""), trade:String(a.trade||""), assigned:assignedOf(a),
@@ -769,6 +828,20 @@ function buildRows(){
       // "Hourly" / "Non Hourly" — the rate report is authoritative, the rental
       // report is the fallback for units it doesn't price.
       billingType: String((rt&&rt.billingType) || (rn&&rn.billingType) || ""),
+      // Does this unit's charge run whether or not it works?
+      //
+      // A NON-HOURLY unit is billed a flat monthly rate, so a day it spends
+      // broken still costs the job money.
+      //
+      // An HOURLY unit is billed per hour worked. Broken means no hours, which
+      // means no charge — its monthlyBillingRate is a reference figure at some
+      // assumed utilization, not a monthly bill. Proof from your own data: some
+      // hourly units bill 140% of that figure in a busy month and one billed
+      // 4% in a quiet one, so it is neither a cap nor an accrual.
+      //
+      // Anything the rate report does not label stays out of the money maths
+      // rather than being guessed at.
+      chargeRunsWhileIdle: String((rt&&rt.billingType)||"")==="Non Hourly",
       // downtime (rolling window)
       downDays: st?st.downDays:null,
       downEvents: st?st.downEvents:null,
@@ -797,10 +870,22 @@ function buildRows(){
       // whether a unit is worth keeping on the job
       damageShare: (dg && monthly!=null && monthly>0) ? 100*dg.total/(monthly*12) : null,
       // cross-report: what the job paid while the unit sat broken
-      downCost: (dailyRate!=null && st && st.downDays) ? dailyRate*st.downDays : null,
+      // Charged only where the charge does not depend on hours worked. Counting
+      // hourly units here invented $278K of the $318K this tile used to report:
+      // 20 hourly units at $360/day against 20 non-hourly at $56/day, for
+      // almost identical downtime.
+      downCost: (dailyRate!=null && st && st.downDays
+                 && String((rt&&rt.billingType)||"")==="Non Hourly")
+                ? dailyRate*st.downDays : null,
       // Posted hours, and what an hour of work actually cost: the charge-out the
       // job carried over the window divided by the hours it got for it. Only
       // meaningful where both reports cover the unit.
+      // Weekly utilization, straight off the report's own ratios. Averaged over
+      // the weeks it actually reported — a missing week is unknown, not zero.
+      utilAvg: utilAvgOf(ut),
+      utilWeeks: ut ? num(ut.periods) : null,
+      utilLast: utilLastOf(ut),
+      utilReportStatus: ut ? String(ut.utilStatus||"") : "",
       hoursTotal: hs ? hs.total : null,
       hoursThisMonth: hs ? hs.thisMonth : null,
       hoursPerMonth: hs ? hs.perMonth : null,
@@ -909,6 +994,7 @@ function rankVal(r,key){
    this made of", not just "which units".
 
    Keys are slugs of the tile labels, so they read plainly in a shared URL. */
+/* KPI-DRILLS-START */
 const DRILLS = {
   "working": { focus:"working", rank:{key:"daysOnSite",dir:"desc"},
     // Every stats function describes its own population inside the scope, not
@@ -954,10 +1040,13 @@ const DRILLS = {
               ["In shop (DS)", fmtNum(d.filter(r=>r.curStatus==="DS").length)],
               ["Longest down", d.length?fmtNum(Math.max(...d.map(r=>r.daysInState||0)))+" d":DASH]]; } },
   "spend-on-down-units": { focus:"downnow", rank:{key:"monthlyCost",dir:"desc"},
-    stats:R=>{ const d=R.filter(r=>r.isDown), b=sum(d.map(r=>r.monthlyCost));
-      return [["Charge-out / mo", fmtMoney(b)], ["Units down", fmtNum(d.length)],
-              ["Per day", fmtMoney(b/DAYS_PER_MONTH)],
-              ["Dearest down unit", d.length?fmtMoney(Math.max(...d.map(r=>r.monthlyCost||0))):DASH]]; } },
+    stats:R=>{ const d=R.filter(r=>r.isDown);
+      const f=d.filter(r=>r.chargeRunsWhileIdle&&r.monthlyCost!=null);
+      const b=sum(f.map(r=>r.monthlyCost));
+      return [["Flat-rate / mo", fmtMoney(b)], ["Units down", fmtNum(d.length)],
+              ["Still billing", fmtNum(f.length)],
+              ["Hourly, billing nothing", fmtNum(d.length-f.length)],
+              ["Per day", fmtMoney(b/DAYS_PER_MONTH)]]; } },
   "downtime-days": { focus:"hasdown", rank:{key:"downDays",dir:"desc"},
     stats:R=>{ const t=R.filter(r=>(r.downDays||0)>0);
       return [["Down days", fmtNum(sum(t.map(r=>r.downDays)))],
@@ -996,10 +1085,23 @@ const DRILLS = {
               ["Charge lines", fmtNum(sum(h.map(r=>r.damageLines)))]]; } },
   "cost-while-down": { focus:"downcost", rank:{key:"downCost",dir:"desc"},
     stats:R=>{ const t=R.filter(r=>r.downCost!=null&&r.downCost>0);
-      return [["Charge-out while down", fmtMoney(sum(t.map(r=>r.downCost)))],
-              ["Units", fmtNum(t.length)],
+      const ex=R.filter(r=>!r.chargeRunsWhileIdle&&(r.downDays||0)>0);
+      return [["Flat-rate cost while down", fmtMoney(sum(t.map(r=>r.downCost)))],
+              ["Units priced", fmtNum(t.length)],
               ["Down days behind it", fmtNum(sum(t.map(r=>r.downDays)))],
-              ["Worst unit", t.length?fmtMoney(Math.max(...t.map(r=>r.downCost))):DASH]]; } },
+              ["Worst unit", t.length?fmtMoney(Math.max(...t.map(r=>r.downCost))):DASH],
+              ["Hourly units excluded", fmtNum(ex.length)],
+              ["Their down days", fmtNum(sum(ex.map(r=>r.downDays)))]]; } },
+  "utilization": { focus:"util", rank:{key:"utilAvg",dir:"asc"},
+    stats:R=>{ const u=R.filter(r=>r.utilAvg!=null);
+      const a=u.length?sum(u.map(r=>r.utilAvg))/u.length:null;
+      const idle=u.filter(r=>r.utilAvg<25).length;
+      return [["Weekly average", a!=null?(Math.round(a)+"%"):DASH],
+              ["Units tracked", fmtNum(u.length)],
+              ["Under 25%", fmtNum(idle)],
+              ["Quietest", u.length?(Math.round(Math.min(...u.map(r=>r.utilAvg)))+"%"):DASH],
+              ["Busiest", u.length?(Math.round(Math.max(...u.map(r=>r.utilAvg)))+"%"):DASH],
+              ["Weeks reported", u.length?fmtNum(Math.max(...u.map(r=>r.utilWeeks||0))):DASH]]; } },
   "hours-posted": { focus:"hours", rank:{key:"hoursTotal",dir:"desc"},
     stats:R=>{ const h=R.filter(r=>r.hoursTotal!=null&&r.hoursTotal>0);
       const t=sum(h.map(r=>r.hoursTotal));
@@ -1022,6 +1124,7 @@ const DRILLS = {
               ["Quietest unit", u.length?(Math.round(Math.min(...u.map(r=>r.utilPct)))+"%"):DASH],
               ["Ranked quietest first", fmtNum(u.length)+" with hours"]]; } },
 };
+/* KPI-DRILLS-END */
 /* Which month took the most damage, across the units in view. */
 function worstDamageMonth(rows){
   const months=monthList(TREND_MONTHS), tot={};
@@ -1034,6 +1137,487 @@ function worstDamageMonth(rows){
   months.forEach(m=>{ if(best==null||tot[m]>tot[best]) best=m; });
   return (best!=null && tot[best]>0) ? (fmtMonth(best)+" · "+fmtMoneyShort(tot[best])) : DASH;
 }
+/* ---------- how a KPI is built ----------
+   A tile answers "how much". The next question is always "how did you get
+   that", and a drill-down that only narrows the table cannot answer it: it
+   shows which units, never the arithmetic. So every drill also declares a
+   derivation — the formula in symbols and in words, the inputs it reads off
+   each unit, that unit's contribution, and the populations deliberately left
+   out with what they would have added had they counted. The engine turns that
+   into a ledger that visibly sums to the figure on the tile.
+
+   Keyed by the same slugs as DRILLS; a parity test pins the two together. The
+   markers let that test evaluate this block on its own — the page is a plain
+   script with no module boundary, so there is nothing else to import. */
+/* KPI-WORK-START */
+const WORK_FMT = {
+  money:  v => fmtMoney(v),
+  money2: v => v==null||isNaN(v) ? DASH : (v<0?"-":"")+"$"+Math.abs(Number(v)).toFixed(2),
+  num:    v => fmtNum(v),
+  num1:   v => fmtNum(v,1),
+  pct:    v => v==null||isNaN(v) ? DASH : Math.round(v)+"%",
+  pct1:   v => v==null||isNaN(v) ? DASH : Number(v).toFixed(1)+"%",
+  days:   v => v==null||isNaN(v) ? DASH : fmtNum(v)+" d",
+  days1:  v => v==null||isNaN(v) ? DASH : fmtNum(v,1)+" d",
+  str:    v => (v==null||v==="") ? DASH : String(v),
+};
+const fmtWork = (v,f) => (WORK_FMT[f]||WORK_FMT.num)(v);
+const MONTH_DIV = "÷ "+DAYS_PER_MONTH;
+
+const DERIVE = {
+  "working": {
+    kind:"count", fmt:"num",
+    eq:"count of units whose current Equipment Master status begins WK",
+    words:"A straight head-count. The Equipment Master carries one status per unit; "+
+      "anything starting WK is working. Nothing is averaged or estimated — the "+
+      "contribution column is 1 per unit because each unit counts once.",
+    include:r=>String(r.status||"").startsWith("WK"),
+    inputs:[{label:"Status",get:r=>r.status,fmt:"str"},
+            {label:"Days on site",get:r=>r.daysOnSite,fmt:"num"}],
+    drops:[{why:"Status is not WK — down, in shop, or another state",
+            match:r=>!String(r.status||"").startsWith("WK")}],
+  },
+  "units-on-site": {
+    kind:"count", fmt:"num",
+    eq:"count of Equipment Master rows for this jobsite, after the filters in view",
+    words:"The denominator every other tile is measured against. Nothing is excluded: "+
+      "if a unit is on the site and passes the filters, it counts, whether or not "+
+      "any report covers it.",
+    include:()=>true,
+    inputs:[{label:"Status",get:r=>r.status,fmt:"str"},
+            {label:"Report data",get:r=>r.hasKpi?"yes":"no",fmt:"str"}],
+    drops:[],
+  },
+  "monthly-spend": {
+    kind:"sum", fmt:"money",
+    eq:"Σ monthly billing rate, over every unit the rate report prices",
+    words:"The rate report carries a monthly billing rate per unit; this adds them up. "+
+      "Read it as the committed run-rate, not last month's invoice: for an hourly-billed "+
+      "unit that rate is a reference figure at an assumed utilization, so a quiet month "+
+      "bills less and a busy one can bill more.",
+    include:r=>r.monthlyCost!=null,
+    inputs:[{label:"Billing type",get:r=>r.billingType,fmt:"str"},
+            {label:"Monthly rate",get:r=>r.monthlyCost,fmt:"money"}],
+    each:r=>r.monthlyCost,
+    drops:[{why:"No rate on file in the Equipment Rates report",match:r=>r.monthlyCost==null}],
+  },
+  "yearly-spend": {
+    kind:"sum", fmt:"money",
+    eq:"Σ monthly billing rate × 12",
+    words:"The monthly figure annualized. It assumes the fleet and its rates stay as they "+
+      "are for twelve months — it is not a forecast, and it does not know about units "+
+      "arriving, leaving, or coming off rent.",
+    include:r=>r.monthlyCost!=null,
+    inputs:[{label:"Monthly rate",get:r=>r.monthlyCost,fmt:"money"},
+            {label:"Months",get:()=>12,fmt:"num"}],
+    each:r=>r.monthlyCost*12,
+    drops:[{why:"No rate on file in the Equipment Rates report",match:r=>r.monthlyCost==null}],
+  },
+  "avg-hourly-rate": {
+    kind:"mean", fmt:"money2",
+    eq:"Σ hourly billing rate ÷ number of hourly-billed units",
+    words:"An unweighted average: every hourly-billed unit counts once, a skid steer as "+
+      "much as a crane. It is the rate card, not what was actually spent — no hours "+
+      "are involved.",
+    include:r=>r.hourlyRate!=null&&r.hourlyRate>0,
+    inputs:[{label:"Hourly rate",get:r=>r.hourlyRate,fmt:"money2"},
+            {label:"Maintenance / hr",get:r=>r.maintPerHour,fmt:"money2"}],
+    each:r=>r.hourlyRate,
+    drops:[{why:"No hourly rate — billed a flat monthly rate, or unpriced",
+            match:r=>!(r.hourlyRate!=null&&r.hourlyRate>0)}],
+  },
+  "rental-commitment": {
+    kind:"sum", fmt:"money",
+    eq:"Σ monthly rental rate, over rented units that have one",
+    words:"What the vendors bill each month for units on rent. Only units carrying a real "+
+      "monthly rental rate can be added up — an hourly-billed rental has all three "+
+      "monthly fields at zero, because the vendor bills the hours instead, so including "+
+      "it would quietly report $0 for a live rental.",
+    include:r=>r.isRented&&r.rentalMonthly!=null&&r.rentalMonthly>0,
+    inputs:[{label:"Vendor",get:r=>r.vendor,fmt:"str"},
+            {label:"Monthly rental",get:r=>r.rentalMonthly,fmt:"money"}],
+    each:r=>r.rentalMonthly,
+    drops:[{why:"Rented but billed hourly — the vendor bills hours, so there is no monthly rate to total",
+            match:r=>r.isRented&&!(r.rentalMonthly!=null&&r.rentalMonthly>0)},
+           {why:"Company-owned, not on vendor rental",match:r=>!r.isRented}],
+  },
+  "down-right-now": {
+    kind:"count", fmt:"num",
+    eq:"count of units whose latest transfer status is DN or DS",
+    words:"A snapshot, not a rolling figure: the last status line in the transfer report "+
+      "for each unit. DN is down on site, DS is down in the shop. A unit with no "+
+      "transfer history has no current status and cannot be counted either way.",
+    include:r=>r.isDown,
+    inputs:[{label:"Status",get:r=>r.curStatus,fmt:"str"},
+            {label:"Days in state",get:r=>r.daysInState,fmt:"num"}],
+    drops:[{why:"Currently in a working or other non-down status",match:r=>r.st&&!r.isDown},
+           {why:"No transfer history — no current status to read",match:r=>!r.st}],
+  },
+  "spend-on-down-units": {
+    kind:"sum", fmt:"money",
+    eq:"Σ monthly billing rate, over units down right now whose charge is flat-rate",
+    words:"The charge still running on equipment that cannot work today. Only flat-rate "+
+      "(Non Hourly) units are counted: their rate is billed whether the machine moves "+
+      "or not. An hourly unit that is broken posts no hours and so bills nothing, and "+
+      "counting those made this figure roughly five times too big.",
+    include:r=>r.isDown&&r.chargeRunsWhileIdle&&r.monthlyCost!=null,
+    inputs:[{label:"Status",get:r=>r.curStatus,fmt:"str"},
+            {label:"Days down",get:r=>r.daysInState,fmt:"num"},
+            {label:"Monthly rate",get:r=>r.monthlyCost,fmt:"money"}],
+    each:r=>r.monthlyCost,
+    drops:[{why:"Down, but billed hourly — no hours worked means no charge",
+            match:r=>r.isDown&&!r.chargeRunsWhileIdle,
+            would:r=>r.monthlyCost||0},
+           {why:"Down, flat-rate, but carries no rate in the rate report",
+            match:r=>r.isDown&&r.chargeRunsWhileIdle&&r.monthlyCost==null},
+           {why:"Not down right now",match:r=>!r.isDown}],
+  },
+  "downtime-days": {
+    kind:"sum", fmt:"num",
+    eq:"Σ days spent in DN or DS, over the last "+TREND_MONTHS+" months",
+    words:"Built from the transfer report as a timeline: each status line opens a spell "+
+      "and the next one closes it, and the days that fall in a DN or DS spell inside "+
+      "the window are added up. A unit still down today has its spell counted to today.",
+    include:r=>(r.downDays||0)>0,
+    inputs:[{label:"Breakdowns",get:r=>r.downEvents,fmt:"num"},
+            {label:"Days down",get:r=>r.downDays,fmt:"num"}],
+    each:r=>r.downDays,
+    drops:[{why:"No time in a down status during the window",match:r=>r.st&&!(r.downDays>0)},
+           {why:"No transfer history — no timeline to measure",match:r=>!r.st}],
+  },
+  "fleet-availability": {
+    kind:"ratio", fmt:"pct1",
+    eq:"(Σ unit-days tracked − Σ down days) ÷ Σ unit-days tracked",
+    words:"A ratio of totals, not an average of percentages — otherwise hundreds of "+
+      "healthy hand tools would drown out a pile driver that sat broken for two "+
+      "months. High availability is not high utilization: a unit parked and working "+
+      "count the same here, because both are available.",
+    include:r=>r.st&&r.st.observedDays>0,
+    inputs:[{label:"Unit-days tracked",get:r=>r.st.observedDays,fmt:"num"},
+            {label:"Days down",get:r=>r.downDays||0,fmt:"num"}],
+    // Scaled by 100 here so the ratio comes out in percent, the unit the tile
+    // and the per-row column both display.
+    num:r=>100*(r.st.observedDays-(r.downDays||0)),
+    den:r=>r.st.observedDays,
+    drops:[{why:"No transfer history — contributes no tracked days",match:r=>!r.st||!(r.st.observedDays>0)}],
+  },
+  "avg-repair-time": {
+    kind:"mean", fmt:"days1",
+    eq:"Σ length of each finished down spell ÷ number of units with one",
+    words:"Mean time to return to service. Only spells that actually ended count — a "+
+      "unit still down has no repair time yet, so a long current breakdown does not "+
+      "show up here at all. Each unit contributes its own mean once, so a unit with "+
+      "six quick repairs weighs the same as one with a single slow one.",
+    include:r=>r.mttrDays!=null,
+    inputs:[{label:"Breakdowns",get:r=>r.downEvents,fmt:"num"},
+            {label:"Mean repair",get:r=>r.mttrDays,fmt:"days1"}],
+    each:r=>r.mttrDays,
+    drops:[{why:"No completed repair in the window — never down, or still down now",
+            match:r=>r.mttrDays==null}],
+  },
+  "repeat-offenders": {
+    kind:"count", fmt:"num",
+    eq:"count of units with "+REPEAT_DOWNS+" or more separate down spells in "+TREND_MONTHS+" months",
+    words:"Counts breakdowns, not days: a unit that went down three times for a day each "+
+      "is here, one that went down once for ninety days is not. Consecutive DN and DS "+
+      "lines for the same fault are one spell, so a unit moved from site to shop is "+
+      "not double-counted.",
+    include:r=>(r.downEvents||0)>=REPEAT_DOWNS,
+    inputs:[{label:"Breakdowns",get:r=>r.downEvents,fmt:"num"},
+            {label:"Days down",get:r=>r.downDays,fmt:"num"},
+            {label:"Cost while down",get:r=>r.downCost,fmt:"money"}],
+    drops:[{why:"Fewer than "+REPEAT_DOWNS+" breakdowns in the window",
+            match:r=>r.st&&(r.downEvents||0)<REPEAT_DOWNS},
+           {why:"No transfer history — no breakdowns to count",match:r=>!r.st}],
+  },
+  "damage-spend": {
+    kind:"sum", fmt:"money",
+    eq:"Σ damage charge lines dated inside the last "+TREND_MONTHS+" months",
+    words:"Actual money, unlike most tiles: these are real charge lines from the Damage "+
+      "Expenses report, kept line by line and summed per unit. Credits come through "+
+      "as negatives and are subtracted, so a unit can net to less than a single "+
+      "charge on it.",
+    include:r=>r.damageCost!=null&&r.damageCost!==0,
+    inputs:[{label:"Incidents",get:r=>r.damageIncidents,fmt:"num"},
+            {label:"Charge lines",get:r=>r.damageLines,fmt:"num"},
+            {label:"Damage",get:r=>r.damageCost,fmt:"money"}],
+    each:r=>r.damageCost,
+    drops:[{why:"No damage charges in the window",match:r=>!(r.damageCost!=null&&r.damageCost!==0)}],
+  },
+  "damage-incidents": {
+    kind:"sum", fmt:"num",
+    eq:"Σ distinct damage documents per unit, over the last "+TREND_MONTHS+" months",
+    words:"An incident is one damage document, however many charge lines it carries — a "+
+      "repair billed as parts plus labour plus freight is one incident, not three. "+
+      "That is why the average per incident is worth more than the line count.",
+    include:r=>r.damageCost!=null&&r.damageCost!==0,
+    inputs:[{label:"Charge lines",get:r=>r.damageLines,fmt:"num"},
+            {label:"Damage",get:r=>r.damageCost,fmt:"money"},
+            {label:"Incidents",get:r=>r.damageIncidents,fmt:"num"}],
+    each:r=>r.damageIncidents,
+    drops:[{why:"No damage charges in the window",match:r=>!(r.damageCost!=null&&r.damageCost!==0)}],
+  },
+  "cost-while-down": {
+    kind:"sum", fmt:"money",
+    eq:"Σ ( monthly rate "+MONTH_DIV+" days × days down ), flat-rate units only",
+    words:"What the job kept paying while machines sat broken. The monthly rate is turned "+
+      "into a daily one over a "+DAYS_PER_MONTH+"-day month and multiplied by that unit's "+
+      "down days. Only flat-rate units are priced this way, because only their charge "+
+      "runs while idle — the hourly units below have real downtime that simply is not "+
+      "billed, and including them overstated this figure roughly eightfold.",
+    include:r=>r.downCost!=null&&r.downCost>0,
+    inputs:[{label:"Monthly rate",get:r=>r.monthlyCost,fmt:"money"},
+            {label:"Per day",get:r=>r.monthlyCost/DAYS_PER_MONTH,fmt:"money2"},
+            {label:"Days down",get:r=>r.downDays,fmt:"num"}],
+    each:r=>r.downCost,
+    drops:[{why:"Was down, but billed hourly — broken means no hours, which means no charge",
+            match:r=>!r.chargeRunsWhileIdle&&(r.downDays||0)>0,
+            would:r=>r.monthlyCost!=null?(r.monthlyCost/DAYS_PER_MONTH)*(r.downDays||0):0},
+           {why:"Flat-rate and down, but carries no rate to price it with",
+            match:r=>r.chargeRunsWhileIdle&&r.monthlyCost==null&&(r.downDays||0)>0},
+           {why:"No downtime in the window, so nothing to price",match:r=>!((r.downDays||0)>0)}],
+  },
+  "utilization": {
+    kind:"mean", fmt:"pct",
+    eq:"Σ each unit's mean weekly utilization ÷ units the utilization report covers",
+    words:"Straight off the utilization report's own weekly ratios, averaged over the "+
+      "weeks a unit actually reported — a missing week is unknown, not zero. Each unit "+
+      "counts once regardless of how many weeks it reported. This is the honest answer "+
+      "to “how hard is the fleet working”, and it is a much smaller number than "+
+      "availability.",
+    include:r=>r.utilAvg!=null,
+    inputs:[{label:"Weeks reported",get:r=>r.utilWeeks,fmt:"num"},
+            {label:"Latest week",get:r=>r.utilLast,fmt:"pct"},
+            {label:"Mean weekly",get:r=>r.utilAvg,fmt:"pct"}],
+    each:r=>r.utilAvg,
+    drops:[{why:"Not covered by the utilization report",match:r=>r.utilAvg==null}],
+  },
+  "hours-posted": {
+    kind:"sum", fmt:"num",
+    eq:"Σ hours posted per month, over the last "+TREND_MONTHS+" months",
+    words:"Total hours charged against these units, taken from the equipment hours export "+
+      "and summed into calendar months before being totalled. These are billed hours, "+
+      "not engine hours — a machine running on a cost code nobody posted does not "+
+      "appear.",
+    include:r=>r.hoursTotal!=null&&r.hoursTotal>0,
+    inputs:[{label:"Days posting",get:r=>r.hoursDays,fmt:"num"},
+            {label:"This month",get:r=>r.hoursThisMonth,fmt:"num"},
+            {label:"Hours",get:r=>r.hoursTotal,fmt:"num"}],
+    each:r=>r.hoursTotal,
+    drops:[{why:"No hours posted in the window",match:r=>!(r.hoursTotal!=null&&r.hoursTotal>0)}],
+  },
+  "cost-per-hour-worked": {
+    kind:"ratio", fmt:"money2",
+    eq:"Σ ( monthly rate × months that unit posted hours ) ÷ Σ hours posted",
+    words:"What an hour of work actually cost. The charge-out is counted only over the "+
+      "months a unit really posted hours — dividing a full year of cost by three months "+
+      "of work would report an hourly cost four times the real one for a machine that "+
+      "only ran in the spring. Needs both the rate report and the hours export to cover "+
+      "the unit.",
+    include:r=>r.costPerHour!=null,
+    inputs:[{label:"Monthly rate",get:r=>r.monthlyCost,fmt:"money"},
+            {label:"Months posting",get:r=>r.hs.months,fmt:"num"},
+            {label:"Hours",get:r=>r.hoursTotal,fmt:"num"}],
+    num:r=>r.monthlyCost*r.hs.months,
+    den:r=>r.hoursTotal,
+    drops:[{why:"Posted no hours in the window",match:r=>!(r.hoursTotal>0)},
+           {why:"Posts hours but carries no rate to divide",match:r=>r.hoursTotal>0&&r.monthlyCost==null}],
+  },
+  "days-posting-hours": {
+    kind:"mean", fmt:"pct",
+    eq:"Σ ( days with posted hours ÷ days on site ) ÷ units measured",
+    words:"A blunt read, and the only utilization the hours export alone can support: it "+
+      "records which days were charged, not how many hours a day was available. A unit "+
+      "that posted one hour on a day counts that day in full. Worth trusting because "+
+      "the separate utilization report lands within a few points of it from completely "+
+      "different data.",
+    include:r=>r.utilPct!=null,
+    inputs:[{label:"Days posting",get:r=>r.hs.days,fmt:"num"},
+            {label:"Days on site",get:r=>r.daysOnSite,fmt:"num"}],
+    each:r=>r.utilPct,
+    drops:[{why:"No posted hours, or no arrival date to measure against",match:r=>r.utilPct==null}],
+  },
+};
+
+const WORK_TOP = 25;             // rows shown before the remainder is folded into one line
+const STATE_WORK = { all:false };
+
+/* Turn a derivation descriptor into the ledger the panel renders: the total (which
+   must equal the tile), every contributing unit with its inputs and running
+   total, and the excluded populations with what each would have added. */
+function deriveKpi(id, R){
+  const d=DRILLS[id], w=DERIVE[id];
+  if(!d||!w) return null;
+  const kind=w.kind||"sum";
+  const inc=R.filter(w.include||(()=>true));
+  const asc = !!(d.rank && d.rank.dir==="asc");
+
+  let parts=inc.map(r=>{
+    const v = kind==="count" ? 1 : (kind==="ratio" ? w.num(r) : w.each(r));
+    return { r, v, den: kind==="ratio" ? w.den(r) : null };
+  });
+  parts.sort((a,b)=>{
+    // Order by what the unit contributes, in the direction the tile ranks by, so
+    // the first rows are the ones the number is actually made of.
+    const av=kind==="ratio" ? (a.den>0?a.v/a.den:0) : a.v;
+    const bv=kind==="ratio" ? (b.den>0?b.v/b.den:0) : b.v;
+    return asc ? (av-bv) : (bv-av);
+  });
+
+  const tv=sum(parts.map(p=>p.v));
+  let total=null;
+  if(kind==="ratio"){ const de=sum(parts.map(p=>p.den)); total = de>0 ? tv/de : null; }
+  else if(kind==="mean"){ total = parts.length ? tv/parts.length : null; }
+  else total = tv;
+
+  // Running total: for a sum it is the subtotal, for a mean the running average,
+  // for a ratio the running ratio — so the last row always equals the headline.
+  let racc=0, rden=0;
+  const rows=parts.map((p,i)=>{
+    racc+=p.v; if(kind==="ratio") rden+=p.den;
+    const run = kind==="ratio" ? (rden>0?racc/rden:null)
+              : kind==="mean"  ? racc/(i+1)
+              : racc;
+    return { r:p.r, v:p.v, den:p.den, run,
+             share: (kind==="sum"||kind==="count") && tv ? 100*p.v/tv : null };
+  });
+
+  // Every unit in view that did not make the cut, grouped by the first reason
+  // that fits. Anything no reason claims is named rather than hidden.
+  const seen=new Set(inc);
+  const out=R.filter(r=>!seen.has(r));
+  const claimed=new Set();
+  const drops=(w.drops||[]).map(g=>{
+    const hit=out.filter(r=>!claimed.has(r)&&g.match(r));
+    hit.forEach(r=>claimed.add(r));
+    return { why:g.why, n:hit.length,
+             would: g.would ? sum(hit.map(g.would)) : null };
+  }).filter(g=>g.n>0);
+  const left=out.filter(r=>!claimed.has(r));
+  if(left.length) drops.push({ why:"No data for this measure", n:left.length, would:null });
+
+  return { id, kind, fmt:w.fmt||"num", eq:w.eq, words:w.words, inputs:w.inputs||[],
+           total, rows, drops, inCount:inc.length, outCount:out.length, asc };
+}
+
+function renderWork(){
+  const el=$("#kpiWork"), id=STATE.drill;
+  if(!el) return;
+  let m=null;
+  try{ m = id ? deriveKpi(id, scopeRows()) : null; }catch(e){ m=null; }
+  if(!m){ el.style.display="none"; el.innerHTML=""; return; }
+  const label=DRILL_LABELS[id]||id.replace(/-/g," ");
+  const nCols=m.inputs.length;
+  const shown = STATE_WORK.all ? m.rows : m.rows.slice(0, WORK_TOP);
+  const rest = m.rows.slice(shown.length);
+  const contribHead = m.kind==="count" ? "Counts" : (m.kind==="ratio" ? "This unit" : "Contributes");
+  const runHead = m.kind==="mean" ? "Running avg" : (m.kind==="ratio" ? "Running" : "Running total");
+  const maxShare = Math.max(0, ...m.rows.map(r=>Math.abs(r.share||0)));
+  // A share of the headline only means something when the headline is a total.
+  // On an average or a ratio the column would be a row of dashes, so it goes.
+  const hasShare = m.kind==="sum" || m.kind==="count";
+
+  const cell=(v,f)=>'<td>'+esc(fmtWork(v,f))+'</td>';
+  const body = shown.map(row=>{
+    const r=row.r;
+    return '<tr><td class="l u">'+esc(r.unit||r.serial||DASH)+'</td>'+
+      '<td class="l">'+esc(r.description||DASH)+'</td>'+
+      m.inputs.map(i=>{ let v=null; try{ v=i.get(r); }catch(e){} return cell(v,i.fmt); }).join("")+
+      '<td class="c">'+esc(m.kind==="ratio"
+          ? fmtWork(row.den>0?row.v/row.den:null, m.fmt)
+          : fmtWork(row.v, m.kind==="count"?"num":m.fmt))+'</td>'+
+      (hasShare
+        ? '<td><span class="bar" style="width:'+Math.max(1,Math.round(46*Math.abs(row.share||0)/(maxShare||1)))+'px"></span> '+
+          esc((row.share||0).toFixed(1)+"%")+'</td>'
+        : "")+
+      '<td>'+esc(fmtWork(row.run, m.kind==="count"?"num":m.fmt))+'</td></tr>';
+  }).join("");
+
+  const restRow = rest.length ? ('<tr class="rest"><td class="l" colspan="2">and '+
+      fmtNum(rest.length)+' more unit'+(rest.length===1?"":"s")+'</td>'+
+      '<td colspan="'+nCols+'"></td>'+
+      '<td class="c">'+esc(m.kind==="ratio"?DASH:fmtWork(sum(rest.map(x=>x.v)), m.kind==="count"?"num":m.fmt))+'</td>'+
+      (hasShare?'<td>'+esc(sum(rest.map(x=>x.share||0)).toFixed(1)+"%")+'</td>':"")+
+      '<td>'+esc(fmtWork(m.rows[m.rows.length-1].run, m.kind==="count"?"num":m.fmt))+'</td></tr>') : "";
+
+  const totLabel = m.kind==="mean" ? "Average over "+fmtNum(m.inCount)+" units"
+                 : m.kind==="ratio" ? "Ratio of the totals"
+                 : m.kind==="count" ? "Total units"
+                 : "Total";
+
+  el.style.display="block";
+  el.innerHTML =
+    '<div class="wk-head">'+
+      '<div class="wk-k">How this number is built &mdash; '+esc(label)+'</div>'+
+      '<div class="wk-eq">'+esc(m.eq)+' = <b>'+esc(fmtWork(m.total,m.fmt))+'</b></div>'+
+      '<p class="wk-w">'+esc(m.words)+'</p>'+
+    '</div>'+
+    '<div class="wk-led">'+
+      '<div><div class="n">'+fmtNum(m.inCount)+' unit'+(m.inCount===1?"":"s")+' counted</div>'+
+        '<div class="why">Every one of them is listed below with its own arithmetic.</div></div>'+
+      m.drops.map(g=>'<div><div class="n out">'+fmtNum(g.n)+' left out</div>'+
+        '<div class="why">'+esc(g.why)+'</div>'+
+        (g.would ? '<div class="amt">Would have added '+esc(fmtWork(g.would,m.fmt))+'</div>' : "")+
+        '</div>').join("")+
+    '</div>'+
+    '<div class="wk-scroll"><table><thead><tr>'+
+      '<th class="l">Unit</th><th class="l">Description</th>'+
+      m.inputs.map(i=>'<th>'+esc(i.label)+'</th>').join("")+
+      '<th>'+contribHead+'</th>'+(hasShare?'<th>Share of total</th>':"")+'<th>'+runHead+'</th>'+
+    '</tr></thead><tbody>'+body+restRow+
+    '<tr class="tot"><td class="l" colspan="2">'+esc(totLabel)+'</td>'+
+      '<td colspan="'+nCols+'"></td>'+
+      '<td class="c">'+esc(fmtWork(m.total,m.fmt))+'</td>'+
+      (hasShare?'<td>100.0%</td>':"")+'<td></td></tr>'+
+    '</tbody></table></div>'+
+    '<div class="wk-foot">'+
+      (rest.length||STATE_WORK.all
+        ? '<button class="btn small secondary" id="wkAll" type="button">'+
+          (STATE_WORK.all?("Show top "+WORK_TOP+" only"):("Show all "+fmtNum(m.rows.length)+" units"))+'</button>'
+        : "")+
+      '<button class="btn small secondary" id="wkCopy" type="button">Copy the working</button>'+
+      '<span class="wk-note">Paste it into a spreadsheet or an email &mdash; every row, its inputs and the total.</span>'+
+    '</div>';
+
+  const all=$("#wkAll");
+  if(all) all.addEventListener("click", ()=>{ STATE_WORK.all=!STATE_WORK.all; renderWork(); });
+  $("#wkCopy").addEventListener("click", e=>copyWorking(m, label, e.currentTarget));
+}
+
+/* The whole ledger as tab-separated text: it pastes straight into Excel, which is
+   how this ends up in front of whoever asked the question. */
+function copyWorking(m, label, btn){
+  const rowsOut=[];
+  rowsOut.push([label, m.eq+" = "+fmtWork(m.total,m.fmt)]);
+  rowsOut.push([]);
+  rowsOut.push(["Unit","Description"].concat(m.inputs.map(i=>i.label),
+    [m.kind==="count"?"Counts":"Contributes","Share","Running"]));
+  m.rows.forEach(row=>{
+    const r=row.r;
+    rowsOut.push([r.unit||r.serial||"", r.description||""].concat(
+      m.inputs.map(i=>{ let v=null; try{ v=i.get(r); }catch(e){} return fmtWork(v,i.fmt); }),
+      [ m.kind==="ratio" ? fmtWork(row.den>0?row.v/row.den:null,m.fmt)
+                         : fmtWork(row.v, m.kind==="count"?"num":m.fmt),
+        row.share!=null ? row.share.toFixed(1)+"%" : "",
+        fmtWork(row.run, m.kind==="count"?"num":m.fmt) ]));
+  });
+  rowsOut.push([]);
+  rowsOut.push(["Total", fmtWork(m.total,m.fmt), fmtNum(m.inCount)+" units counted"]);
+  m.drops.forEach(g=>rowsOut.push(["Left out", fmtNum(g.n)+" units", g.why,
+    g.would!=null?("would have added "+fmtWork(g.would,m.fmt)):""]));
+  const text=rowsOut.map(r=>r.map(c=>String(c==null?"":c)).join("\t")).join("\n");
+  (async()=>{
+    let ok=false;
+    try{ if(navigator.clipboard&&navigator.clipboard.writeText){ await navigator.clipboard.writeText(text); ok=true; } }catch(e){}
+    if(!ok) ok=copyFallback(text);
+    if(!ok){ toast("Couldn't copy — select the table and press Ctrl+C"); return; }
+    toast("Copied the working for "+label);
+    if(btn){ btn.classList.add("done"); setTimeout(()=>btn.classList.remove("done"),900); }
+  })();
+}
+
+/* KPI-WORK-END */
+
 const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
 
 /* A tile with a matching entry in DRILLS becomes a real <button>, so it is
@@ -1122,10 +1706,16 @@ function renderTiles(){
     html += tile("Down right now", String(downNow.length),
       downNow.length?(dnNow.length+" on site · "+dsNow.length+" in shop"):"Nothing down on site",
       {meter:pctOf(downNow.length), meterCls:downNow.length?"warn":"light", alert:downNow.length>0});
-    // What the job is paying, this month, for units that cannot work today.
-    const burn=sum(downNow.map(r=>r.monthlyCost));
+    // What the job is still paying for units that cannot work today — which is
+    // only the ones billed a flat monthly rate. An hourly unit that is broken
+    // posts no hours and so bills nothing; including them made this tile 81%
+    // fiction ($49K of $61K).
+    const idleBilled=downNow.filter(r=>r.chargeRunsWhileIdle && r.monthlyCost!=null);
+    const burn=sum(idleBilled.map(r=>r.monthlyCost));
+    const downHourly=downNow.length-idleBilled.length;
     if(burn>0) html += tile("Spend on down units", fmtMoneyShort(burn)+"/mo",
-      "Charge-out still running on the "+downNow.length+" unit"+(downNow.length===1?"":"s")+" down now",
+      "Flat-rate charge still running on "+idleBilled.length+" of the "+downNow.length+
+      " down"+(downHourly?(" · "+downHourly+" hourly, billing nothing while idle"):""),
       {alert:true});
     html += tile("Downtime days", fmtNum(dd), "Last "+TREND_MONTHS+" months · "+tracked.length+" units with history"+staleNote("transfers"));
     if(avail!=null) html += tile("Fleet availability", avail.toFixed(1)+"%",
@@ -1154,8 +1744,21 @@ function renderTiles(){
 
   if(on.transfers && on.rates){
     const dc=sum(R.map(r=>r.downCost));
+    const priced=R.filter(r=>r.downCost!=null&&r.downCost>0);
+    const unpriced=R.filter(r=>!r.chargeRunsWhileIdle&&(r.downDays||0)>0);
     if(dc>0) html += tile("Cost while down", fmtMoneyShort(dc),
-      "Charge-out rate × downtime, last "+TREND_MONTHS+" months", {alert:true});
+      "Flat monthly rate × downtime on "+priced.length+" unit"+(priced.length===1?"":"s")+
+      (unpriced.length?(" · "+unpriced.length+" hourly excluded, they bill nothing while down"):"")+
+      staleNote("rates"), {alert:true});
+  }
+  if(on.utilization){
+    const u=R.filter(r=>r.utilAvg!=null);
+    if(u.length){
+      const avg=sum(u.map(r=>r.utilAvg))/u.length;
+      html += tile("Utilization", Math.round(avg)+"%",
+        "Weekly average from the utilization report · "+fmtNum(u.length)+" of "+fmtNum(n)+
+        " units tracked"+staleNote("utilization"), {ring:Math.min(100,avg)});
+    }
   }
   if(on.hours){
     const posting=R.filter(r=>r.hoursTotal!=null&&r.hoursTotal>0);
@@ -1237,6 +1840,7 @@ function applyDrill(id,{push=true}={}){
   STATE.rank=d.rank||null;
   STATE.sort=null;                       // a drill's ranking is the point of it
   STATE.page=1;
+  STATE_WORK.all=false;                  // a new KPI starts from its top contributors
   $("#fFocus").value=d.focus||"";
   renderTiles(); renderTable();
   if(push) syncUrl();
@@ -1253,7 +1857,7 @@ function clearDrill(){
 const DRILL_LABELS = {};
 function renderDrillBar(shown,total){
   const el=$("#drillBar"), id=STATE.drill, d=id?DRILLS[id]:null;
-  if(!d){ el.style.display="none"; el.innerHTML=""; return; }
+  if(!d){ el.style.display="none"; el.innerHTML=""; renderWork(); return; }
   const label=DRILL_LABELS[id]||id.replace(/-/g," ");
   let stats=[];
   try{ stats=d.stats?d.stats(scopeRows()):[]; }catch(e){ stats=[]; }
@@ -1268,6 +1872,7 @@ function renderDrillBar(shown,total){
     (stats.length?('<div class="dr-stats">'+stats.map(p=>
       '<div><span class="k">'+esc(p[0])+'</span>'+esc(p[1])+'</div>').join("")+'</div>'):"");
   $("#drillClear").addEventListener("click", clearDrill);
+  renderWork();
 }
 function rankWords(rank){
   if(!rank) return "by unit number";
@@ -1538,6 +2143,10 @@ function columns(){
   if(on.rental) cols.push(
     {key:"rentalMonthly", label:"Rental / mo", type:"money", grp:true},
     {key:"annivDate", label:"Billed through", type:"anniv"});
+  if(on.utilization){
+    cols.push({key:"utilAvg", label:"Utilization", type:"pct", grp:true});
+    cols.push({key:"utilLast", label:"Latest week", type:"pct"});
+  }
   if(on.hours){
     cols.push({key:"hoursTotal", label:"Hours "+TREND_MONTHS+"mo", type:"num", grp:true});
     cols.push({key:"hoursDays", label:"Days posting", type:"num"});
@@ -1657,6 +2266,7 @@ function viewRows(){
   else if(ff==="rented") v=v.filter(r=>r.isRented);
   else if(ff==="hasdown") v=v.filter(r=>(r.downDays||0)>0);
   else if(ff==="hours") v=v.filter(r=>r.hoursTotal!=null&&r.hoursTotal>0);
+  else if(ff==="util") v=v.filter(r=>r.utilAvg!=null);
   const s=STATE.sort;
   if(s&&s.key){
     const dir=s.dir==="desc"?-1:1;
@@ -1784,6 +2394,9 @@ function detReliability(r){
     kv("Damage "+TREND_MONTHS+"mo", r.damageCost==null?"":fmtMoney(r.damageCost)),
     kv("Damage incidents", r.damageIncidents==null?"":String(r.damageIncidents)),
     kv("Damage vs yr cost", r.damageShare==null?"":fmtPct(r.damageShare)),
+    kv("Utilization", r.utilAvg!=null?(Math.round(r.utilAvg)+"% avg over "+r.utilWeeks+" wk"):""),
+    kv("Latest week", r.utilLast!=null?(Math.round(r.utilLast)+"%"):""),
+    kv("On utilization report", r.utilReportStatus),
     kv("Hours "+TREND_MONTHS+"mo", r.hoursTotal!=null?fmtNum(r.hoursTotal):""),
     kv("Days posting", (r.hoursDays!=null&&r.daysOnSite!=null)
       ? (fmtNum(r.hoursDays)+" of "+fmtNum(r.daysOnSite)+" on site") : ""),
@@ -1951,6 +2564,8 @@ function exportCsv(){
   if(on.rental) cols.push(["Vendor","vendor"],["PO",r=>r.rn?r.rn.po:""],
     ["Rental monthly","rentalMonthly"],["Billed through","annivDate"],["Days to renewal","annivDays"],
     ["Contract days",r=>r.rn?r.rn.contractDays:""],["On rent since",r=>r.rn?r.rn.acquiredDate:""]);
+  if(on.utilization) cols.push(["Utilization %","utilAvg"],["Latest week %","utilLast"],
+    ["Weeks tracked","utilWeeks"],["Status on utilization report","utilReportStatus"]);
   if(on.hours) cols.push(["Hours "+TREND_MONTHS+"mo","hoursTotal"],
     ["Hours this month","hoursThisMonth"],["Days posting","hoursDays"],
     ["Days posting %","utilPct"],["Cost per hour worked","costPerHour"],

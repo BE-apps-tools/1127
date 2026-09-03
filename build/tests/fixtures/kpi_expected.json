@@ -369,6 +369,54 @@
      "serial": "S5"
     }
    }
+  },
+  "kpi_util_mini.xlsx": {
+   "report": {
+    "asOf": "2026-07-12",
+    "columns": [
+     "assetTrade",
+     "utilDescription",
+     "utilStatus"
+    ],
+    "file": "kpi_util_mini.xlsx",
+    "kind": "utilization",
+    "label": "Equipment utilization (weekly)",
+    "rows": 7,
+    "site": "",
+    "units": 3
+   },
+   "units": {
+    "U1": {
+     "assetTrade": "CIVIL",
+     "byPeriod": {
+      "2026-06-28": 0.45,
+      "2026-07-05": 0.825,
+      "2026-07-12": 1.15
+     },
+     "period": "week",
+     "periods": 3,
+     "utilStatus": "Working"
+    },
+    "U2": {
+     "byPeriod": {
+      "2026-06-28": 0.0,
+      "2026-07-12": 0.25
+     },
+     "period": "week",
+     "periods": 2,
+     "utilStatus": "Available"
+    },
+    "U3": {
+     "assetTrade": "INSTALL",
+     "byPeriod": {
+      "2026-06-28": 0.5,
+      "2026-07-05": 0.6
+     },
+     "period": "week",
+     "periods": 2,
+     "utilStatus": "Down - In Shop"
+    }
+   }
   }
  }
 }

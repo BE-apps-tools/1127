@@ -193,6 +193,31 @@ FIXTURES = [
          ["", "", ("n", "46146"), ("s", "1127"), "", ("s", "04523128"),
           ("n", "3"), ("n", "0"), ("n", "0")],
      ]),
+    # --- Equipment utilization: the only WIDE report. Week labels are dates in
+    # the header, each sitting in a merged cell so its value lands one column to
+    # the right — hence the blank spacer after every date. Values are 0..1
+    # ratios and can exceed 1, so nothing may clamp them.
+    ("kpi_util_mini.xlsx", "Utilization",
+     [],
+     ["Asset Trade", "Asset Unit Or Tag Number", "Asset Asset Description 01", "Status",
+      "46201", "", "46208", "", "46215", ""],
+     [
+         [("s", "CIVIL"), ("s", "U1"), ("s", "Excavator, tracked"), ("s", "Working"),
+          "", ("n", "0.45"), "", ("n", "0.825"), "", ("n", "1.15")],
+         # a blank trade, and a gap week -> the gap is simply absent, not zero
+         ["", ("s", "U2"), ("s", "Generator 20kW"), ("s", "Available"),
+          "", ("n", "0"), "", "", "", ("n", "0.25")],
+         # a unit listed twice: the halves merge instead of the last row winning
+         [("s", "INSTALL"), ("s", "U3"), ("s", "Dozer"), ("s", "Down - In Shop"),
+          "", ("n", "0.5"), "", "", "", ""],
+         [("s", "INSTALL"), ("s", "U3"), ("s", "Dozer"), ("s", "Down - In Shop"),
+          "", "", "", ("n", "0.6"), "", ""],
+         # every reading blank -> the unit says nothing and is dropped
+         [("s", "CIVIL"), ("s", "U8"), ("s", "Radio"), ("s", "Working"),
+          "", "", "", "", "", ""],
+         # no unit number at all -> skipped
+         ["", "", ("s", "Orphan"), ("s", "Working"), "", ("n", "0.9"), "", "", "", ""],
+     ]),
 ]
 
 

@@ -69,3 +69,9 @@ jobs:
       # the committed golden — the end-to-end guard for port divergence.
       - name: KPI import pipeline parity (kpi-core.js vs Python golden)
         run: node worker/tests/kpi_pipeline.test.mjs
+
+      # Every tile has to be able to show its own arithmetic, and that arithmetic
+      # has to reconcile to the tile — a KPI nobody can explain is a KPI nobody
+      # can defend.
+      - name: KPI derivations reconcile to the tiles (kpis.html)
+        run: node --test worker/tests/kpi_work.test.mjs

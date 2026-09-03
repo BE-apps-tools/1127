@@ -747,7 +747,7 @@ async function postAdmins(req, env, h){
  * different reports without clobbering the other. The spreadsheets are parsed in
  * the browser and never uploaded — only the extracted values arrive here.
  * Requires GH_TOKEN with Contents: Read+write. */
-const KPI_KINDS = ["rates", "rental", "transfers", "damage", "hours"];
+const KPI_KINDS = ["rates", "rental", "transfers", "damage", "hours", "utilization"];
 const KPI_KEY_RE = /^(SN:)?[\x20-\x7E]{1,60}$/;     // unit # or "SN:<serial>", printable ASCII
 const KPI_FIELD_RE = /^[A-Za-z][A-Za-z0-9]{0,30}$/;
 const KPI_MAX_UNITS = 20000;                        // a jobsite fleet is hundreds; this is a runaway guard
@@ -779,7 +779,7 @@ function kpiCleanRow(e, kind){
 /* A month -> number map, as the bucket families publish. Keys must be YYYY-MM
  * and values finite numbers; anything else in the object is dropped rather than
  * trusted, and an empty result is treated as no field at all. */
-const KPI_MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+const KPI_MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])(-(0[1-9]|[12]\d|3[01]))?$/;
 const KPI_MAX_BUCKETS = 240;                       // 20 years of months, far past any report
 function kpiCleanBuckets(v){
   if (!v || typeof v !== "object" || Array.isArray(v)) return null;
@@ -798,8 +798,10 @@ function kpiCleanBuckets(v){
 /* Keep only well-formed values: a number, a trimmed string, the `events`/`items`
  * array of a timeline or ledger, or a month->number bucket map. Anything else is
  * dropped rather than trusted. */
+/* Fields whose value is a date -> number map: the bucket families publish months,
+   the wide utilization report publishes weeks. */
 const KPI_BUCKET_FIELDS = new Set([
-  "hoursByMonth", "ownershipHoursByMonth", "operatingHoursByMonth"]);
+  "hoursByMonth", "ownershipHoursByMonth", "operatingHoursByMonth", "byPeriod"]);
 function kpiCleanBlock(rec, kind){
   const out = {};
   let n = 0;
