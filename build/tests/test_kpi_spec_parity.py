@@ -81,10 +81,26 @@ def test_modes_are_known():
     # events  = a status timeline
     # ledger  = cost lines, kept line by line
     # buckets = many lines per unit, summed into calendar months
+    # wide    = one row per unit, the periods along the row as date columns
     # Both ports switch on this, so an unknown mode would silently extract nothing.
     for ks in SPEC["kinds"]:
-        assert ks.get("mode") in ("record", "events", "ledger", "buckets"), \
+        assert ks.get("mode") in ("record", "events", "ledger", "buckets", "wide"), \
             (ks["kind"], ks.get("mode"))
+
+
+def test_wide_families_declare_their_period_layout():
+    for ks in SPEC["kinds"]:
+        if ks.get("mode") != "wide":
+            continue
+        assert isinstance(ks.get("wideValueOffset"), int), \
+            ks["kind"] + ": the value's offset from its date header must be declared"
+        assert ks.get("wideValueType") in ("num", "int"), \
+            ks["kind"] + ": a period reading has to be numeric"
+        for f in ks.get("wideKeepFields", []):
+            assert f in ks["fields"], (ks["kind"], f)
+        # Its signals cannot be date columns, which are found dynamically.
+        for sig in ks["signals"]:
+            assert sig in ks["fields"], (ks["kind"], sig)
 
 
 def test_bucket_families_declare_their_bucket_fields():

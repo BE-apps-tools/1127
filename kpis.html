@@ -444,6 +444,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
           <option value="rented">On vendor rental</option>
           <option value="hasdown">Had downtime (12 mo)</option>
           <option value="hours">Reporting hours</option>
+          <option value="util">Utilization tracked</option>
           <option value="nodata">No report data</option>
         </select>
         <button class="btn small secondary" id="exportCsv">Export CSV</button>
@@ -683,6 +684,20 @@ function damageByMonth(items, months){
   });
   return idx;
 }
+/* Average weekly utilization as the report states it: a 0..1 ratio per week,
+   which can exceed 1 in an overtime week, so nothing here clamps it. Weeks the
+   report left blank are unknown and excluded rather than counted as zero. */
+function utilAvgOf(ut){
+  if(!ut || !ut.byPeriod) return null;
+  const v=Object.keys(ut.byPeriod).map(k=>num(ut.byPeriod[k])).filter(x=>x!=null);
+  return v.length ? 100*sum(v)/v.length : null;
+}
+/* The newest week's reading, so a unit that has gone quiet is visible. */
+function utilLastOf(ut){
+  if(!ut || !ut.byPeriod) return null;
+  const ks=Object.keys(ut.byPeriod).sort();
+  return ks.length ? 100*num(ut.byPeriod[ks[ks.length-1]]) : null;
+}
 /* Posted hours over a window, from the month buckets the hours report publishes.
    Bucketed at import (see the note on the family in build/kpi_reports.py), so the
    window is honoured to the month, not the day — a rolling 12 months here means
@@ -752,6 +767,7 @@ function buildRows(){
   STATE.rows = STATE.assets.map(a=>{
     const k=kpiFor(a)||{};
     const tr=k.transfers||null, rt=k.rates||null, rn=k.rental||null, hr=k.hours||null;
+    const ut=k.utilization||null;
     const dm=k.damage||null;
     const st = tr ? timelineStats(tr.events, winFrom) : null;
     const dg = dm ? damageStats(dm.items, winFrom) : null;
@@ -761,7 +777,7 @@ function buildRows(){
     const dailyRate = monthly!=null ? monthly/DAYS_PER_MONTH : null;
     const annivDays = rn && rn.billedThroughDate ? daysUntil(rn.billedThroughDate) : null;
     return {
-      asset:a, kpi:k, tr, rt, rn, hr, dm, st, hs,
+      asset:a, kpi:k, tr, rt, rn, hr, dm, st, hs, ut,
       unit:String(a.unit||""), serial:String(a.serial||""),
       description:String(a.description||""), description2:String(a.description2||""),
       status:String(a.status||""), trade:String(a.trade||""), assigned:assignedOf(a),
@@ -769,6 +785,20 @@ function buildRows(){
       // "Hourly" / "Non Hourly" — the rate report is authoritative, the rental
       // report is the fallback for units it doesn't price.
       billingType: String((rt&&rt.billingType) || (rn&&rn.billingType) || ""),
+      // Does this unit's charge run whether or not it works?
+      //
+      // A NON-HOURLY unit is billed a flat monthly rate, so a day it spends
+      // broken still costs the job money.
+      //
+      // An HOURLY unit is billed per hour worked. Broken means no hours, which
+      // means no charge — its monthlyBillingRate is a reference figure at some
+      // assumed utilization, not a monthly bill. Proof from your own data: some
+      // hourly units bill 140% of that figure in a busy month and one billed
+      // 4% in a quiet one, so it is neither a cap nor an accrual.
+      //
+      // Anything the rate report does not label stays out of the money maths
+      // rather than being guessed at.
+      chargeRunsWhileIdle: String((rt&&rt.billingType)||"")==="Non Hourly",
       // downtime (rolling window)
       downDays: st?st.downDays:null,
       downEvents: st?st.downEvents:null,
@@ -797,10 +827,22 @@ function buildRows(){
       // whether a unit is worth keeping on the job
       damageShare: (dg && monthly!=null && monthly>0) ? 100*dg.total/(monthly*12) : null,
       // cross-report: what the job paid while the unit sat broken
-      downCost: (dailyRate!=null && st && st.downDays) ? dailyRate*st.downDays : null,
+      // Charged only where the charge does not depend on hours worked. Counting
+      // hourly units here invented $278K of the $318K this tile used to report:
+      // 20 hourly units at $360/day against 20 non-hourly at $56/day, for
+      // almost identical downtime.
+      downCost: (dailyRate!=null && st && st.downDays
+                 && String((rt&&rt.billingType)||"")==="Non Hourly")
+                ? dailyRate*st.downDays : null,
       // Posted hours, and what an hour of work actually cost: the charge-out the
       // job carried over the window divided by the hours it got for it. Only
       // meaningful where both reports cover the unit.
+      // Weekly utilization, straight off the report's own ratios. Averaged over
+      // the weeks it actually reported — a missing week is unknown, not zero.
+      utilAvg: utilAvgOf(ut),
+      utilWeeks: ut ? num(ut.periods) : null,
+      utilLast: utilLastOf(ut),
+      utilReportStatus: ut ? String(ut.utilStatus||"") : "",
       hoursTotal: hs ? hs.total : null,
       hoursThisMonth: hs ? hs.thisMonth : null,
       hoursPerMonth: hs ? hs.perMonth : null,
@@ -954,10 +996,13 @@ const DRILLS = {
               ["In shop (DS)", fmtNum(d.filter(r=>r.curStatus==="DS").length)],
               ["Longest down", d.length?fmtNum(Math.max(...d.map(r=>r.daysInState||0)))+" d":DASH]]; } },
   "spend-on-down-units": { focus:"downnow", rank:{key:"monthlyCost",dir:"desc"},
-    stats:R=>{ const d=R.filter(r=>r.isDown), b=sum(d.map(r=>r.monthlyCost));
-      return [["Charge-out / mo", fmtMoney(b)], ["Units down", fmtNum(d.length)],
-              ["Per day", fmtMoney(b/DAYS_PER_MONTH)],
-              ["Dearest down unit", d.length?fmtMoney(Math.max(...d.map(r=>r.monthlyCost||0))):DASH]]; } },
+    stats:R=>{ const d=R.filter(r=>r.isDown);
+      const f=d.filter(r=>r.chargeRunsWhileIdle&&r.monthlyCost!=null);
+      const b=sum(f.map(r=>r.monthlyCost));
+      return [["Flat-rate / mo", fmtMoney(b)], ["Units down", fmtNum(d.length)],
+              ["Still billing", fmtNum(f.length)],
+              ["Hourly, billing nothing", fmtNum(d.length-f.length)],
+              ["Per day", fmtMoney(b/DAYS_PER_MONTH)]]; } },
   "downtime-days": { focus:"hasdown", rank:{key:"downDays",dir:"desc"},
     stats:R=>{ const t=R.filter(r=>(r.downDays||0)>0);
       return [["Down days", fmtNum(sum(t.map(r=>r.downDays)))],
@@ -996,10 +1041,23 @@ const DRILLS = {
               ["Charge lines", fmtNum(sum(h.map(r=>r.damageLines)))]]; } },
   "cost-while-down": { focus:"downcost", rank:{key:"downCost",dir:"desc"},
     stats:R=>{ const t=R.filter(r=>r.downCost!=null&&r.downCost>0);
-      return [["Charge-out while down", fmtMoney(sum(t.map(r=>r.downCost)))],
-              ["Units", fmtNum(t.length)],
+      const ex=R.filter(r=>!r.chargeRunsWhileIdle&&(r.downDays||0)>0);
+      return [["Flat-rate cost while down", fmtMoney(sum(t.map(r=>r.downCost)))],
+              ["Units priced", fmtNum(t.length)],
               ["Down days behind it", fmtNum(sum(t.map(r=>r.downDays)))],
-              ["Worst unit", t.length?fmtMoney(Math.max(...t.map(r=>r.downCost))):DASH]]; } },
+              ["Worst unit", t.length?fmtMoney(Math.max(...t.map(r=>r.downCost))):DASH],
+              ["Hourly units excluded", fmtNum(ex.length)],
+              ["Their down days", fmtNum(sum(ex.map(r=>r.downDays)))]]; } },
+  "utilization": { focus:"util", rank:{key:"utilAvg",dir:"asc"},
+    stats:R=>{ const u=R.filter(r=>r.utilAvg!=null);
+      const a=u.length?sum(u.map(r=>r.utilAvg))/u.length:null;
+      const idle=u.filter(r=>r.utilAvg<25).length;
+      return [["Weekly average", a!=null?(Math.round(a)+"%"):DASH],
+              ["Units tracked", fmtNum(u.length)],
+              ["Under 25%", fmtNum(idle)],
+              ["Quietest", u.length?(Math.round(Math.min(...u.map(r=>r.utilAvg)))+"%"):DASH],
+              ["Busiest", u.length?(Math.round(Math.max(...u.map(r=>r.utilAvg)))+"%"):DASH],
+              ["Weeks reported", u.length?fmtNum(Math.max(...u.map(r=>r.utilWeeks||0))):DASH]]; } },
   "hours-posted": { focus:"hours", rank:{key:"hoursTotal",dir:"desc"},
     stats:R=>{ const h=R.filter(r=>r.hoursTotal!=null&&r.hoursTotal>0);
       const t=sum(h.map(r=>r.hoursTotal));
@@ -1122,10 +1180,16 @@ function renderTiles(){
     html += tile("Down right now", String(downNow.length),
       downNow.length?(dnNow.length+" on site · "+dsNow.length+" in shop"):"Nothing down on site",
       {meter:pctOf(downNow.length), meterCls:downNow.length?"warn":"light", alert:downNow.length>0});
-    // What the job is paying, this month, for units that cannot work today.
-    const burn=sum(downNow.map(r=>r.monthlyCost));
+    // What the job is still paying for units that cannot work today — which is
+    // only the ones billed a flat monthly rate. An hourly unit that is broken
+    // posts no hours and so bills nothing; including them made this tile 81%
+    // fiction ($49K of $61K).
+    const idleBilled=downNow.filter(r=>r.chargeRunsWhileIdle && r.monthlyCost!=null);
+    const burn=sum(idleBilled.map(r=>r.monthlyCost));
+    const downHourly=downNow.length-idleBilled.length;
     if(burn>0) html += tile("Spend on down units", fmtMoneyShort(burn)+"/mo",
-      "Charge-out still running on the "+downNow.length+" unit"+(downNow.length===1?"":"s")+" down now",
+      "Flat-rate charge still running on "+idleBilled.length+" of the "+downNow.length+
+      " down"+(downHourly?(" · "+downHourly+" hourly, billing nothing while idle"):""),
       {alert:true});
     html += tile("Downtime days", fmtNum(dd), "Last "+TREND_MONTHS+" months · "+tracked.length+" units with history"+staleNote("transfers"));
     if(avail!=null) html += tile("Fleet availability", avail.toFixed(1)+"%",
@@ -1154,8 +1218,21 @@ function renderTiles(){
 
   if(on.transfers && on.rates){
     const dc=sum(R.map(r=>r.downCost));
+    const priced=R.filter(r=>r.downCost!=null&&r.downCost>0);
+    const unpriced=R.filter(r=>!r.chargeRunsWhileIdle&&(r.downDays||0)>0);
     if(dc>0) html += tile("Cost while down", fmtMoneyShort(dc),
-      "Charge-out rate × downtime, last "+TREND_MONTHS+" months", {alert:true});
+      "Flat monthly rate × downtime on "+priced.length+" unit"+(priced.length===1?"":"s")+
+      (unpriced.length?(" · "+unpriced.length+" hourly excluded, they bill nothing while down"):"")+
+      staleNote("rates"), {alert:true});
+  }
+  if(on.utilization){
+    const u=R.filter(r=>r.utilAvg!=null);
+    if(u.length){
+      const avg=sum(u.map(r=>r.utilAvg))/u.length;
+      html += tile("Utilization", Math.round(avg)+"%",
+        "Weekly average from the utilization report · "+fmtNum(u.length)+" of "+fmtNum(n)+
+        " units tracked"+staleNote("utilization"), {ring:Math.min(100,avg)});
+    }
   }
   if(on.hours){
     const posting=R.filter(r=>r.hoursTotal!=null&&r.hoursTotal>0);
@@ -1538,6 +1615,10 @@ function columns(){
   if(on.rental) cols.push(
     {key:"rentalMonthly", label:"Rental / mo", type:"money", grp:true},
     {key:"annivDate", label:"Billed through", type:"anniv"});
+  if(on.utilization){
+    cols.push({key:"utilAvg", label:"Utilization", type:"pct", grp:true});
+    cols.push({key:"utilLast", label:"Latest week", type:"pct"});
+  }
   if(on.hours){
     cols.push({key:"hoursTotal", label:"Hours "+TREND_MONTHS+"mo", type:"num", grp:true});
     cols.push({key:"hoursDays", label:"Days posting", type:"num"});
@@ -1657,6 +1738,7 @@ function viewRows(){
   else if(ff==="rented") v=v.filter(r=>r.isRented);
   else if(ff==="hasdown") v=v.filter(r=>(r.downDays||0)>0);
   else if(ff==="hours") v=v.filter(r=>r.hoursTotal!=null&&r.hoursTotal>0);
+  else if(ff==="util") v=v.filter(r=>r.utilAvg!=null);
   const s=STATE.sort;
   if(s&&s.key){
     const dir=s.dir==="desc"?-1:1;
@@ -1784,6 +1866,9 @@ function detReliability(r){
     kv("Damage "+TREND_MONTHS+"mo", r.damageCost==null?"":fmtMoney(r.damageCost)),
     kv("Damage incidents", r.damageIncidents==null?"":String(r.damageIncidents)),
     kv("Damage vs yr cost", r.damageShare==null?"":fmtPct(r.damageShare)),
+    kv("Utilization", r.utilAvg!=null?(Math.round(r.utilAvg)+"% avg over "+r.utilWeeks+" wk"):""),
+    kv("Latest week", r.utilLast!=null?(Math.round(r.utilLast)+"%"):""),
+    kv("On utilization report", r.utilReportStatus),
     kv("Hours "+TREND_MONTHS+"mo", r.hoursTotal!=null?fmtNum(r.hoursTotal):""),
     kv("Days posting", (r.hoursDays!=null&&r.daysOnSite!=null)
       ? (fmtNum(r.hoursDays)+" of "+fmtNum(r.daysOnSite)+" on site") : ""),
@@ -1951,6 +2036,8 @@ function exportCsv(){
   if(on.rental) cols.push(["Vendor","vendor"],["PO",r=>r.rn?r.rn.po:""],
     ["Rental monthly","rentalMonthly"],["Billed through","annivDate"],["Days to renewal","annivDays"],
     ["Contract days",r=>r.rn?r.rn.contractDays:""],["On rent since",r=>r.rn?r.rn.acquiredDate:""]);
+  if(on.utilization) cols.push(["Utilization %","utilAvg"],["Latest week %","utilLast"],
+    ["Weeks tracked","utilWeeks"],["Status on utilization report","utilReportStatus"]);
   if(on.hours) cols.push(["Hours "+TREND_MONTHS+"mo","hoursTotal"],
     ["Hours this month","hoursThisMonth"],["Days posting","hoursDays"],
     ["Days posting %","utilPct"],["Cost per hour worked","costPerHour"],

@@ -19,6 +19,8 @@ Four report families feed the Asset KPIs page on top of the Equipment Master:
                      as a share of what the unit costs to run.
   * ``hours``        posted equipment hours by day and cost code, summed into
                      calendar months (EquipmentDetailGrid).
+  * ``utilization``  weekly utilization ratio per unit, the weeks arriving as
+                     date columns across the row (Equipment_Utilization).
 
 A report is recognised by its **headers**, not its filename: it needs a unit (or
 serial) column plus at least one of the family's signal columns, and the header
@@ -48,7 +50,8 @@ from .xlsx_read import norm_header, sheet_rows
 # the Equipment Master; serial is the fallback for exports that carry only a
 # serial/VIN.
 UNIT_ALIASES = ["Unit Number", "Unit #", "Unit", "Unit No", "Unit Nbr",
-                "Equipment Number", "Equipment #", "Equipment", "Equipment Code", "Equip Number",
+                "Equipment Number", "Equipment #", "Equipment", "Equipment Code",
+    "Asset Unit Or Tag Number", "Unit Or Tag Number", "Equip Number",
                 "Equip #", "Asset Number", "Asset #"]
 SERIAL_ALIASES = ["Serial Number", "Serial #", "Serial", "Serial No", "VIN"]
 
@@ -286,6 +289,32 @@ SPEC = {
             # names, the repo is public, and it drives no KPI — the same call made
             # for the damage report's Transaction Originator.
         },
+        {
+            # Real export: Equipment_Utilization — the only WIDE report. One row
+            # per unit; the week columns are dates in the header, and each value
+            # is that week's utilization as a 0..1 ratio (values above 1 happen,
+            # so it is not a capped percentage). The week label sits in a merged
+            # cell and its value lands in the NEXT column, which is what
+            # `wideValueOffset` is for.
+            "kind": "utilization",
+            "label": "Equipment utilization (weekly)",
+            "mode": "wide",
+            "hints": ["utilization", "utilisation", "equipment utilization"],
+            "signals": ["utilStatus", "assetTrade", "utilDescription"],
+            "fields": {
+                "utilStatus": {"type": "str", "aliases": ["Status", "Asset Status"]},
+                "assetTrade": {"type": "str", "aliases": [
+                    "Asset Trade", "Trade", "Asset Trade Code"]},
+                "utilDescription": {"type": "str", "aliases": [
+                    "Asset Asset Description 01", "Asset Description 01",
+                    "Asset Description"]},
+            },
+            # Every header cell that parses as a date becomes a period column.
+            "wideValueOffset": 1,
+            "wideValueType": "num",
+            "widePeriod": "week",
+            "wideKeepFields": ["utilStatus", "assetTrade"],
+        },
     ],
 }
 
@@ -455,6 +484,21 @@ def find_header(rows, scan=HEADER_SCAN):
     return best
 
 
+def wide_periods(header, offset=1):
+    """[(value_column, ISO date)] for every header cell that parses as a date.
+
+    The utilization export names each period with a date in the header and puts
+    the value `offset` columns to the right, because the label lives in a merged
+    cell spanning both.
+    """
+    out = []
+    for i, h in enumerate(header):
+        iso = coerce_date(h)
+        if iso:
+            out.append((i + offset, iso))
+    return out
+
+
 def map_headers(header, kind):
     """{unit, serial, cols:{target: index}} for one kind, matched on the
     normalized lower-cased header (so 'Unit\\nNumber' and 'unit number' agree).
@@ -490,6 +534,13 @@ def detect_kind(header, filename=""):
         if m["unit"] is None and m["serial"] is None:
             continue
         hits = sum(1 for s in ks["signals"] if s in m["cols"])
+        # A wide family is only itself if the header actually carries period
+        # columns; without them it is some other report that happens to share a
+        # label or two.
+        if ks.get("mode") == "wide":
+            if len(wide_periods(header, ks.get("wideValueOffset", 1))) < 2:
+                continue
+            hits += 1                       # the period columns are a signal too
         if hits < min(floor, len(ks["signals"])):
             continue
         score = hits * 10 + (3 if any(h in base for h in ks["hints"]) else 0)
@@ -584,6 +635,11 @@ def extract(rows, kind, filename=""):
     events_mode = mode == "events"
     ledger_mode = mode == "ledger"
     buckets_mode = mode == "buckets"
+    wide_mode = mode == "wide"
+    periods = wide_periods(header, ks.get("wideValueOffset", 1)) if wide_mode else []
+    if wide_mode and not periods:
+        raise ValueError("No period columns found in the header — "
+                         "this report names each period with a date")
     bf_values = set((ks.get("backfillField") or {}).get("values", []))
     as_of_field = ks.get("asOfField")
     units, dates, row_count = {}, [], 0
@@ -604,7 +660,7 @@ def extract(rows, kind, filename=""):
             rec[target] = val
             if target == as_of_field:
                 dates.append(val)
-        if not rec:
+        if not rec and not wide_mode:
             continue
         row_count += 1
         blk = units.setdefault(key, {})
@@ -627,6 +683,21 @@ def extract(rows, kind, filename=""):
             if not rec.get(ks["lineDateField"]) or rec.get(ks["lineAmountField"]) is None:
                 continue
             blk.setdefault("items", []).append(rec)
+        elif wide_mode:
+            # One row per unit; the measures are along the row, one per period.
+            for f in ks.get("wideKeepFields", []):
+                if rec.get(f):
+                    blk[f] = rec[f]
+            per = {}
+            for ci, iso in periods:
+                v = _COERCE[ks.get("wideValueType", "num")](cell(ci))
+                if v is None or v == "":
+                    continue
+                per[iso] = v
+            if per:
+                # Merge rather than replace: a unit listed twice keeps both
+                # halves of its history instead of only the last row's.
+                blk.setdefault("byPeriod", {}).update(per)
         elif buckets_mode:
             # Summed into calendar-month buckets as the rows are read — see the
             # note on the family for why this one pre-sums. An undated line has
@@ -674,6 +745,18 @@ def extract(rows, kind, filename=""):
             items.sort(key=lambda i: i[ks["lineDateField"]])   # oldest first
             total += len(items)
         row_count = total                              # charge lines kept, not rows read
+    elif wide_mode:
+        total = 0
+        for key, blk in list(units.items()):
+            per = blk.get("byPeriod") or {}
+            if not per:
+                del units[key]                     # a row with no readings says nothing
+                continue
+            blk["byPeriod"] = {k2: per[k2] for k2 in sorted(per)}
+            blk["periods"] = len(per)
+            blk["period"] = ks.get("widePeriod", "period")
+            total += len(per)
+        row_count = total                          # readings kept, not rows read
     elif buckets_mode:
         total = 0
         for key, blk in list(units.items()):
@@ -709,6 +792,10 @@ def extract(rows, kind, filename=""):
     # (`asOfField`) — these exports also carry future rate-end and billed-through
     # dates, and a report with no such field simply has no as-of.
     today = date.today().isoformat()
+    # A wide report has no date field per row — its dates are the period columns,
+    # so the newest period that has already happened is when the data was true.
+    if wide_mode:
+        dates.extend(iso for _, iso in periods)
     past = [d for d in dates if d <= today]
     report = {
         "kind": kind, "label": ks["label"], "file": os.path.basename(filename or ""),
