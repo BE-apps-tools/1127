@@ -51,6 +51,9 @@ const reportFor = kind => (STATE.kpis.reports||[]).find(r=>r.kind===kind) || nul
 const staleness = rep => rep ? { age: 0, level: "" } : { age: null, level: "" };
 const ageText = age => age === 0 ? "refreshed today" : (age == null ? "age unknown" : age + " days old");
 const askOn = () => false;
+// Not renderWork — the KPI-WORK block declares it, and a second const of the
+// same name is a SyntaxError that kills the whole module.
+const wbase = () => "";
 const $ = () => null;
 const toast = () => {};
 const copyFallback = () => true;

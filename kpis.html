@@ -1859,9 +1859,31 @@ const ASK_IMPL = {
 /* KPI-ASK-TOOLS-END */
 
 const ASK_MAX_STEPS = 8;                    // tool round-trips before we stop
-const ASK_STATE = { msgs:[], busy:false };
+// `enabled` is three-state: null until the Worker has been asked, then true or
+// false. The panel only shows on a definite true.
+const ASK_STATE = { msgs:[], busy:false, enabled:null };
 
-function askOn(){ return !!nsGet("bac_admin_key"); }
+/* Two things have to be true before the panel is worth showing, and the page can
+   only see one of them by itself: you have to be signed in as an admin (the
+   route is gated on it), and the Worker has to actually hold an ANTHROPIC_API_KEY.
+   Without the second check an admin gets an Explain box that accepts a question
+   and then answers "not configured" — a dead control is worse than no control,
+   so ask /health once and stay hidden unless it says yes. */
+function askOn(){ return !!nsGet("bac_admin_key") && ASK_STATE.enabled===true; }
+async function askProbe(){
+  if(!nsGet("bac_admin_key")){ ASK_STATE.enabled=false; return; }
+  try{
+    const r=await fetch(wbase()+"/health");
+    const j=r.ok ? await r.json() : null;
+    ASK_STATE.enabled = !!(j && j.hasAnthropicKey);
+  }catch(e){
+    ASK_STATE.enabled=false;      // unreachable Worker: stay hidden, don't guess
+  }
+  renderAskPanel();
+  // The working panel's "Explain in plain English" button is drawn from askOn(),
+  // so it has to be redrawn once the answer is in.
+  if(STATE.drill) renderWork();
+}
 
 /* Minimal markdown: paragraphs, "- " lists and **bold**. The prompt asks for
    nothing else, and a full renderer would be a bigger attack surface than the
@@ -3201,6 +3223,7 @@ function bind(){
 }
 async function init(){
   bind();
+  askProbe();          // not awaited: the page must not wait on the Worker to render
   await Promise.all([loadMeta(), loadSiteIndex(), loadKpis()]);
   const u=readUrl();
   if(u.q) $("#q").value=u.q;
