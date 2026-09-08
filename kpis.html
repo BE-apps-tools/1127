@@ -292,6 +292,25 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
   .toolbar select{width:auto;max-width:100%;}
   input:focus,select:focus,textarea:focus{outline:none;border-color:var(--energy-blue);box-shadow:0 0 0 2px var(--light-blue);}
 
+  /* Column picker. Twenty-two columns cannot fit a laptop at a readable size, so
+     the answer is choosing which ones you want rather than a wider card. */
+  .colpick{position:relative;display:inline-block;}
+  .colpick-menu{position:absolute;z-index:40;top:calc(100% + 6px);right:0;width:262px;
+    background:var(--white);border:1px solid var(--light-gray);border-radius:var(--r-sm);
+    box-shadow:var(--shadow-lift);padding:12px 14px;max-height:70vh;overflow-y:auto;}
+  .colpick-menu .cp-h{font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;
+    font-size:8.5px;letter-spacing:0.06em;color:var(--medium-gray);margin:11px 0 5px;}
+  .colpick-menu .cp-h:first-child{margin-top:0;}
+  .colpick-menu label{display:flex;align-items:center;gap:8px;font-size:12.5px;
+    color:var(--dark-gray);padding:3px 0;cursor:pointer;}
+  .colpick-menu input[type=checkbox]{flex:0 0 auto;width:14px;height:14px;accent-color:var(--dark-blue);cursor:pointer;}
+  .colpick-menu label.locked{color:var(--medium-gray);cursor:default;}
+  .colpick-menu .cp-foot{display:flex;gap:7px;flex-wrap:wrap;
+    margin-top:12px;padding-top:11px;border-top:1px solid var(--bright-gray);}
+  .colpick-menu .cp-note{font-size:11px;line-height:1.45;color:var(--medium-gray);margin-top:9px;}
+  /* Full width: the 1400px cap leaves real estate unused on a big monitor, and
+     that space is exactly what a wide table needs. */
+  body.wide main{max-width:none;}
   .table-scroll{overflow-x:auto;min-width:0;-webkit-overflow-scrolling:touch;border:1px solid var(--light-gray);
     border-radius:var(--r);background:var(--white);box-shadow:var(--shadow);}
   table{width:100%;border-collapse:collapse;font-size:13px;}
@@ -553,6 +572,13 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
           <option value="util">Utilization tracked</option>
           <option value="nodata">No report data</option>
         </select>
+        <button class="btn small secondary" id="clearFilters" type="button"
+          title="Reset the search, every dropdown and any tile drill-down">Clear filters</button>
+        <div class="colpick">
+          <button class="btn small secondary" id="colsBtn" type="button"
+            aria-expanded="false" aria-controls="colsMenu">Columns</button>
+          <div class="colpick-menu" id="colsMenu" style="display:none;"></div>
+        </div>
         <button class="btn small secondary" id="exportCsv">Export CSV</button>
       </div>
 
@@ -573,8 +599,9 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
         <button class="btn small secondary" id="pgLast" title="Last page" aria-label="Last page">&raquo;</button>
         <label class="pgsize" for="pgSize">Per page</label>
         <select id="pgSize" aria-label="Rows per page">
+          <option value="30" selected>30</option>
           <option value="50">50</option>
-          <option value="100" selected>100</option>
+          <option value="100">100</option>
           <option value="250">250</option>
           <option value="500">500</option>
         </select>
@@ -1859,9 +1886,31 @@ const ASK_IMPL = {
 /* KPI-ASK-TOOLS-END */
 
 const ASK_MAX_STEPS = 8;                    // tool round-trips before we stop
-const ASK_STATE = { msgs:[], busy:false };
+// `enabled` is three-state: null until the Worker has been asked, then true or
+// false. The panel only shows on a definite true.
+const ASK_STATE = { msgs:[], busy:false, enabled:null };
 
-function askOn(){ return !!nsGet("bac_admin_key"); }
+/* Two things have to be true before the panel is worth showing, and the page can
+   only see one of them by itself: you have to be signed in as an admin (the
+   route is gated on it), and the Worker has to actually hold an ANTHROPIC_API_KEY.
+   Without the second check an admin gets an Explain box that accepts a question
+   and then answers "not configured" — a dead control is worse than no control,
+   so ask /health once and stay hidden unless it says yes. */
+function askOn(){ return !!nsGet("bac_admin_key") && ASK_STATE.enabled===true; }
+async function askProbe(){
+  if(!nsGet("bac_admin_key")){ ASK_STATE.enabled=false; return; }
+  try{
+    const r=await fetch(wbase()+"/health");
+    const j=r.ok ? await r.json() : null;
+    ASK_STATE.enabled = !!(j && j.hasAnthropicKey);
+  }catch(e){
+    ASK_STATE.enabled=false;      // unreachable Worker: stay hidden, don't guess
+  }
+  renderAskPanel();
+  // The working panel's "Explain in plain English" button is drawn from askOn(),
+  // so it has to be redrawn once the answer is in.
+  if(STATE.drill) renderWork();
+}
 
 /* Minimal markdown: paragraphs, "- " lists and **bold**. The prompt asks for
    nothing else, and a full renderer would be a bigger attack surface than the
@@ -2237,6 +2286,26 @@ function clearScope(){
   STATE.page=1;
   renderTiles(); renderTrends(); renderTable(); syncUrl();
 }
+/* Everything the toolbar can narrow, plus the focus and any tile drill-down —
+   one button back to the whole site. "Show all units" in the scope bar only
+   appears once a filter is set, which is no use when you cannot remember what
+   you set or which of six controls is holding the view down. */
+const ALL_FILTERS = ["#q","#fTrade","#fStatus","#fBilling","#fClass","#fFocus"];
+function anyFilterActive(){
+  return !!STATE.drill || ALL_FILTERS.some(sel=>{ const el=$(sel); return el && el.value; });
+}
+function clearAllFilters(){
+  ALL_FILTERS.forEach(sel=>{ const el=$(sel); if(el) el.value=""; });
+  STATE.drill=null; STATE.rank=null; STATE.sort=null; STATE.page=1;
+  renderTiles(); renderTrends(); renderTable(); syncUrl();
+  const t=$("#tiles"); if(t) t.scrollIntoView({block:"start", behavior:"smooth"});
+}
+/* Disabled when there is nothing to clear, so the button also reports whether
+   anything is narrowing the view. */
+function syncClearBtn(){
+  const b=$("#clearFilters");
+  if(b) b.disabled = !anyFilterActive();
+}
 
 /* ---------- tile drill-down ----------
    Clicking a tile answers "which units is this?" without leaving the page: the
@@ -2528,41 +2597,147 @@ function bindChartHover(){
 /* ---------- columns ---------- */
 /* Built from the report families present, so a site with no rental report shows
    no empty rental columns rather than a wall of dashes. */
-function columns(){
+/* Every column the loaded reports can fill, tagged with the report family it came
+   from so the picker can group them. `fam:"core"` is the Equipment Master. */
+function allColumns(){
   const on=activeKinds();
   const cols=[
-    {key:"unit", label:"Unit #", cls:"id", type:"str"},
-    {key:"description", label:"Description", cls:"desc", type:"str"},
-    {key:"status", label:"Status", type:"status"},
-    {key:"trade", label:"Trade", type:"trade"},
+    {key:"unit", label:"Unit #", cls:"id", type:"str", fam:"core", lock:true},
+    {key:"description", label:"Description", cls:"desc", type:"str", fam:"core"},
+    {key:"status", label:"Status", type:"status", fam:"core"},
+    {key:"trade", label:"Trade", type:"trade", fam:"core"},
   ];
-  if(on.transfers) cols.push({key:"eqClass", label:"Class", type:"str"});
-  cols.push({key:"daysOnSite", label:"Days on site", type:"num"});
+  if(on.transfers) cols.push({key:"eqClass", label:"Class", type:"str", fam:"transfers"});
+  cols.push({key:"daysOnSite", label:"Days on site", type:"num", fam:"core"});
   if(on.transfers) cols.push(
-    {key:"downDays", label:"Down days "+TREND_MONTHS+"mo", type:"num", grp:true},
-    {key:"downEvents", label:"Breakdowns", type:"num"},
-    {key:"availPct", label:"Avail %", type:"pct"});
+    {key:"downDays", label:"Down days "+TREND_MONTHS+"mo", type:"num", grp:true, fam:"transfers"},
+    {key:"downEvents", label:"Breakdowns", type:"num", fam:"transfers"},
+    {key:"availPct", label:"Avail %", type:"pct", fam:"transfers"});
   if(on.rates) cols.push(
-    {key:"monthlyCost", label:"Cost / mo", type:"money", grp:true},
-    {key:"yearlyCost", label:"Cost / yr", type:"money"});
-  if(on.transfers && on.rates) cols.push({key:"downCost", label:"Cost while down", type:"money"});
+    {key:"monthlyCost", label:"Cost / mo", type:"money", grp:true, fam:"rates"},
+    {key:"yearlyCost", label:"Cost / yr", type:"money", fam:"rates"});
+  if(on.transfers && on.rates) cols.push({key:"downCost", label:"Cost while down", type:"money", fam:"rates"});
   if(on.damage) cols.push(
-    {key:"damageCost", label:"Damage "+TREND_MONTHS+"mo", type:"money", grp:true},
-    {key:"damageIncidents", label:"Incidents", type:"num"});
+    {key:"damageCost", label:"Damage "+TREND_MONTHS+"mo", type:"money", grp:true, fam:"damage"},
+    {key:"damageIncidents", label:"Incidents", type:"num", fam:"damage"});
   if(on.rental) cols.push(
-    {key:"rentalMonthly", label:"Rental / mo", type:"money", grp:true},
-    {key:"annivDate", label:"Billed through", type:"anniv"});
+    {key:"rentalMonthly", label:"Rental / mo", type:"money", grp:true, fam:"rental"},
+    {key:"annivDate", label:"Billed through", type:"anniv", fam:"rental"});
   if(on.utilization){
-    cols.push({key:"utilAvg", label:"Utilization", type:"pct", grp:true});
-    cols.push({key:"utilLast", label:"Latest week", type:"pct"});
+    cols.push({key:"utilAvg", label:"Utilization", type:"pct", grp:true, fam:"utilization"});
+    cols.push({key:"utilLast", label:"Latest week", type:"pct", fam:"utilization"});
   }
   if(on.hours){
-    cols.push({key:"hoursTotal", label:"Hours "+TREND_MONTHS+"mo", type:"num", grp:true});
-    cols.push({key:"hoursDays", label:"Days posting", type:"num"});
-    cols.push({key:"utilPct", label:"Days posting %", type:"pct"});
-    if(on.rates) cols.push({key:"costPerHour", label:"Cost / hr worked", type:"money"});
+    cols.push({key:"hoursTotal", label:"Hours "+TREND_MONTHS+"mo", type:"num", grp:true, fam:"hours"});
+    cols.push({key:"hoursDays", label:"Days posting", type:"num", fam:"hours"});
+    cols.push({key:"utilPct", label:"Days posting %", type:"pct", fam:"hours"});
+    if(on.rates) cols.push({key:"costPerHour", label:"Cost / hr worked", type:"money", fam:"hours"});
   }
   return cols;
+}
+/* What the table actually draws. Hiding a column never hides its data: the row
+   detail still shows every field, and Export CSV has its own full list. */
+function columns(){
+  const hid=hiddenCols();
+  return allColumns().filter(c=>c.lock || !hid.has(c.key));
+}
+/* Insertion order here is the order the picker lists the groups in. It is not the
+   column order in the table — `daysOnSite` sits between two transfer columns, so
+   grouping by "the family changed" would print a heading twice. */
+const FAM_LABEL = { core:"Equipment Master", transfers:"Downtime", rates:"Cost",
+  damage:"Damage", rental:"Rental", utilization:"Utilization", hours:"Posted hours" };
+
+/* Which columns are switched off, remembered per browser. */
+function hiddenCols(){
+  try{
+    const raw=nsGet("bac_kpi_cols_off");
+    const a=raw?JSON.parse(raw):[];
+    return new Set(Array.isArray(a)?a:[]);
+  }catch(e){ return new Set(); }
+}
+function setHiddenCols(set){
+  try{ nsSet("bac_kpi_cols_off", JSON.stringify([...set])); }catch(e){}
+}
+function wideOn(){ return nsGet("bac_kpi_wide")==="1"; }
+function setWide(on){
+  try{ on ? nsSet("bac_kpi_wide","1") : nsDel("bac_kpi_wide"); }catch(e){}
+  document.body.classList.toggle("wide", !!on);
+}
+
+/* The picker, grouped by the report each column comes from — so "I don't care
+   about rental" is one glance and two clicks, not a hunt down a flat list. */
+function renderColsMenu(){
+  const el=$("#colsMenu");
+  if(!el) return;
+  const cols=allColumns(), hid=hiddenCols();
+  let html="";
+  Object.keys(FAM_LABEL).forEach(fam=>{
+    const group=cols.filter(c=>c.fam===fam);
+    if(!group.length) return;                  // that report is not loaded
+    html+='<div class="cp-h">'+esc(FAM_LABEL[fam])+'</div>';
+    group.forEach(c=>{
+      const on=c.lock || !hid.has(c.key);
+      html+='<label'+(c.lock?' class="locked"':'')+'>'+
+        '<input type="checkbox" data-col="'+esc(c.key)+'"'+(on?" checked":"")+(c.lock?" disabled":"")+'>'+
+        '<span>'+esc(c.label)+(c.lock?" (always shown)":"")+'</span></label>';
+    });
+  });
+  const shown=columns().length;
+  html+='<div class="cp-foot">'+
+      '<button class="btn small secondary" data-cols="all" type="button">Show all</button>'+
+      '<button class="btn small secondary" data-cols="fit" type="button">Fit to screen</button>'+
+    '</div>'+
+    '<label style="margin-top:10px;"><input type="checkbox" id="colsWide"'+(wideOn()?" checked":"")+'>'+
+      '<span>Use the full window width</span></label>'+
+    '<div class="cp-note">'+shown+' of '+cols.length+' columns shown. Hiding a column never '+
+      'hides its data &mdash; open a row for every field, and Export CSV always writes them all.</div>';
+  el.innerHTML=html;
+}
+/* Turn columns off from the right until the table stops needing a scrollbar.
+   Measured, not guessed: the widths depend on the data in view. */
+function fitColumns(){
+  const el=$("#tableScroll");
+  if(!el) return;
+  const hid=hiddenCols();
+  const droppable=allColumns().filter(c=>!c.lock).map(c=>c.key).reverse();
+  for(const key of droppable){
+    if(el.scrollWidth<=el.clientWidth+1) break;
+    if(hid.has(key)) continue;
+    hid.add(key);
+    setHiddenCols(hid);
+    renderTable();
+  }
+  renderColsMenu();
+}
+function colsMenuOpen(open){
+  const m=$("#colsMenu"), b=$("#colsBtn");
+  if(!m||!b) return;
+  if(open) renderColsMenu();
+  m.style.display=open?"block":"none";
+  b.setAttribute("aria-expanded", open?"true":"false");
+}
+function bindCols(){
+  const b=$("#colsBtn"), m=$("#colsMenu");
+  if(!b||!m) return;
+  b.addEventListener("click", e=>{ e.stopPropagation(); colsMenuOpen(m.style.display==="none"); });
+  m.addEventListener("click", e=>e.stopPropagation());
+  document.addEventListener("click", ()=>colsMenuOpen(false));
+  document.addEventListener("keydown", e=>{ if(e.key==="Escape") colsMenuOpen(false); });
+  m.addEventListener("change", e=>{
+    const t=e.target;
+    if(t.id==="colsWide"){ setWide(t.checked); syncDetailWidth(); renderTable(); renderColsMenu(); return; }
+    const key=t.dataset && t.dataset.col;
+    if(!key) return;
+    const hid=hiddenCols();
+    t.checked ? hid.delete(key) : hid.add(key);
+    setHiddenCols(hid);
+    renderTable(); renderColsMenu();
+  });
+  m.addEventListener("click", e=>{
+    const act=e.target.dataset && e.target.dataset.cols;
+    if(act==="all"){ setHiddenCols(new Set()); renderTable(); renderColsMenu(); }
+    else if(act==="fit"){ fitColumns(); }
+  });
 }
 function renderHead(cols){
   $("#headRow").innerHTML = cols.map(c=>{
@@ -2726,7 +2901,9 @@ function viewRows(){
   return v;
 }
 /* ---------- paging ---------- */
-const PER_DEFAULT=100;
+// A page you can take in at a glance beats one you have to scroll. The pager
+// below the table is how you get to the rest.
+const PER_DEFAULT=30;
 function perPage(){ const el=$("#pgSize"), n=el?parseInt(el.value,10):PER_DEFAULT; return n>0?n:PER_DEFAULT; }
 function pageCount(total){ return Math.max(1, Math.ceil(total/perPage())); }
 function gotoPage(p){ const t=viewRows().length, pc=pageCount(t);
@@ -2897,6 +3074,7 @@ function syncDetailWidth(){
 }
 function renderTable(){
   syncDetailWidth();
+  syncClearBtn();
   const cols=columns();
   renderHead(cols);
   const v=viewRows(), total=v.length, pc=pageCount(total);
@@ -3197,10 +3375,14 @@ function bind(){
   });
   bindCopy();
   bindAsk();
+  bindCols();
+  $("#clearFilters").addEventListener("click", clearAllFilters);
   window.addEventListener("resize", syncDetailWidth);
 }
 async function init(){
   bind();
+  setWide(wideOn());   // before first paint, so the table is never laid out twice
+  askProbe();          // not awaited: the page must not wait on the Worker to render
   await Promise.all([loadMeta(), loadSiteIndex(), loadKpis()]);
   const u=readUrl();
   if(u.q) $("#q").value=u.q;

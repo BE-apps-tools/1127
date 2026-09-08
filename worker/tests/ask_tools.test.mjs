@@ -316,3 +316,28 @@ test("an empty site does not throw from any tool", () => {
     assert.doesNotThrow(() => fn(args), name);
   }
 });
+
+test("the panel stays hidden unless the Worker actually holds a key", async () => {
+  // The page can see whether you are signed in; only /health can tell it whether
+  // the Worker is configured. Both have to be true, and an unreachable Worker
+  // counts as no.
+  const src = await readFile(new URL("../../kpis.html", import.meta.url), "utf8");
+  const fn = src.match(/function askOn\(\)\{[^}]*\}/)[0];
+  assert.match(fn, /bac_admin_key/);
+  assert.match(fn, /ASK_STATE\.enabled===true/);
+  const probe = src.slice(src.indexOf("async function askProbe"),
+                          src.indexOf("/* Minimal markdown"));
+  assert.match(probe, /hasAnthropicKey/);
+  assert.match(probe, /catch[\s\S]*enabled=false/);
+  // /health must be the source of truth, and the probe must not block first paint.
+  assert.match(src, /\n  askProbe\(\);/, "askProbe should be called un-awaited from init");
+});
+
+test("health reports whether the explainer is configured", () => {
+  const start = WORKER_SRC.indexOf("async function health");
+  const body = WORKER_SRC.slice(start, start + 1200);
+  assert.match(body, /hasAnthropicKey: !!String\(env\.ANTHROPIC_API_KEY/);
+  // The key itself must never leave the Worker, only the fact that it exists.
+  assert.ok(!/ANTHROPIC_API_KEY\s*[,}]/.test(body.replace(/!!String\(env\.ANTHROPIC_API_KEY[^)]*\)/, "")),
+    "health must report only the presence of the key, never its value");
+});
