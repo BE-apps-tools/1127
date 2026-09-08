@@ -811,6 +811,59 @@ def extract(rows, kind, filename=""):
     return {"units": units, "report": report}
 
 
+def coalesce(extracted):
+    """Fold same-family extracts into one entry, so complementary slices of a
+    report import as one family.
+
+    The Anniversary Date export is run once per billing type: one file for the
+    hourly units, one for the non-hourly. They are the same report and the same
+    family, and their unit sets are disjoint. Handed to ``merge`` as two entries
+    they would destroy each other — merge drops a family from every unit before
+    applying an entry, so the second file wipes the units the first just wrote.
+
+    Disjoint unit sets are therefore unioned. Overlapping ones are a different
+    thing entirely: two vintages of the same export, where taking either silently
+    would publish a number nobody chose. Those are returned as conflicts for the
+    caller to report, and neither is used.
+
+    Returns ``(entries, conflicts)``.
+    """
+    order, by_kind, conflicts = [], {}, []
+    for ex in extracted:
+        kind = ex["report"]["kind"]
+        if kind not in by_kind:
+            first = {"units": dict(ex["units"]), "report": dict(ex["report"])}
+            by_kind[kind] = first
+            order.append(kind)
+            continue
+        first = by_kind[kind]
+        overlap = set(first["units"]) & set(ex["units"])
+        if overlap:
+            conflicts.append({
+                "kind": kind,
+                "files": [first["report"]["file"], ex["report"]["file"]],
+                "units": len(overlap),
+                "examples": sorted(overlap)[:5],
+            })
+            continue
+        a, b = first["report"], ex["report"]
+        first["units"].update(ex["units"])
+        a["file"] = (a["file"] + " + " + b["file"])[:300]
+        a["rows"] = (a.get("rows") or 0) + (b.get("rows") or 0)
+        a["units"] = len(first["units"])
+        # The later run date is the one the freshness check should see.
+        a["asOf"] = max(a.get("asOf") or "", b.get("asOf") or "")
+        a["columns"] = sorted(set(a.get("columns") or []) | set(b.get("columns") or []))
+        # Two files stamped with different jobsites are not two slices of one
+        # report. Blank it so the page's wrong-site banner fires rather than
+        # picking one at random.
+        if (a.get("site") or "") != (b.get("site") or ""):
+            a["site"] = ""
+    kept = [ex for ex in (by_kind[k] for k in order)
+            if ex["report"]["kind"] not in {c["kind"] for c in conflicts}]
+    return kept, conflicts
+
+
 def merge(existing, extracted):
     """Fold extracted report blocks into a kpis.json bundle, per family.
 

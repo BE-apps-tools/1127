@@ -15,6 +15,7 @@ import assert from "node:assert/strict";
 import {
   STATE, DERIVE, deriveKpi, askCatalogue,
   qaWorking, qaMeaning, qaFreshness, qaDownNow, qaWhereMoney, qaHowBusy, qaScope,
+  qaChargeModel, FILTER,
 } from "./_kpi_ask.mjs";
 
 /* Same fleet shape as buildRows() produces. */
@@ -216,4 +217,36 @@ test("an empty site answers rather than throwing or lying", () => {
   const nd = qaWorking("cost-while-down");
   assert.ok(/not been imported/.test(nd), nd);
   assert.ok(/How current is this data/.test(nd), "should point at the coverage answer");
+});
+
+test("the charge-model answer describes the site, not the slice you are viewing", () => {
+  loadFleet();
+  // Both models named, with their real counts.
+  const all = qaChargeModel();
+  assertClean(all, "charge model");
+  assert.ok(/Hourly — 1 unit\b/.test(all), all);
+  assert.ok(/Non-hourly — 3 units/.test(all), all);
+  assert.ok(/flat fee every month/.test(all), "must state the non-hourly rule: " + all);
+  assert.ok(/Hours coded daily/.test(all), "must state the hourly rule: " + all);
+
+  // Filtering to one model must not make the answer claim the other is empty —
+  // it explains the models, it does not report on the current scope.
+  FILTER.billing = "Hourly";
+  try {
+    const filtered = qaChargeModel();
+    assertClean(filtered, "charge model, filtered");
+    assert.ok(/Non-hourly — 3 units/.test(filtered),
+      "an answer about both models must never report one of them as empty: " + filtered);
+    assert.ok(/filtered to hourly units only/.test(filtered),
+      "it should say the page is filtered, so the counts are not misread: " + filtered);
+  } finally { FILTER.billing = ""; }
+});
+
+test("units with no billing type are named, not quietly folded into a model", () => {
+  loadFleet();
+  STATE.rows.push({ ...STATE.rows[0], unit: "Q1", billingType: "", chargeRunsWhileIdle: false });
+  const text = qaChargeModel();
+  assertClean(text, "charge model with an unclassified unit");
+  assert.ok(/outside both models/.test(text),
+    "a unit the rate report never classified must be called out: " + text);
 });
