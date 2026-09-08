@@ -916,18 +916,19 @@ async function kbOnFiles(files){
       extracted.push(KPI.extract(rows, kind, f.name));
     }catch(e){ failed.push({name:f.name, why:e.message}); }
   }
-  // One file per family: the second would silently overwrite the first, so make
-  // the operator pick which export is the real one.
-  const kinds=extracted.map(e=>e.report.kind);
-  const dupe=kinds.find((k,i)=>kinds.indexOf(k)!==i);
-  if(dupe){
-    const label=(KPI.kindSpec(dupe)||{}).label||dupe;
-    const names=extracted.filter(e=>e.report.kind===dupe).map(e=>e.report.file).join(" and ");
-    KB={extracted:[], failed:failed.concat([{name:names,
-      why:"Both look like the "+label+" report — drop only the one you want published."}])};
-  } else {
-    KB={extracted, failed};
-  }
+  // Two files of one family are usually two slices of the same report — the
+  // Anniversary Date export is run once per billing type — so union them.
+  // Overlapping unit sets are two vintages instead, and those still need a
+  // decision from whoever is importing.
+  const co=KPI.coalesce(extracted);
+  co.conflicts.forEach(c=>{
+    const label=(KPI.kindSpec(c.kind)||{}).label||c.kind;
+    failed.push({ name:c.files.join(" and "),
+      why:"Both are the "+label+" report and they cover "+c.units+" of the same unit"+
+          (c.units===1?"":"s")+" ("+c.examples.join(", ")+
+          ") — so they are two versions of it, not two halves. Drop only the current one." });
+  });
+  KB={extracted:co.entries, failed};
   renderBuilder();
 }
 /* Hand the parsed bundle to kpis.html rather than re-deriving the tiles here:

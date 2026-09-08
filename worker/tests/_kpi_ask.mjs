@@ -45,17 +45,24 @@ const worstDamageMonth = () => DASH;
 const columns = () => [];
 const FIELD_LABELS = {};
 const DRILL_LABELS = {};
-const scopeRows = () => STATE.rows;
-const scopeParts = () => [];
+/* A filter, modelled the way the page does it: STATE.rows is always the whole
+   jobsite and scopeRows() is the narrowed view. An answer that reads STATE.rows
+   must keep describing the site while a filter is set. */
+const FILTER = { billing: "" };
+const scopeRows = () => FILTER.billing
+  ? STATE.rows.filter(r => r.billingType === FILTER.billing) : STATE.rows;
+const scopeParts = () => FILTER.billing
+  ? [FILTER.billing === "Hourly" ? "hourly-billed" : "non-hourly"] : [];
 const reportFor = kind => (STATE.kpis.reports||[]).find(r=>r.kind===kind) || null;
 const staleness = rep => rep ? { age: 0, level: "" } : { age: null, level: "" };
 const ageText = age => age === 0 ? "refreshed today" : (age == null ? "age unknown" : age + " days old");
 const askOn = () => false;
+const CHARGE_MODEL = { "Hourly": "Hours coded daily.", "Non Hourly": "A flat fee every month." };
 const activeKinds = () => { const on={}; KPI_KINDS.forEach(k=>on[k]=STATE.rows.some(r=>r.kpi&&r.kpi[k])); return on; };
 // Not renderWork — the KPI-WORK block declares it, and a second const of the
 // same name is a SyntaxError that kills the whole module.
 const wbase = () => "";
-const $ = () => null;
+const $ = sel => sel === "#fBilling" ? { value: FILTER.billing } : null;
 const toast = () => {};
 const copyFallback = () => true;
 const nsGet = () => "";
@@ -65,8 +72,9 @@ const navigator = {};
 const src = PRELUDE + block("KPI-DRILLS") + block("KPI-WORK") + block("KPI-FOCUS") +
   block("KPI-ASK-TOOLS") + block("KPI-ASK-QA") +
   "\nexport { ASK_IMPL, FOCUS_PRED, DERIVE, DRILLS, deriveKpi, STATE," +
-  " askCatalogue, qaWorking, qaMeaning, qaFreshness, qaDownNow, qaWhereMoney, qaHowBusy, qaScope };\n";
+  " askCatalogue, qaWorking, qaMeaning, qaFreshness, qaDownNow, qaWhereMoney, qaHowBusy, qaScope, qaChargeModel, FILTER };\n";
 
 export const P = await import("data:text/javascript;base64," + Buffer.from(src).toString("base64"));
 export const { ASK_IMPL, FOCUS_PRED, DERIVE, DRILLS, deriveKpi, STATE,
-  askCatalogue, qaWorking, qaMeaning, qaFreshness, qaDownNow, qaWhereMoney, qaHowBusy, qaScope } = P;
+  askCatalogue, qaWorking, qaMeaning, qaFreshness, qaDownNow, qaWhereMoney, qaHowBusy, qaScope,
+  qaChargeModel, FILTER } = P;

@@ -383,3 +383,97 @@ def test_build_survives_a_corrupt_existing_bundle(tmp_path):
     build(str(src), str(out))
     bundle = json.load(open(out / "kpis.json", encoding="utf-8"))
     assert bundle["units"]["U1"]["rates"]["monthlyBillingRate"] == 7392
+
+
+# ---------------------------------------------------------------- coalesce
+def _entry(kind, units, file, rows=0, as_of="", site="", columns=None):
+    return {"units": dict(units),
+            "report": {"kind": kind, "label": kind, "file": file, "rows": rows,
+                        "units": len(units), "asOf": as_of, "site": site,
+                        "columns": list(columns or [])}}
+
+
+def test_two_slices_of_one_report_are_unioned():
+    """The Anniversary Date export is run once per billing type.
+
+    Two files, same family, disjoint units. Handed straight to merge() the second
+    wipes the first, because merge drops a family from every unit before applying
+    an entry — so the hourly rentals vanished and nothing said so.
+    """
+    from build.kpi_reports import coalesce, merge
+    a = _entry("rental", {"U1": {"billingType": "Hourly"}, "U2": {"billingType": "Hourly"}},
+               "Anniversary_Date_9.xlsx", rows=2, as_of="2026-09-01", site="36620001127",
+               columns=["vendor", "hourlyRate"])
+    b = _entry("rental", {"U3": {"billingType": "Non Hourly"}},
+               "Anniversary_Date_10.xlsx", rows=1, as_of="2026-09-05", site="36620001127",
+               columns=["vendor", "totalNonHourlyRate"])
+
+    entries, conflicts = coalesce([a, b])
+    assert conflicts == []
+    assert len(entries) == 1
+    rep = entries[0]["report"]
+    assert sorted(entries[0]["units"]) == ["U1", "U2", "U3"]
+    assert rep["units"] == 3
+    assert rep["rows"] == 3
+    assert rep["asOf"] == "2026-09-05"                 # the later run date
+    assert rep["site"] == "36620001127"
+    assert rep["columns"] == ["hourlyRate", "totalNonHourlyRate", "vendor"]
+    assert "Anniversary_Date_9.xlsx" in rep["file"] and "Anniversary_Date_10.xlsx" in rep["file"]
+
+    # And the whole point: both billing types survive the merge.
+    bundle = merge({"builtAt": "", "reports": [], "units": {}}, entries)
+    kinds = {u: sorted(rec) for u, rec in bundle["units"].items()}
+    assert set(kinds) == {"U1", "U2", "U3"}
+    # Without coalesce the hourly pair is silently gone.
+    naive = merge({"builtAt": "", "reports": [], "units": {}}, [a, b])
+    assert set(naive["units"]) == {"U3"}
+
+
+def test_two_vintages_of_one_report_are_refused_rather_than_guessed():
+    from build.kpi_reports import coalesce
+    a = _entry("rental", {"U1": {"vendor": "old"}, "U2": {}}, "Anniversary_Date_9.xlsx")
+    b = _entry("rental", {"U1": {"vendor": "new"}}, "Anniversary_Date_9 (1).xlsx")
+    entries, conflicts = coalesce([a, b])
+    # Neither is used: taking either silently would publish a number nobody chose.
+    assert entries == []
+    assert len(conflicts) == 1
+    assert conflicts[0]["kind"] == "rental"
+    assert conflicts[0]["units"] == 1
+    assert conflicts[0]["examples"] == ["U1"]
+    assert set(conflicts[0]["files"]) == {"Anniversary_Date_9.xlsx", "Anniversary_Date_9 (1).xlsx"}
+
+
+def test_coalesce_leaves_other_families_and_order_alone():
+    from build.kpi_reports import coalesce
+    r = _entry("rates", {"U1": {}}, "rates.xlsx")
+    a = _entry("rental", {"U1": {}}, "a.xlsx")
+    b = _entry("rental", {"U2": {}}, "b.xlsx")
+    t = _entry("transfers", {"U9": {}}, "t.xlsx")
+    entries, conflicts = coalesce([r, a, b, t])
+    assert conflicts == []
+    assert [e["report"]["kind"] for e in entries] == ["rates", "rental", "transfers"]
+    # A conflict in one family must not take another family down with it.
+    c = _entry("rental", {"U2": {}}, "c.xlsx")
+    entries2, conflicts2 = coalesce([r, b, c, t])
+    assert [e["report"]["kind"] for e in entries2] == ["rates", "transfers"]
+    assert [x["kind"] for x in conflicts2] == ["rental"]
+
+
+def test_coalesce_does_not_mutate_what_it_was_given():
+    from build.kpi_reports import coalesce
+    a = _entry("rental", {"U1": {}}, "a.xlsx", rows=1)
+    b = _entry("rental", {"U2": {}}, "b.xlsx", rows=1)
+    coalesce([a, b])
+    assert list(a["units"]) == ["U1"]
+    assert a["report"]["rows"] == 1
+    assert a["report"]["file"] == "a.xlsx"
+
+
+def test_a_mismatched_site_blanks_rather_than_picking_one():
+    from build.kpi_reports import coalesce
+    a = _entry("rental", {"U1": {}}, "a.xlsx", site="36620001127")
+    b = _entry("rental", {"U2": {}}, "b.xlsx", site="99900002222")
+    entries, conflicts = coalesce([a, b])
+    # Two jobsites are not two slices of one report — let the page's wrong-site
+    # banner fire instead of silently adopting one of them.
+    assert entries[0]["report"]["site"] == ""

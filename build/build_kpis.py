@@ -12,7 +12,7 @@ build must not break because someone parked a spreadsheet in source/.
 import json
 import os
 
-from .kpi_reports import merge, read_report, report_files
+from .kpi_reports import coalesce, merge, read_report, report_files
 
 
 def build(source_dir, out_dir):
@@ -37,6 +37,16 @@ def build(source_dir, out_dir):
                             "reason": "no recognised KPI report columns"})
             continue
         extracted.append(ex)
+
+    # Two files of one family are usually complementary slices (the Anniversary
+    # Date export is run once per billing type), so union them rather than let
+    # the second wipe the first inside merge().
+    extracted, conflicts = coalesce(extracted)
+    for c in conflicts:
+        skipped.append({"file": " + ".join(c["files"]),
+                        "reason": ("both are the " + c["kind"] + " report and they cover "
+                                   + str(c["units"]) + " of the same units (e.g. "
+                                   + ", ".join(c["examples"]) + ") — keep only the current one")})
 
     bundle = merge(existing, extracted)
     bundle["builtAt"] = os.environ.get("BUILD_TS", "") or bundle.get("builtAt", "")

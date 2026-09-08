@@ -460,6 +460,48 @@ function kpiExtract(rows, kind, filename){
     site:kpiReportSite(rows, hi, m.site), columns:targets.slice().sort() } };
 }
 
+/* Mirrors build/kpi_reports.coalesce. Two files of one family are usually
+   complementary slices of the same report — the Anniversary Date export is run
+   once per billing type, one file for the hourly units and one for the
+   non-hourly — and kpiMerge would let the second destroy the first, because it
+   drops a family from every unit before applying an entry.
+
+   Disjoint unit sets are unioned. Overlapping ones are two vintages of the same
+   export, where quietly taking either would publish a number nobody chose, so
+   they come back as conflicts and neither is used. */
+function kpiCoalesce(extracted){
+  const order=[], byKind={}, conflicts=[];
+  (extracted||[]).forEach(ex=>{
+    const kind=ex.report.kind;
+    if(!byKind[kind]){
+      byKind[kind]={ units:Object.assign({}, ex.units), report:Object.assign({}, ex.report) };
+      order.push(kind);
+      return;
+    }
+    const first=byKind[kind];
+    const overlap=Object.keys(ex.units).filter(k=>Object.prototype.hasOwnProperty.call(first.units,k));
+    if(overlap.length){
+      conflicts.push({ kind, files:[first.report.file, ex.report.file],
+        units:overlap.length, examples:overlap.slice().sort().slice(0,5) });
+      return;
+    }
+    const a=first.report, b=ex.report;
+    Object.assign(first.units, ex.units);
+    a.file=(a.file+" + "+b.file).slice(0,300);
+    a.rows=(a.rows||0)+(b.rows||0);
+    a.units=Object.keys(first.units).length;
+    // The later run date is the one the freshness check should see.
+    a.asOf=(a.asOf||"")>(b.asOf||"") ? (a.asOf||"") : (b.asOf||"");
+    a.columns=[...new Set([].concat(a.columns||[], b.columns||[]))].sort();
+    // Two files stamped with different jobsites are not two slices of one
+    // report. Blank it so the page's wrong-site banner fires rather than
+    // picking one at random.
+    if((a.site||"")!==(b.site||"")) a.site="";
+  });
+  const bad=new Set(conflicts.map(c=>c.kind));
+  return { entries: order.map(k=>byKind[k]).filter(ex=>!bad.has(ex.report.kind)), conflicts };
+}
+
 /* Mirrors build/kpi_reports.merge and the Worker's /kpis merge: the families in
    `extracted` replace their block on every unit and leave the others untouched.
    A preview that merged differently from the server would show numbers the
@@ -530,7 +572,7 @@ const KPI_CORE = {
   find: kpiFind, mapHeaders: kpiMapHeaders, findHeader: kpiFindHeader,
   headerAt: kpiHeaderAt, mergeGroupRow: kpiMergeGroupRow, widePeriods: kpiWidePeriods,
   detectKind: kpiDetectKind, reportSite: kpiReportSite, timeline: kpiTimeline,
-  extract: kpiExtract, merge: kpiMerge,
+  extract: kpiExtract, coalesce: kpiCoalesce, merge: kpiMerge,
   FIELD_LABELS,
 };
 globalThis.KPI = KPI_CORE;
