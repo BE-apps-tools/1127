@@ -51,6 +51,7 @@ const reportFor = kind => (STATE.kpis.reports||[]).find(r=>r.kind===kind) || nul
 const staleness = rep => rep ? { age: 0, level: "" } : { age: null, level: "" };
 const ageText = age => age === 0 ? "refreshed today" : (age == null ? "age unknown" : age + " days old");
 const askOn = () => false;
+const activeKinds = () => { const on={}; KPI_KINDS.forEach(k=>on[k]=STATE.rows.some(r=>r.kpi&&r.kpi[k])); return on; };
 // Not renderWork — the KPI-WORK block declares it, and a second const of the
 // same name is a SyntaxError that kills the whole module.
 const wbase = () => "";
@@ -62,8 +63,10 @@ const navigator = {};
 `;
 
 const src = PRELUDE + block("KPI-DRILLS") + block("KPI-WORK") + block("KPI-FOCUS") +
-  block("KPI-ASK-TOOLS") +
-  "\nexport { ASK_IMPL, FOCUS_PRED, DERIVE, DRILLS, deriveKpi, STATE };\n";
+  block("KPI-ASK-TOOLS") + block("KPI-ASK-QA") +
+  "\nexport { ASK_IMPL, FOCUS_PRED, DERIVE, DRILLS, deriveKpi, STATE," +
+  " askCatalogue, qaWorking, qaMeaning, qaFreshness, qaDownNow, qaWhereMoney, qaHowBusy, qaScope };\n";
 
 export const P = await import("data:text/javascript;base64," + Buffer.from(src).toString("base64"));
-export const { ASK_IMPL, FOCUS_PRED, DERIVE, DRILLS, deriveKpi, STATE } = P;
+export const { ASK_IMPL, FOCUS_PRED, DERIVE, DRILLS, deriveKpi, STATE,
+  askCatalogue, qaWorking, qaMeaning, qaFreshness, qaDownNow, qaWhereMoney, qaHowBusy, qaScope } = P;

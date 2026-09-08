@@ -213,12 +213,18 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
   .ask .steps{margin-top:7px;font-size:11.5px;color:var(--medium-gray);
     font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;letter-spacing:0.04em;}
   .ask .msg.err .body{color:var(--alert);}
-  .ask .ask-seeds{display:flex;gap:7px;flex-wrap:wrap;padding:11px 16px 0;}
-  .ask .ask-seeds:empty{display:none;}
-  .ask .seed{font-size:11.5px;color:var(--dark-blue);background:var(--white);
-    border:1px solid var(--light-blue);border-radius:999px;padding:5px 11px;
+  .ask .ask-qs{padding:13px 16px 4px;}
+  .ask .ask-qs:empty{display:none;}
+  .ask .qs-h{font-family:'Arial Black', Arial, sans-serif;text-transform:uppercase;
+    font-size:8.5px;letter-spacing:0.06em;color:var(--medium-gray);margin:12px 0 6px;}
+  .ask .qs-h:first-child{margin-top:0;}
+  .ask .qs-row{display:flex;gap:7px;flex-wrap:wrap;}
+  .ask .seed{font-size:12px;color:var(--dark-blue);background:var(--white);
+    border:1px solid var(--light-blue);border-radius:999px;padding:6px 12px;
     cursor:pointer;font-family:Arial, Helvetica, sans-serif;text-align:left;}
   .ask .seed:hover{background:var(--light-blue);}
+  .ask .seed:focus-visible{outline:2px solid var(--energy-blue);outline-offset:1px;}
+  .ask .ask-formwrap{border-top:1px solid var(--bright-gray);margin-top:12px;}
   .ask .ask-form{display:flex;gap:8px;padding:12px 16px;align-items:center;}
   .ask .ask-form input{flex:1 1 auto;min-width:0;font-family:Arial, Helvetica, sans-serif;
     font-size:13.5px;padding:9px 12px;border:1px solid var(--light-gray);
@@ -517,23 +523,25 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
       <div class="scopebar" id="scopeBar" role="status"></div>
       <section class="tiles" id="tiles" aria-label="Site KPIs"></section>
 
-      <!-- Read-only KPI explainer. Hidden entirely unless an admin key is present:
-           the Worker gates /ask on it, so showing the panel to anyone else would
-           only offer them a button that returns 401. -->
-      <section class="ask" id="askPanel" style="display:none;" aria-label="Ask about these numbers">
+      <!-- The explainer. The question list is answered by the page itself from the
+           same ledger the tiles use, so it needs no key and works for everyone.
+           The free-text box only appears when the Worker is configured for it. -->
+      <section class="ask" id="askPanel" style="display:none;" aria-label="Explain these numbers">
         <div class="ask-head">
           <span class="ask-k">Explain</span>
-          <span class="ask-t">Ask about any number on this page &mdash; what it means, or how it was worked out.</span>
-          <button class="btn small secondary" id="askClear" type="button">Clear</button>
+          <span class="ask-t">Pick a question. Answers are worked out from the reports on this page.</span>
+          <button class="btn small secondary" id="askClear" type="button" style="display:none;">Clear</button>
         </div>
         <div class="ask-log" id="askLog" role="log" aria-live="polite"></div>
-        <div class="ask-seeds" id="askSeeds"></div>
-        <form class="ask-form" id="askForm">
-          <input type="text" id="askInput" autocomplete="off" enterkeyhint="send"
-            aria-label="Ask a question about these KPIs"
-            placeholder="Why are we spending this much on down equipment?">
-          <button class="btn small" id="askSend" type="submit">Ask</button>
-        </form>
+        <div class="ask-qs" id="askQs"></div>
+        <div class="ask-formwrap" id="askFormWrap" style="display:none;">
+          <form class="ask-form" id="askForm">
+            <input type="text" id="askInput" autocomplete="off" enterkeyhint="send"
+              aria-label="Ask a question about these KPIs"
+              placeholder="Or ask anything about these numbers&hellip;">
+            <button class="btn small" id="askSend" type="submit">Ask</button>
+          </form>
+        </div>
         <div class="ask-foot" id="askFoot">Reads the reports already loaded. It cannot change anything.</div>
       </section>
 
@@ -1667,7 +1675,7 @@ function renderWork(){
           (STATE_WORK.all?("Show top "+WORK_TOP+" only"):("Show all "+fmtNum(m.rows.length)+" units"))+'</button>'
         : "")+
       '<button class="btn small secondary" id="wkCopy" type="button">Copy the working</button>'+
-      (askOn() ? '<button class="btn small secondary" id="wkAsk" type="button">Explain in plain English</button>' : "")+
+      '<button class="btn small secondary" id="wkAsk" type="button">Explain in plain English</button>'+
       '<span class="wk-note">Paste it into a spreadsheet or an email &mdash; every row, its inputs and the total.</span>'+
     '</div>';
 
@@ -1678,7 +1686,12 @@ function renderWork(){
   if(ask) ask.addEventListener("click", ()=>{
     const p=$("#askPanel");
     if(p) p.scrollIntoView({block:"start", behavior:"smooth"});
-    askSubmit("How did you land on the "+label.toLowerCase()+" number, and what should I know about it?");
+    // Written from this same ledger, so it needs no key and cannot disagree
+    // with the table right above it.
+    askSetBody(askBubble("You","you"), askFormat("How did we land on "+lc1(label)+"?"));
+    const bubble=askBubble("Explain");
+    askSetBody(bubble, askFormat(qaWorking(id)));
+    $("#askClear").style.display="";
   });
 }
 
@@ -1885,6 +1898,240 @@ const ASK_IMPL = {
 };
 /* KPI-ASK-TOOLS-END */
 
+/* ============================================================
+   Answers without a model.
+
+   The questions people actually ask about these tiles are a short, known list,
+   and every one of them can be answered from the ledger deriveKpi() already
+   produces. So the catalogue below writes the answers itself: read the working,
+   assemble a paragraph. No API key, no account, no per-question cost, nothing
+   sent anywhere, and it cannot invent a number — if a figure here is wrong then
+   the tile is wrong too, because they come from the same call.
+
+   What it gives up is open-ended conversation. That is what the /ask relay adds
+   on top when a key exists; this layer stands on its own without one.
+   ============================================================ */
+/* KPI-ASK-QA-START */
+const lc1 = s => { const t=String(s||""); return t ? t.charAt(0).toLowerCase()+t.slice(1) : t; };
+const plural = (n,w) => fmtNum(n)+" "+w+(n===1?"":"s");
+function qaLabel(id){ return DRILL_LABELS[id] || id.replace(/-/g," "); }
+function qaModel(id){
+  try{ return deriveKpi(id, scopeRows()); }catch(e){ return null; }
+}
+/* Used whenever a KPI has no data, so the answer is "which report is missing"
+   rather than a confident zero. */
+function qaNoData(id){
+  const fams=(KPI_SPEC.kinds||[]).filter(ks=>!reportFor(ks.kind)).map(ks=>ks.label);
+  return "There is nothing behind **"+qaLabel(id)+"** for the units in view. That usually means "+
+    "the report it reads has not been imported for this jobsite"+
+    (fams.length ? (" — not loaded right now: "+fams.join(", ")+".") : ".")+
+    "\n\nAsk “How current is this data?” for the full list of what is loaded and how old each one is.";
+}
+
+/* "What does X mean?" — the definition, the current value, and the population,
+   because a figure without its denominator invites the wrong comparison. */
+function qaMeaning(id){
+  const m=qaModel(id), d=DERIVE[id], label=qaLabel(id);
+  if(!d) return "I don't have a KPI by that name.";
+  if(!m || !m.inCount) return qaNoData(id);
+  const R=scopeRows();
+  return "**"+label+"** is "+lc1(d.words)+
+    "\n\nRight now it reads **"+fmtWork(m.total,m.fmt)+"**, worked out over "+
+    plural(m.inCount,"unit")+" of the "+fmtNum(R.length)+" in view."+
+    (m.inCount<R.length
+      ? " The other "+plural(R.length-m.inCount,"unit")+" are not counted, so don't read this as covering the whole fleet."
+      : "");
+}
+
+/* "How did you land on that?" — the formula, the population, the unit driving
+   it, and what was left out with its price tag. */
+function qaWorking(id){
+  const m=qaModel(id), label=qaLabel(id);
+  if(!m || !m.inCount) return qaNoData(id);
+  const R=scopeRows();
+  const out=[];
+  out.push("**"+label+"** is **"+fmtWork(m.total,m.fmt)+"**, and here is where it comes from.");
+  out.push("The sum is "+m.eq+" — over "+plural(m.inCount,"unit")+
+    " of the "+fmtNum(R.length)+" in view.");
+
+  const top=m.rows[0];
+  if(top){
+    const name="unit "+(top.r.unit||top.r.serial)+(top.r.description?" ("+top.r.description+")":"");
+    const bits=m.inputs.map(i=>{
+      let v=null; try{ v=i.get(top.r); }catch(e){}
+      return lc1(i.label)+" "+fmtWork(v,i.fmt);
+    });
+    if(m.kind==="sum"){
+      out.push("The single biggest piece is "+name+": "+bits.join(", ")+
+        ", which is "+fmtWork(top.v,m.fmt)+
+        (top.share!=null ? " — "+top.share.toFixed(1)+"% of the whole figure." : "."));
+    }else if(m.kind==="mean"){
+      const last=m.rows[m.rows.length-1];
+      out.push("Every unit counts once here, however big it is. The "+
+        (m.asc?"lowest":"highest")+" is "+name+" at "+fmtWork(top.v,m.fmt)+
+        ", the other end is unit "+(last.r.unit||last.r.serial)+" at "+fmtWork(last.v,m.fmt)+".");
+    }else if(m.kind==="ratio"){
+      out.push("It is a ratio of the totals, not an average of each unit's own percentage — "+
+        "otherwise a few hundred hand tools would drown out one machine that sat broken for months.");
+    }else{
+      out.push("It is a head count, so each unit adds one. The first of them is "+name+".");
+    }
+  }
+
+  if(m.drops.length){
+    out.push("Left out of the figure:");
+    m.drops.forEach(g=>{
+      out.push("- "+plural(g.n,"unit")+" — "+lc1(g.why)+
+        (g.would!=null ? ". Counting them would have added "+fmtWork(g.would,m.fmt)+"." : "."));
+    });
+  }
+  out.push("For the arithmetic unit by unit, click the **"+label+
+    "** tile above — the panel underneath it lists every unit with its inputs, "+
+    "its contribution and a running total that lands on this figure.");
+  return out.join("\n\n");
+}
+
+/* "How current is this data?" — the question behind every "is this right?" */
+function qaFreshness(){
+  const on=activeKinds();
+  const rows=(KPI_SPEC.kinds||[]).map(ks=>{
+    const rep=reportFor(ks.kind), st=staleness(rep);
+    const covered=STATE.rows.filter(r=>r.kpi&&r.kpi[ks.kind]).length;
+    if(!rep) return "- **"+ks.label+"** — not imported for this jobsite.";
+    return "- **"+ks.label+"** — "+ageText(st.age)+", covering "+
+      plural(covered,"unit")+(st.level?" (worth rerunning)":"")+".";
+  });
+  const master=(STATE.meta&&STATE.meta.sourceVersion)?(" from Equipment Master "+STATE.meta.sourceVersion):"";
+  const behind=(KPI_SPEC.kinds||[]).filter(ks=>on[ks.kind]&&staleness(reportFor(ks.kind)).level).length;
+  return "This jobsite has "+plural(STATE.rows.length,"unit")+" on it"+master+
+    ", and six reports can feed the tiles.\n\n"+rows.join("\n")+
+    "\n\nThe reports are run independently, so one can go stale while the others stay current."+
+    (behind ? " "+plural(behind,"report")+" behind right now, which is why some tiles carry an age note in their subtitle."
+            : " Everything loaded is current.")+
+    "\n\nEach report is replaced on its own when you import it, so refreshing one never disturbs the others.";
+}
+
+/* "What's down right now, and what is it costing?" — the standing question. */
+function qaDownNow(){
+  const R=scopeRows();
+  const dn=qaModel("down-right-now"), sp=qaModel("spend-on-down-units");
+  if(!dn || !dn.inCount){
+    return (reportFor("transfers")
+      ? "Nothing is down right now across the "+plural(R.length,"unit")+" in view."
+      : qaNoData("down-right-now"));
+  }
+  const onSite=dn.rows.filter(x=>x.r.curStatus==="DN").length;
+  const inShop=dn.rows.length-onSite;
+  const out=[];
+  out.push("**"+plural(dn.inCount,"unit")+"** cannot work today — "+
+    onSite+" down on site, "+inShop+" in the shop.");
+  const worst=dn.rows[0];
+  if(worst) out.push("The longest-standing is unit "+(worst.r.unit||worst.r.serial)+
+    (worst.r.description?" ("+worst.r.description+")":"")+", "+
+    plural(worst.r.daysInState||0,"day")+" in that status.");
+  if(sp && sp.inCount){
+    out.push("Of those, **"+plural(sp.inCount,"unit")+"** are still being charged for, because they bill "+
+      "a flat monthly rate that runs whether the machine moves or not — **"+
+      fmtWork(sp.total,sp.fmt)+" a month**, about "+fmtMoney(sp.total/DAYS_PER_MONTH)+" a day.");
+    const hourly=sp.drops.find(g=>/billed hourly/.test(g.why));
+    if(hourly && hourly.n) out.push("The remaining "+plural(hourly.n,"unit")+
+      " bill by the hour, so they charge nothing while broken. Their downtime is just as real; it simply is not on an invoice.");
+  }else if(sp){
+    out.push("None of them is being charged for while idle — they all bill by the hour, so broken means no hours and no charge.");
+  }
+  out.push("Click the **Down right now** tile to see the list, or **Spend on down units** for the money.");
+  return out.join("\n\n");
+}
+
+/* "Where is the money going?" — the three cost tiles read together, which is
+   the comparison people make in their heads anyway and usually get wrong. */
+function qaWhereMoney(){
+  const mo=qaModel("monthly-spend");
+  if(!mo || !mo.inCount) return qaNoData("monthly-spend");
+  const out=[];
+  out.push("The fleet in view carries **"+fmtWork(mo.total,mo.fmt)+" a month** in charge-out, "+
+    "across "+plural(mo.inCount,"unit")+" the rate report prices.");
+  out.push("Read that as the **committed run-rate, not last month's invoice**. For a unit billed by the "+
+    "hour the monthly rate is a reference figure at an assumed utilization — a quiet month bills less, "+
+    "a busy one can bill more. Only the flat-rate units bill that figure come what may.");
+  const top=mo.rows.slice(0,3).map(r=>"- unit "+(r.r.unit||r.r.serial)+
+    (r.r.description?" ("+r.r.description+")":"")+" — "+fmtWork(r.v,mo.fmt)+" a month"+
+    (r.share!=null?", "+r.share.toFixed(1)+"% of the total":""));
+  if(top.length){ out.push("The dearest few:"); out.push(top.join("\n")); }
+  const dmg=qaModel("damage-spend");
+  if(dmg && dmg.inCount) out.push("Separately, **"+fmtWork(dmg.total,dmg.fmt)+"** of damage was charged over the "+
+    "last "+TREND_MONTHS+" months across "+plural(dmg.inCount,"unit")+". That one is real money off a ledger, "+
+    "not a rate — the only money figure on this page that is.");
+  const cwd=qaModel("cost-while-down");
+  if(cwd && cwd.inCount) out.push("And **"+fmtWork(cwd.total,cwd.fmt)+"** was paid to flat-rate units while they "+
+    "sat broken. Do not read that as the price of downtime: the hourly units had downtime too, it just was not billed.");
+  return out.join("\n\n");
+}
+
+/* "How hard is the fleet actually working?" — availability vs utilization is the
+   single most common misreading on the page. */
+function qaHowBusy(){
+  const av=qaModel("fleet-availability"), ut=qaModel("utilization"), dp=qaModel("days-posting-hours");
+  if(!av && !ut && !dp) return qaNoData("utilization");
+  const out=[];
+  if(av && av.inCount) out.push("**Availability is "+fmtWork(av.total,av.fmt)+"** over "+
+    plural(av.inCount,"unit")+" with status history. That is the share of tracked days the equipment was "+
+    "**not** broken — so it says almost nothing is failing.");
+  if(ut && ut.inCount) out.push("**Utilization is "+fmtWork(ut.total,ut.fmt)+"** over "+
+    plural(ut.inCount,"unit")+" the utilization report covers. That is how hard the fleet is actually working.");
+  if(dp && dp.inCount) out.push("A second, independent read: **"+fmtWork(dp.total,dp.fmt)+
+    "** of days on site carried posted hours, across "+plural(dp.inCount,"unit")+
+    ". Different report, different method, and it lands close to the utilization figure — which is the "+
+    "best evidence on this page that both are real.");
+  if(av && ut && av.inCount && ut.inCount) out.push("Both being true at once is the thing to understand: "+
+    "**a parked machine is available.** High availability and low utilization means almost nothing is broken "+
+    "and most of it is idle — and idle is the bigger number in dollars.");
+  return out.join("\n\n");
+}
+
+/* "What is this filter doing to the numbers?" */
+function qaScope(){
+  const R=scopeRows(), parts=scopeParts();
+  const focus=$("#fFocus") ? $("#fFocus").value : "";
+  const out=[];
+  if(!parts.length && !focus && !STATE.drill){
+    return "Nothing is filtered. Every tile above covers all "+plural(STATE.rows.length,"unit")+
+      " on this jobsite.\n\nSet a filter or click a tile and the tiles recompute for just that group — "+
+      "the line above them always says what they are covering.";
+  }
+  out.push("The tiles above are covering **"+fmtNum(R.length)+" of "+fmtNum(STATE.rows.length)+
+    "** units, not the whole jobsite.");
+  if(parts.length) out.push("Narrowed by: "+parts.join(" · ")+".");
+  if(STATE.drill) out.push("You are also drilled into **"+qaLabel(STATE.drill)+
+    "**, which ranks the table by what that tile measures.");
+  else if(focus) out.push("The focus dropdown is also set, which narrows the table below but not the tiles.");
+  out.push("Every figure on this page recomputes from that group, so a total here is not the site total. "+
+    "**Clear filters** in the toolbar puts it all back.");
+  return out.join("\n\n");
+}
+
+/* The catalogue. Built fresh each time because which KPIs exist depends on which
+   reports are loaded and what the filters are. */
+function askCatalogue(){
+  const out=[];
+  out.push({group:"The fleet right now", q:"What's down right now, and what is it costing us?", a:qaDownNow});
+  out.push({group:"The fleet right now", q:"Where is the money going?", a:qaWhereMoney});
+  out.push({group:"The fleet right now", q:"How hard is the fleet actually working?", a:qaHowBusy});
+  out.push({group:"The fleet right now", q:"How current is this data?", a:qaFreshness});
+  out.push({group:"The fleet right now", q:"What are these numbers covering?", a:qaScope});
+  // One pair per KPI that actually has data, so the list never offers a question
+  // whose answer is "that report isn't loaded".
+  Object.keys(DERIVE).forEach(id=>{
+    const m=qaModel(id);
+    if(!m || !m.inCount) return;
+    const label=qaLabel(id);
+    out.push({group:"How a number was worked out", q:"How did we land on "+lc1(label)+"?", a:()=>qaWorking(id)});
+    out.push({group:"What a number means", q:"What does "+lc1(label)+" mean?", a:()=>qaMeaning(id)});
+  });
+  return out;
+}
+/* KPI-ASK-QA-END */
+
 const ASK_MAX_STEPS = 8;                    // tool round-trips before we stop
 // `enabled` is three-state: null until the Worker has been asked, then true or
 // false. The panel only shows on a definite true.
@@ -2032,47 +2279,81 @@ async function askSubmit(question){
   }finally{
     ASK_STATE.busy=false;
     $("#askSend").disabled=false; $("#askInput").disabled=false;
-    renderAskSeeds();
+    renderAskQs();
   }
 }
 
-/* Starter questions, drawn from what is actually on screen: the tile being
-   drilled if there is one, otherwise the money tiles a manager asks about. */
-function renderAskSeeds(){
-  const el=$("#askSeeds");
+/* The question list, grouped, rebuilt from whatever is on screen — so it never
+   offers a question about a report that is not loaded, and the per-KPI questions
+   follow the filters. The tile you are drilled into is offered first. */
+function renderAskQs(){
+  const el=$("#askQs");
   if(!el) return;
-  const seeds=[];
-  if(STATE.drill){
-    const label=(DRILL_LABELS[STATE.drill]||STATE.drill.replace(/-/g," ")).toLowerCase();
-    seeds.push("How did you land on the "+label+" number?");
-    seeds.push("What does "+label+" actually mean?");
-  } else {
-    seeds.push("Why are we spending this much on down equipment?");
-    seeds.push("What does cost while down include, and what does it leave out?");
-    seeds.push("Which units are costing us the most and why?");
+  const cat=askCatalogue();
+  ASK_STATE.cat=cat;
+  const drilled=STATE.drill ? qaLabel(STATE.drill) : null;
+  const groups=[];
+  cat.forEach((e,i)=>{
+    let g=groups.find(x=>x.name===e.group);
+    if(!g){ g={name:e.group, items:[]}; groups.push(g); }
+    g.items.push({i, q:e.q});
+  });
+  // Put the drilled KPI's own questions at the front of their group.
+  if(drilled){
+    const key=lc1(drilled);
+    groups.forEach(g=>g.items.sort((a,b)=>
+      (b.q.includes(key)?1:0)-(a.q.includes(key)?1:0)));
   }
-  seeds.push("How current is this data?");
-  el.innerHTML=seeds.map(s=>'<button class="seed" type="button">'+esc(s)+'</button>').join("");
+  el.innerHTML=groups.map(g=>
+    '<div class="qs-h">'+esc(g.name)+'</div><div class="qs-row">'+
+    g.items.map(it=>'<button class="seed" type="button" data-q="'+it.i+'">'+esc(it.q)+'</button>').join("")+
+    '</div>').join("");
   el.querySelectorAll(".seed").forEach(b=>
-    b.addEventListener("click",()=>askSubmit(b.textContent)));
+    b.addEventListener("click",()=>askCanned(Number(b.dataset.q))));
+}
+/* Answer from the page, immediately. No request, so no spinner and no failure
+   mode — the worst case is "that report isn't loaded", which is itself an answer. */
+function askCanned(idx){
+  const cat=ASK_STATE.cat||askCatalogue();
+  const e=cat[idx];
+  if(!e) return;
+  askSetBody(askBubble("You","you"), askFormat(e.q));
+  const bubble=askBubble("Explain");
+  let text;
+  try{ text=e.a(); }catch(err){ text="Something went wrong working that out: "+String(err&&err.message||err); }
+  askSetBody(bubble, askFormat(text));
+  $("#askClear").style.display="";
+  bubble.scrollIntoView({block:"nearest", behavior:"smooth"});
 }
 function renderAskPanel(){
   const el=$("#askPanel");
   if(!el) return;
-  if(!askOn() || !STATE.rows.length){ el.style.display="none"; return; }
+  // The question list needs no key and no sign-in — it only reads what the page
+  // has already loaded. The free-text box is the part that needs the Worker.
+  if(!STATE.rows.length){ el.style.display="none"; return; }
   el.style.display="block";
-  if(!$("#askLog").children.length) renderAskSeeds();
+  const fw=$("#askFormWrap");
+  if(fw) fw.style.display = askOn() ? "block" : "none";
+  const t=$("#askQs");
+  if(t && (!t.children.length || ASK_STATE.qsDrill!==STATE.drill)){
+    ASK_STATE.qsDrill=STATE.drill;
+    renderAskQs();
+  }
+  $("#askFoot").textContent = askOn()
+    ? "Answers come from the reports on this page. Nothing here can change anything."
+    : "Answers are worked out from the reports on this page — the same figures as the tiles.";
 }
 function askClear(){
   ASK_STATE.msgs=[];
   $("#askLog").innerHTML="";
-  renderAskSeeds();
+  $("#askClear").style.display="none";
+  renderAskQs();
 }
 function bindAsk(){
   const f=$("#askForm");
-  if(!f) return;
-  f.addEventListener("submit",e=>{ e.preventDefault(); askSubmit($("#askInput").value); });
-  $("#askClear").addEventListener("click",askClear);
+  if(f) f.addEventListener("submit",e=>{ e.preventDefault(); askSubmit($("#askInput").value); });
+  const c=$("#askClear");
+  if(c) c.addEventListener("click",askClear);
 }
 
 const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
