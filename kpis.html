@@ -1333,8 +1333,9 @@ const DERIVE = {
     kind:"mean", fmt:"money2",
     eq:"Σ hourly billing rate ÷ number of hourly-billed units",
     words:"An unweighted average: every hourly-billed unit counts once, a skid steer as "+
-      "much as a crane. It is the rate card, not what was actually spent — no hours "+
-      "are involved.",
+      "much as a crane. Hourly units get billed based on the Market rate sheet, which "+
+      "sets a reference rate used to determine billing. It is the rate card, not what "+
+      "was actually spent — no hours are involved.",
     include:r=>r.hourlyRate!=null&&r.hourlyRate>0,
     inputs:[{label:"Hourly rate",get:r=>r.hourlyRate,fmt:"money2"},
             {label:"Maintenance / hr",get:r=>r.maintPerHour,fmt:"money2"}],
