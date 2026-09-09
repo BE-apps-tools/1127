@@ -54,7 +54,7 @@ function row(o) {
     damageCost: o.damage == null ? null : o.damage,
     damageIncidents: o.incidents == null ? null : o.incidents,
     damageLines: null, damageLast: "", damageShare: null,
-    downCost: (o.monthly != null && st && dd && flat) ? (o.monthly / 30.44) * dd : null,
+    downCost: (o.monthly != null && st && dd) ? (o.monthly / 30.44) * dd : null,
     utilAvg: o.util == null ? null : o.util, utilWeeks: o.utilWeeks == null ? null : o.utilWeeks,
     utilLast: null, utilReportStatus: "",
     hoursTotal: hs ? hs.total : null, hoursThisMonth: 0,
@@ -141,14 +141,13 @@ test("the working answer quotes the same figure as the ledger", () => {
   const m = deriveKpi("cost-while-down", STATE.rows);
   const text = qaWorking("cost-while-down");
   assertClean(text, "cost-while-down working");
-  assert.ok(text.includes("$5,000"), "missing the total: " + text);
-  assert.equal(m.total, 5000);
-  // The population, the driver, and the exclusion with its price tag.
-  assert.ok(/2 units/.test(text), "missing the population: " + text);
-  assert.ok(text.includes("F2"), "missing the biggest contributor: " + text);
-  assert.ok(text.includes("80.0%"), "missing its share: " + text);
-  assert.ok(/billed hourly/.test(text), "missing the hourly exclusion: " + text);
-  assert.ok(text.includes("$9,855"), "missing what the exclusion would have added: " + text);
+  // Now includes hourly units (H1: $9,855) plus non-hourly (F1: $1,000 + F2: $4,000)
+  assert.ok(text.includes("$14,855"), "missing the total with hourly included: " + text);
+  assert.ok(Math.abs(m.total - 14855) < 1, "total should be ~$14,855, got: " + m.total);
+  // The population, the driver, and the composition.
+  assert.ok(/3 units/.test(text), "missing the population: " + text);
+  assert.ok(text.includes("H1"), "missing the biggest contributor (hourly unit): " + text);
+  assert.ok(/all billing types/.test(text), "missing statement that all billing types are included: " + text);
   // And it points at where the full arithmetic lives.
   assert.ok(/tile above/.test(text), "does not point at the working panel");
 });
@@ -169,7 +168,7 @@ test("what-does-it-mean carries the definition and the denominator", () => {
   const text = qaMeaning("cost-while-down");
   assertClean(text, "meaning");
   assert.ok(text.length > 200, "too thin to explain anything");
-  assert.ok(/2 units/.test(text), "missing the population: " + text);
+  assert.ok(/3 units/.test(text), "missing the population: " + text);
   assert.ok(/whole fleet/.test(text), "must warn when it covers only part of the fleet");
 });
 
