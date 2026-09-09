@@ -992,12 +992,9 @@ function buildRows(){
       // whether a unit is worth keeping on the job
       damageShare: (dg && monthly!=null && monthly>0) ? 100*dg.total/(monthly*12) : null,
       // cross-report: what the job paid while the unit sat broken
-      // Charged only where the charge does not depend on hours worked. Counting
-      // hourly units here invented $278K of the $318K this tile used to report:
-      // 20 hourly units at $360/day against 20 non-hourly at $56/day, for
-      // almost identical downtime.
-      downCost: (dailyRate!=null && st && st.downDays
-                 && String((rt&&rt.billingType)||"")==="Non Hourly")
+      // Ownership accrues monthly for both billing types: 176 hours per month
+      // for hourly units, flat monthly rate for non-hourly. Pro-rated by downtime.
+      downCost: (dailyRate!=null && st && st.downDays)
                 ? dailyRate*st.downDays : null,
       // Posted hours, and what an hour of work actually cost: the charge-out the
       // job carried over the window divided by the hours it got for it. Only
@@ -1207,13 +1204,10 @@ const DRILLS = {
               ["Charge lines", fmtNum(sum(h.map(r=>r.damageLines)))]]; } },
   "cost-while-down": { focus:"downcost", rank:{key:"downCost",dir:"desc"},
     stats:R=>{ const t=R.filter(r=>r.downCost!=null&&r.downCost>0);
-      const ex=R.filter(r=>!r.chargeRunsWhileIdle&&(r.downDays||0)>0);
-      return [["Flat-rate cost while down", fmtMoney(sum(t.map(r=>r.downCost)))],
+      return [["Cost while down", fmtMoney(sum(t.map(r=>r.downCost)))],
               ["Units priced", fmtNum(t.length)],
               ["Down days behind it", fmtNum(sum(t.map(r=>r.downDays)))],
-              ["Worst unit", t.length?fmtMoney(Math.max(...t.map(r=>r.downCost))):DASH],
-              ["Hourly units excluded", fmtNum(ex.length)],
-              ["Their down days", fmtNum(sum(ex.map(r=>r.downDays)))]]; } },
+              ["Worst unit", t.length?fmtMoney(Math.max(...t.map(r=>r.downCost))):DASH]]; } },
   "utilization": { focus:"util", rank:{key:"utilAvg",dir:"asc"},
     stats:R=>{ const u=R.filter(r=>r.utilAvg!=null);
       const a=u.length?sum(u.map(r=>r.utilAvg))/u.length:null;
@@ -1481,22 +1475,18 @@ const DERIVE = {
   },
   "cost-while-down": {
     kind:"sum", fmt:"money",
-    eq:"Σ ( monthly rate "+MONTH_DIV+" days × days down ), flat-rate units only",
-    words:"What the job kept paying while machines sat broken. The monthly rate is turned "+
+    eq:"Σ ( monthly ownership rate "+MONTH_DIV+" days × days down ), all billing types",
+    words:"What the job kept paying while machines sat broken. The monthly cost is turned "+
       "into a daily one over a "+DAYS_PER_MONTH+"-day month and multiplied by that unit's "+
-      "down days. Only flat-rate units are priced this way, because only their charge "+
-      "runs while idle — the hourly units below have real downtime that simply is not "+
-      "billed, and including them overstated this figure roughly eightfold.",
+      "down days. Both flat-rate and hourly units accrue ownership monthly — flat-rate as "+
+      "a monthly bill, hourly as 176 hours of monthly ownership on top of hours worked.",
     include:r=>r.downCost!=null&&r.downCost>0,
     inputs:[{label:"Monthly rate",get:r=>r.monthlyCost,fmt:"money"},
             {label:"Per day",get:r=>r.monthlyCost/DAYS_PER_MONTH,fmt:"money2"},
             {label:"Days down",get:r=>r.downDays,fmt:"num"}],
     each:r=>r.downCost,
-    drops:[{why:"Was down, but billed hourly — broken means no hours, which means no charge",
-            match:r=>!r.chargeRunsWhileIdle&&(r.downDays||0)>0,
-            would:r=>r.monthlyCost!=null?(r.monthlyCost/DAYS_PER_MONTH)*(r.downDays||0):0},
-           {why:"Flat-rate and down, but carries no rate to price it with",
-            match:r=>r.chargeRunsWhileIdle&&r.monthlyCost==null&&(r.downDays||0)>0},
+    drops:[{why:"Down but carries no monthly rate to price it with",
+            match:r=>r.monthlyCost==null&&(r.downDays||0)>0},
            {why:"No downtime in the window, so nothing to price",match:r=>!((r.downDays||0)>0)}],
   },
   "utilization": {
@@ -1884,8 +1874,7 @@ const ASK_IMPL = {
       downDays12mo:r.downDays, breakdowns12mo:r.downEvents,
       meanRepairDays:r.mttrDays!=null?Number(r.mttrDays.toFixed(1)):null,
       costWhileDown:r.downCost!=null?fmtMoney(r.downCost):null,
-      costWhileDownNote: r.chargeRunsWhileIdle ? null
-        : "Billed by the hour, so its downtime is not charged and it is excluded from cost-while-down.",
+      costWhileDownNote: null,
       damage12mo:r.damageCost!=null?fmtMoney(r.damageCost):null,
       damageIncidents:r.damageIncidents, lastDamage:r.damageLast||null,
       hoursPosted12mo:r.hoursTotal, daysPostingHours:r.hoursDays,
@@ -2086,8 +2075,8 @@ function qaWhereMoney(){
     "last "+TREND_MONTHS+" months across "+plural(dmg.inCount,"unit")+". That one is real money off a ledger, "+
     "not a rate — the only money figure on this page that is.");
   const cwd=qaModel("cost-while-down");
-  if(cwd && cwd.inCount) out.push("And **"+fmtWork(cwd.total,cwd.fmt)+"** was paid to flat-rate units while they "+
-    "sat broken. Do not read that as the price of downtime: the hourly units had downtime too, it just was not billed.");
+  if(cwd && cwd.inCount) out.push("And **"+fmtWork(cwd.total,cwd.fmt)+"** in ownership was accrued while units "+
+    "sat broken — the monthly charge that neither stops nor adjusts for downtime, across both flat-rate and hourly units.");
   return out.join("\n\n");
 }
 
@@ -2545,10 +2534,8 @@ function renderTiles(){
   if(on.transfers && on.rates){
     const dc=sum(R.map(r=>r.downCost));
     const priced=R.filter(r=>r.downCost!=null&&r.downCost>0);
-    const unpriced=R.filter(r=>!r.chargeRunsWhileIdle&&(r.downDays||0)>0);
     if(dc>0) html += tile("Cost while down", fmtMoneyShort(dc),
-      "Flat monthly rate × downtime on "+priced.length+" unit"+(priced.length===1?"":"s")+
-      (unpriced.length?(" · "+unpriced.length+" hourly excluded, they bill nothing while down"):"")+
+      "Monthly ownership × downtime on "+priced.length+" unit"+(priced.length===1?"":"s")+
       staleNote("rates"), {alert:true});
   }
   if(on.utilization){

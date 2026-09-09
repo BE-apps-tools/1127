@@ -48,7 +48,7 @@ function row(o) {
     damageCost: o.damage == null ? null : o.damage,
     damageIncidents: o.incidents == null ? null : o.incidents,
     damageLines: o.lines == null ? null : o.lines,
-    downCost: (monthly != null && st && downDays && flat) ? (monthly / DPM) * downDays : null,
+    downCost: (monthly != null && st && downDays) ? (monthly / DPM) * downDays : null,
     utilAvg: o.util == null ? null : o.util,
     utilWeeks: o.utilWeeks == null ? null : o.utilWeeks,
     utilLast: null,
@@ -169,23 +169,19 @@ test("shares add up to the whole, for the tiles that have them", () => {
   }
 });
 
-test("cost while down prices only the units whose charge runs while idle", () => {
+test("cost while down prices all units with monthly costs and downtime", () => {
   const m = deriveKpi("cost-while-down", fleet());
-  assert.deepEqual(m.rows.map(r => r.r.unit), ["F2", "F1"]);   // biggest contributor first
-  // 6088/30.44*20 + 3044/30.44*10 = 4000 + 1000
-  assert.ok(Math.abs(m.total - 5000) < 1e-6, "total was " + m.total);
+  // Now includes both hourly and non-hourly: H1 and H2 tie at $9,855, then F2, then F1
+  assert.deepEqual(m.rows.map(r => r.r.unit), ["H1", "H2", "F2", "F1"]);   // biggest contributors first
+  // 20000/30.44*15 + 10000/30.44*30 + 6088/30.44*20 + 3044/30.44*10 = 9855.45 + 9855.45 + 4000 + 1000
+  assert.ok(Math.abs(m.total - 24710.90) < 0.05, "total was " + m.total);
 
-  // The hourly units are excluded by name, and the ledger says what counting them
-  // would have cost — which is the whole argument for excluding them.
+  // No units should be excluded for being hourly; they all accrue ownership monthly
   const hourly = m.drops.find(g => /billed hourly/.test(g.why));
-  assert.ok(hourly, "no exclusion names the hourly units");
-  assert.equal(hourly.n, 2);
-  // 10000/30.44*30 + 20000/30.44*15 = 9855.45 + 9855.45
-  assert.ok(Math.abs(hourly.would - 19710.90) < 0.05, "would have added " + hourly.would);
-  assert.ok(hourly.would > 3 * m.total,
-    "the excluded figure should dwarf the real one — that was the bug");
+  assert.ok(!hourly, "hourly units should not be excluded anymore");
 
-  const unpriced = m.drops.find(g => /no rate/.test(g.why));
+  const unpriced = m.drops.find(g => /no monthly rate/.test(g.why));
+  assert.ok(unpriced, "there should be a drop for units with no rate");
   assert.equal(unpriced.n, 1, "the flat-rate unit with no rate must be named, not dropped");
 });
 
