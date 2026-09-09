@@ -52,7 +52,7 @@ function row(o) {
     damageCost: o.damage == null ? null : o.damage,
     damageIncidents: o.incidents == null ? null : o.incidents,
     damageLines: null, damageLast: "", damageShare: null,
-    downCost: (o.monthly != null && st && dd) ? (o.monthly / 30.44) * dd : null,
+    downCost: (o.monthly != null && st && dd && (st.currentStatus === "DN" || st.currentStatus === "WK01")) ? (o.monthly / 30.44) * dd : null,
     utilAvg: o.util == null ? null : o.util, utilWeeks: o.utilWeeks == null ? null : o.utilWeeks,
     utilLast: null, utilReportStatus: "",
     hoursTotal: hs ? hs.total : null, hoursThisMonth: 0,
@@ -204,7 +204,7 @@ test("list_kpis says which KPIs have data and which do not", () => {
   assert.equal(out.kpis.length, Object.keys(DERIVE).length);
   const cwd = out.kpis.find(k => k.id === "cost-while-down");
   assert.equal(cwd.available, true);
-  assert.ok(cwd.value.includes("14,855"), "now includes hourly units: " + cwd.value);  // formatted, not a raw float
+  assert.ok(cwd.value.includes("5,000"), "includes units that pay rent (F1 + F2): " + cwd.value);  // formatted, not a raw float
   assert.ok(cwd.means.length > 40, "a KPI with no plain-English meaning explains nothing");
   assert.ok(cwd.formula);
   // No damage report for most of this fleet, but utilization has none at all
@@ -217,16 +217,16 @@ test("list_kpis says which KPIs have data and which do not", () => {
 test("explain_kpi hands over the working, already formatted", () => {
   loadFleet();
   const out = ASK_IMPL.explain_kpi({ kpi_id: "cost-while-down", top: 5 });
-  assert.ok(out.value.includes("14,855"), "value should include $14,855: " + out.value);
-  assert.equal(out.unitsCounted, 3);
-  // H1 (hourly) is now the biggest contributor at ~$9,855
-  assert.equal(out.contributors[0].unit, "H1");
-  assert.ok(out.contributors[0].contributes.includes("9,855"), "H1 should contribute ~$9,855");
-  assert.equal(out.contributors[0]["Days down"], "30");
-  assert.ok(parseFloat(out.contributors[0].shareOfTotal) > 60, "H1 should be ~66% of total");
-  // F2 and F1 are also included
-  assert.ok(out.contributors.some(c => c.unit === "F2"), "F2 should be in contributors");
+  assert.ok(out.value.includes("5,000"), "value should include $5,000 (units paying rent): " + out.value);
+  assert.equal(out.unitsCounted, 2);
+  // F2 is the biggest contributor at ~$4,000
+  assert.equal(out.contributors[0].unit, "F2");
+  assert.ok(out.contributors[0].contributes.includes("4,000"), "F2 should contribute ~$4,000");
+  assert.equal(out.contributors[0]["Days down"], "20");
+  assert.ok(parseFloat(out.contributors[0].shareOfTotal) > 70, "F2 should be ~80% of total");
+  // F1 is also included; H1 is excluded because it's in DS (in shop)
   assert.ok(out.contributors.some(c => c.unit === "F1"), "F1 should be in contributors");
+  assert.ok(!out.contributors.some(c => c.unit === "H1"), "H1 should not be in contributors (DS status)");
   // Every value handed over is a string the screen would show, never a float.
   for (const c of out.contributors) {
     for (const [k, v] of Object.entries(c)) {
@@ -268,12 +268,13 @@ test("find_units names the valid focuses when given a bad one", () => {
   for (const k of Object.keys(FOCUS_PRED)) assert.ok(out.error.includes(k), k);
 });
 
-test("unit_detail shows cost while down for both hourly and non-hourly units", () => {
+test("unit_detail excludes units that don't pay rent (DS status)", () => {
   loadFleet();
   const h = ASK_IMPL.unit_detail({ unit: "H1" });
   assert.equal(h.billing, "Hourly");
   assert.equal(h.chargeRunsWhileIdle, false);
-  assert.ok(h.costWhileDown.includes("9,855"), "hourly unit should show cost: " + h.costWhileDown);
+  // H1 is in DS (in shop), so no costWhileDown accrues
+  assert.ok(!h.costWhileDown || h.costWhileDown === "—", "H1 (DS) should show no cost: " + h.costWhileDown);
   assert.equal(h.costWhileDownNote, null);
   assert.equal(h.downDays12mo, 30);
   assert.equal(h.statusMeans, "Down - in shop");

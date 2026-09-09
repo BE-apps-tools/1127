@@ -48,7 +48,7 @@ function row(o) {
     damageCost: o.damage == null ? null : o.damage,
     damageIncidents: o.incidents == null ? null : o.incidents,
     damageLines: o.lines == null ? null : o.lines,
-    downCost: (monthly != null && st && downDays) ? (monthly / DPM) * downDays : null,
+    downCost: (monthly != null && st && downDays && (st.currentStatus === "DN" || st.currentStatus === "WK01")) ? (monthly / DPM) * downDays : null,
     utilAvg: o.util == null ? null : o.util,
     utilWeeks: o.utilWeeks == null ? null : o.utilWeeks,
     utilLast: null,
@@ -171,14 +171,14 @@ test("shares add up to the whole, for the tiles that have them", () => {
 
 test("cost while down prices all units with monthly costs and downtime", () => {
   const m = deriveKpi("cost-while-down", fleet());
-  // Now includes both hourly and non-hourly: H1 and H2 tie at $9,855, then F2, then F1
-  assert.deepEqual(m.rows.map(r => r.r.unit), ["H1", "H2", "F2", "F1"]);   // biggest contributors first
-  // 20000/30.44*15 + 10000/30.44*30 + 6088/30.44*20 + 3044/30.44*10 = 9855.45 + 9855.45 + 4000 + 1000
-  assert.ok(Math.abs(m.total - 24710.90) < 0.05, "total was " + m.total);
+  // Units that pay rent (WK01, DN) contribute; H1 is DS (in shop) so excluded
+  assert.deepEqual(m.rows.map(r => r.r.unit), ["H2", "F2", "F1"]);   // biggest contributors first
+  // 20000/30.44*15 + 6088/30.44*20 + 3044/30.44*10 = 9855.45 + 4000 + 1000
+  assert.ok(Math.abs(m.total - 14855.45) < 0.05, "total was " + m.total);
 
-  // No units should be excluded for being hourly; they all accrue ownership monthly
-  const hourly = m.drops.find(g => /billed hourly/.test(g.why));
-  assert.ok(!hourly, "hourly units should not be excluded anymore");
+  // H1 should be excluded for being in DS (in shop) status, which doesn't pay rent
+  const inShop = m.drops.find(g => /DS|in the shop|doesn't pay/.test(g.why));
+  assert.ok(inShop, "should exclude units in DS status that don't pay rent");
 
   const unpriced = m.drops.find(g => /no monthly rate/.test(g.why));
   assert.ok(unpriced, "there should be a drop for units with no rate");
