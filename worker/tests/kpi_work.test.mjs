@@ -189,9 +189,9 @@ test("spend on down units counts only what is still being billed today", () => {
   const m = deriveKpi("spend-on-down-units", fleet());
   assert.deepEqual(m.rows.map(r => r.r.unit), ["F1"]);
   assert.equal(m.total, 3044);
-  const idle = m.drops.find(g => /no hours worked/.test(g.why));
-  assert.equal(idle.n, 1);                     // H1 is down and hourly
-  assert.equal(idle.would, 10000);             // what the old, wrong tile added
+  const hourly = m.drops.find(g => /billed hourly/.test(g.why));
+  assert.equal(hourly.n, 1);                  // H1 is down and billed hourly
+  assert.equal(hourly.would, 10000);          // what it would have added under the old model
 });
 
 test("availability is a ratio of totals, not an average of percentages", () => {

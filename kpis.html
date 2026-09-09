@@ -1348,14 +1348,14 @@ const DERIVE = {
     kind:"sum", fmt:"money",
     eq:"Σ monthly rental rate, over rented units that have one",
     words:"What the vendors bill each month for units on rent. Only units carrying a real "+
-      "monthly rental rate can be added up — an hourly-billed rental has all three "+
-      "monthly fields at zero, because the vendor bills the hours instead, so including "+
-      "it would quietly report $0 for a live rental.",
+      "monthly rental rate can be added up. Both hourly and non-hourly rentals bill based "+
+      "on the market rate sheet — if a rented unit has no monthly rental rate in the report, "+
+      "it cannot be totaled.",
     include:r=>r.isRented&&r.rentalMonthly!=null&&r.rentalMonthly>0,
     inputs:[{label:"Vendor",get:r=>r.vendor,fmt:"str"},
             {label:"Monthly rental",get:r=>r.rentalMonthly,fmt:"money"}],
     each:r=>r.rentalMonthly,
-    drops:[{why:"Rented but billed hourly — the vendor bills hours, so there is no monthly rate to total",
+    drops:[{why:"Rented but has no monthly rate in the Anniversary Date report",
             match:r=>r.isRented&&!(r.rentalMonthly!=null&&r.rentalMonthly>0)},
            {why:"Company-owned, not on vendor rental",match:r=>!r.isRented}],
   },
@@ -1373,22 +1373,26 @@ const DERIVE = {
   },
   "spend-on-down-units": {
     kind:"sum", fmt:"money",
-    eq:"Σ monthly billing rate, over units down right now whose charge is flat-rate",
-    words:"The charge still running on equipment that cannot work today. Only flat-rate "+
-      "(Non Hourly) units are counted: their rate is billed whether the machine moves "+
-      "or not. An hourly unit that is broken posts no hours and so bills nothing, and "+
-      "counting those made this figure roughly five times too big.",
-    include:r=>r.isDown&&r.chargeRunsWhileIdle&&r.monthlyCost!=null,
+    eq:"Σ monthly billing rate, over units down on site (DN) whose charge is flat-rate",
+    words:"The charge still running on equipment down on site where it would normally work. "+
+      "Only flat-rate (Non Hourly) units are counted: their rate is billed whether the "+
+      "machine moves or not. An hourly unit that is broken posts no hours and so bills "+
+      "nothing. Units in the shop (DS status) are not being charged for, so they do not "+
+      "appear here.",
+    include:r=>r.st&&r.st.currentStatus==="DN"&&r.chargeRunsWhileIdle&&r.monthlyCost!=null,
     inputs:[{label:"Status",get:r=>r.curStatus,fmt:"str"},
             {label:"Days down",get:r=>r.daysInState,fmt:"num"},
             {label:"Monthly rate",get:r=>r.monthlyCost,fmt:"money"}],
     each:r=>r.monthlyCost,
-    drops:[{why:"Down, but billed hourly — no hours worked means no charge",
-            match:r=>r.isDown&&!r.chargeRunsWhileIdle,
+    drops:[{why:"Down but billed hourly — no hours worked means no charge",
+            match:r=>r.st&&r.isDown&&!r.chargeRunsWhileIdle,
             would:r=>r.monthlyCost||0},
-           {why:"Down, flat-rate, but carries no rate in the rate report",
-            match:r=>r.isDown&&r.chargeRunsWhileIdle&&r.monthlyCost==null},
-           {why:"Not down right now",match:r=>!r.isDown}],
+           {why:"Down in the shop (DS) or off-site — doesn't pay rent",
+            match:r=>r.st&&r.isDown&&r.st.currentStatus!=="DN",
+            would:r=>r.monthlyCost||0},
+           {why:"Down on site (DN), flat-rate, but carries no rate in the rate report",
+            match:r=>r.st&&r.st.currentStatus==="DN"&&r.chargeRunsWhileIdle&&r.monthlyCost==null},
+           {why:"Not currently down",match:r=>!r.isDown}],
   },
   "downtime-days": {
     kind:"sum", fmt:"num",
