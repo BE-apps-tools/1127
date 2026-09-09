@@ -994,7 +994,8 @@ function buildRows(){
       // cross-report: what the job paid while the unit sat broken
       // Ownership accrues monthly for both billing types: 176 hours per month
       // for hourly units, flat monthly rate for non-hourly. Pro-rated by downtime.
-      downCost: (dailyRate!=null && st && st.downDays)
+      // Only units with rent-paying status (WK, DN) accrue cost; off-site units (DS, AR, AC, AV) don't.
+      downCost: (dailyRate!=null && st && st.downDays && (st.currentStatus==="DN"||st.currentStatus==="WK"))
                 ? dailyRate*st.downDays : null,
       // Posted hours, and what an hour of work actually cost: the charge-out the
       // job carried over the window divided by the hours it got for it. Only
@@ -1486,7 +1487,9 @@ const DERIVE = {
             {label:"Per day",get:r=>r.monthlyCost/DAYS_PER_MONTH,fmt:"money2"},
             {label:"Days down",get:r=>r.downDays,fmt:"num"}],
     each:r=>r.downCost,
-    drops:[{why:"Down but carries no monthly rate to price it with",
+    drops:[{why:"In the shop (DS) or off-site — doesn't pay rent",
+            match:r=>r.st&&(r.downDays||0)>0&&r.st.currentStatus!=="DN"&&r.st.currentStatus!=="WK01"},
+           {why:"Down but carries no monthly rate to price it with",
             match:r=>r.monthlyCost==null&&(r.downDays||0)>0},
            {why:"No downtime in the window, so nothing to price",match:r=>!((r.downDays||0)>0)}],
   },
