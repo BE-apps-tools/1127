@@ -348,6 +348,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
           <select id="fTrade"><option value="">All trades</option></select>
           <select id="fStatus"><option value="">All statuses</option></select>
           <button class="btn small secondary" id="exportCsv">Export CSV</button>
+          <button class="btn small" id="exportXlsx" title="Download the assets currently shown (all filters applied) as a formatted Excel workbook">Export Excel</button>
         </div>
         <div class="batchbar" id="batchBar">
           <span class="bcount" id="batchCount">0 selected</span>
@@ -445,6 +446,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
 
 <div class="toast" id="toast"></div>
 
+<script src="xlsx-export.js"></script>
 <script>
 "use strict";
 
@@ -1193,6 +1195,41 @@ function exportCsv(){
   setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },0);
   toast("Exported "+v.length+" asset"+(v.length===1?"":"s"));
 }
+/* Excel export of exactly what the filters leave in view (same rows/order as the table; no cost fields). */
+async function exportXlsx(){
+  const v=viewAssets();
+  if(!v.length){ toast("Nothing to export"); return; }
+  if(!window.BACXlsx){ toast("Excel export unavailable — reload the page"); return; }
+  const btn=$("#exportXlsx"); if(btn) btn.disabled=true;
+  try{
+    const site=(STATE.siteIndex.find(s=>String(s.code)===String(STATE.site))||{}).name||STATE.site||"All sites";
+    const today=new Date().toISOString().slice(0,10);
+    const tf=$("#fTrade").value, sf=$("#fStatus").value, q=$("#q").value.trim();
+    const filters=[tf&&("Trade: "+(tf===TRADE_NONE?"Unassigned":tf)), sf&&("Status: "+sf), q&&('Search: "'+q+'"')].filter(Boolean).join("  |  ")||"None (all assets)";
+    const cols=[
+      {header:"Unit #",key:"unit",width:14},{header:"Serial #",key:"serial",width:18},
+      {header:"Description",key:"description",width:34},{header:"Description 2",key:"description2",width:26},
+      {header:"Mfg",key:"mfg",width:16},{header:"Model Year",key:"modelYear",width:10},
+      {header:"Status",key:"status",width:26},{header:"Trade",key:"trade",width:20},
+      {header:"Assigned",get:assignedOf,width:30},{header:"Company",key:"company",width:28},
+      {header:"Location",key:"location",width:22},{header:"Location Code",key:"locationCode",width:20},
+      {header:"Transfer #",key:"transferNumber",width:14},{header:"Finance",key:"financeMethod",width:20},
+      {header:"Asset #",key:"assetNumber",width:12},{header:"From Date",key:"fromDate",type:"date"},
+      {header:"Acquired",key:"acquiredDate",type:"date"},{header:"Additional Info",key:"additionalInfo",width:30},
+      {header:"Remarks",key:"remarks",width:36}];
+    await BACXlsx.download({
+      filename:"assets_"+(STATE.site||"all")+"_"+today+".xlsx",
+      title:"Equipment Tracking — "+site, subtitle:v.length.toLocaleString()+" assets  ·  Generated "+today+"  ·  Blattner Site Inventory Portal",
+      info:[["Site",site+(STATE.site?" ("+STATE.site+")":"")],["Generated",today],["Filters applied",filters],
+            ["Assets exported",v.length],["Total on site",STATE.assets.length]],
+      overview:{title:"Overview",breakdowns:[
+        {title:"Assets by status",labelHeader:"Status",rows:BACXlsx.tally(v,a=>a.status)},
+        {title:"Assets by trade",labelHeader:"Trade",rows:BACXlsx.tally(v,a=>a.trade||"Unassigned")}]},
+      sheets:[{name:"Assets",freezeCols:2,columns:cols,rows:v}]});
+    toast("Exported "+v.length+" asset"+(v.length===1?"":"s")+" to Excel");
+  }catch(e){ toast("Excel export failed: "+(e&&e.message||e)); }
+  finally{ if(btn) btn.disabled=false; }
+}
 function bind(){
   document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>switchTab(b.dataset.panel)));
   bindCopy();
@@ -1209,6 +1246,7 @@ function bind(){
   $("#fTrade").addEventListener("change", ()=>{ STATE.page=1; renderInventory(); syncUrl(); });
   $("#fStatus").addEventListener("change", ()=>{ STATE.page=1; renderInventory(); syncUrl(); });
   $("#exportCsv").addEventListener("click", exportCsv);
+  $("#exportXlsx").addEventListener("click", exportXlsx);
   $("#pgFirst").addEventListener("click", ()=>gotoPage(1));
   $("#pgPrev").addEventListener("click", ()=>gotoPage(STATE.page-1));
   $("#pgNext").addEventListener("click", ()=>gotoPage(STATE.page+1));
