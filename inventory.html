@@ -367,7 +367,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
           <table>
             <thead><tr>
               <th class="selcol"><input type="checkbox" id="selAll" aria-label="Select shown assets"></th>
-              <th data-sort="unit">Unit #</th><th data-sort="serial">Serial #</th><th data-sort="plate">Plate #</th><th data-sort="description">Description</th><th data-sort="mfg">Mfg / Yr</th>
+              <th data-sort="unit">Unit #</th><th data-sort="serial">Serial #</th><th data-sort="description">Description</th><th data-sort="mfg">Mfg / Yr</th>
               <th data-sort="status">Status</th><th data-sort="trade">Trade</th><th data-sort="assignedEmployee">Assigned</th><th></th>
             </tr></thead>
             <tbody id="invBody"></tbody>
@@ -724,7 +724,6 @@ function renderInventory(){
       '<td class="selcol"><input type="checkbox" class="rowsel" data-unit="'+esc(a.unit)+'" data-serial="'+esc(a.serial)+'"'+(STATE.selected.has(rkey(a.unit,a.serial))?' checked':'')+'></td>'+
       '<td class="id"'+cpAttr(a.unit)+'>'+esc(a.unit)+'</td>'+
       '<td'+cpAttr(a.serial)+'>'+esc(a.serial)+'</td>'+
-      '<td'+cpAttr(a.plate)+'>'+(a.plate?esc(a.plate)+(a.plateState?' <span class="d2">'+esc(a.plateState)+'</span>':''):'')+'</td>'+
       '<td class="desc"'+cpAttr(a.description)+'>'+esc(a.description)+(a.description2?'<div class="d2">'+esc(a.description2)+'</div>':'')+'</td>'+
       '<td'+cpAttr(mfg)+'>'+esc(mfg)+'</td>'+
       '<td class="status-cell"'+cpAttr(a.status)+'>'+statusDot(a.status)+esc(a.status)+'</td>'+
@@ -732,8 +731,8 @@ function renderInventory(){
       '<td'+cpAttr(assignedOf(a))+'>'+esc(assignedOf(a))+'</td>'+
       '<td><div class="row-actions">'+pendBadge+'<button class="btn small" data-req-unit="'+esc(a.unit)+'" data-req-serial="'+esc(a.serial)+'">Request</button></div></td>';
     const detail=document.createElement("tr"); detail.className="detail-row"; detail.style.display="none";
-    detail.innerHTML='<td colspan="10"><div class="detail-grid">'+
-      dt("Plate renewal",a.plateRenewal)+dt("VIN",a.vin)+dt("Company",a.company)+dt("Location",a.location)+dt("Location code",a.locationCode)+
+    detail.innerHTML='<td colspan="9"><div class="detail-grid">'+
+      dt("Plate #",a.plate)+dt("Plate state",a.plateState)+dt("Plate renewal",a.plateRenewal)+dt("VIN",a.vin)+dt("Company",a.company)+dt("Location",a.location)+dt("Location code",a.locationCode)+
       dt("Transfer #",a.transferNumber)+dt("Finance",a.financeMethod)+dt("Asset #",a.assetNumber)+
       dt("From date",a.fromDate)+dt("Acquired",a.acquiredDate)+dt("Additional info",a.additionalInfo)+dt("Remarks",a.remarks)+
       '</div></td>';
