@@ -50,6 +50,19 @@ change requests — which become auto-reconciling GitHub Issues.
 | `scripts/brandcheck.py` | Blattner brand gate for `index.html` |
 | `scripts/sync_kpi_spec.py` | Mirrors the KPI report spec into `kpi-core.js` |
 
+## License plates
+
+The **License Plate Report** (JDE export: Unit Number, VIN, Plate Number, License Renewal Date, State)
+is imported together with the Equipment Master and joined to it on **Unit Number**. Matched assets gain
+`plate`, `plateState`, `plateRenewal` and `vin`, shown on Equipment Tracking (column, detail row, search,
+CSV/Excel) and in search on the Dashboard and Asset KPIs. If a unit is listed twice (an expired plate
+beside its replacement) the later renewal date wins; `N/A` is not treated as a plate.
+
+- **Browser import** (Equipment Tracking → Import): choose the master, and optionally the plate report.
+  Each publish replaces the data, so import both together every time or plates are dropped.
+- **Action build**: a `License Plate*.xlsx` beside the Equipment Master in `source/` is picked up
+  automatically (`build/plates.py`).
+
 ## Keeping the reports current
 
 The three exports are run independently, so a missed one would leave a stale
