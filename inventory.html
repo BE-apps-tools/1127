@@ -335,6 +335,9 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
             <div class="hintbox">Upload the latest <strong>Equipment Master .xlsx</strong>. It is parsed entirely in your browser — the spreadsheet is never uploaded; only the built inventory JSON is published to the site.</div>
             <div class="field"><label for="emFile">Equipment Master (.xlsx)</label>
               <input type="file" id="emFile" accept=".xlsx"></div>
+            <div class="field"><label for="lpFile">License Plate Report (.xlsx) <span style="color:var(--mid-gray,#76777B)">&mdash; optional</span></label>
+              <input type="file" id="lpFile" accept=".xlsx"></div>
+            <div class="hintbox">Plates are matched to the Equipment Master by <strong>Unit Number</strong> and published with it. Each publish replaces the data, so import the plate report <strong>together with</strong> the master every time or the plates are dropped.</div>
             <div id="emPreview"></div>
             <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
               <button class="btn" id="emPublish" disabled>Publish inventory</button>
@@ -344,7 +347,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
         </div>
         <section class="inv-stats" id="invStats" style="display:none;" aria-label="Site summary"></section>
         <div class="toolbar">
-          <div class="search"><input type="text" id="q" aria-label="Search assets by unit or serial number, description, or assigned employee" placeholder="Search Unit # or Serial # or description or assigned…" autocomplete="off"></div>
+          <div class="search"><input type="text" id="q" aria-label="Search assets by unit or serial number, description, or assigned employee" placeholder="Search Unit # or Serial # or Plate # or description or assigned…" autocomplete="off"></div>
           <select id="fTrade"><option value="">All trades</option></select>
           <select id="fStatus"><option value="">All statuses</option></select>
           <button class="btn small secondary" id="exportCsv">Export CSV</button>
@@ -361,7 +364,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
           <table>
             <thead><tr>
               <th class="selcol"><input type="checkbox" id="selAll" aria-label="Select shown assets"></th>
-              <th data-sort="unit">Unit #</th><th data-sort="serial">Serial #</th><th data-sort="description">Description</th><th data-sort="mfg">Mfg / Yr</th>
+              <th data-sort="unit">Unit #</th><th data-sort="serial">Serial #</th><th data-sort="plate">Plate #</th><th data-sort="description">Description</th><th data-sort="mfg">Mfg / Yr</th>
               <th data-sort="status">Status</th><th data-sort="trade">Trade</th><th data-sort="assignedEmployee">Assigned</th><th></th>
             </tr></thead>
             <tbody id="invBody"></tbody>
@@ -446,6 +449,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
 
 <div class="toast" id="toast"></div>
 
+<script src="kpi-core.js"></script>
 <script src="xlsx-export.js"></script>
 <script>
 "use strict";
@@ -651,7 +655,7 @@ function viewAssets(){
   if(tf===TRADE_NONE) v=v.filter(a=>!String(a.trade||"").trim());
   else if(tf) v=v.filter(a=>a.trade===tf);
   if(sf) v=v.filter(a=>a.status===sf);
-  if(q) v=v.filter(a=>[a.unit,a.serial,a.description,a.description2,assignedOf(a)].some(x=>String(x||"").toLowerCase().includes(q)));
+  if(q) v=v.filter(a=>[a.unit,a.serial,a.plate,a.vin,a.description,a.description2,assignedOf(a)].some(x=>String(x||"").toLowerCase().includes(q)));
   const s=STATE.sort;
   if(s && s.key){
     const dir = s.dir==="desc" ? -1 : 1;
@@ -717,6 +721,7 @@ function renderInventory(){
       '<td class="selcol"><input type="checkbox" class="rowsel" data-unit="'+esc(a.unit)+'" data-serial="'+esc(a.serial)+'"'+(STATE.selected.has(rkey(a.unit,a.serial))?' checked':'')+'></td>'+
       '<td class="id"'+cpAttr(a.unit)+'>'+esc(a.unit)+'</td>'+
       '<td'+cpAttr(a.serial)+'>'+esc(a.serial)+'</td>'+
+      '<td'+cpAttr(a.plate)+'>'+(a.plate?esc(a.plate)+(a.plateState?' <span class="d2">'+esc(a.plateState)+'</span>':''):'')+'</td>'+
       '<td class="desc"'+cpAttr(a.description)+'>'+esc(a.description)+(a.description2?'<div class="d2">'+esc(a.description2)+'</div>':'')+'</td>'+
       '<td'+cpAttr(mfg)+'>'+esc(mfg)+'</td>'+
       '<td class="status-cell"'+cpAttr(a.status)+'>'+statusDot(a.status)+esc(a.status)+'</td>'+
@@ -724,8 +729,8 @@ function renderInventory(){
       '<td'+cpAttr(assignedOf(a))+'>'+esc(assignedOf(a))+'</td>'+
       '<td><div class="row-actions">'+pendBadge+'<button class="btn small" data-req-unit="'+esc(a.unit)+'" data-req-serial="'+esc(a.serial)+'">Request</button></div></td>';
     const detail=document.createElement("tr"); detail.className="detail-row"; detail.style.display="none";
-    detail.innerHTML='<td colspan="9"><div class="detail-grid">'+
-      dt("Company",a.company)+dt("Location",a.location)+dt("Location code",a.locationCode)+
+    detail.innerHTML='<td colspan="10"><div class="detail-grid">'+
+      dt("Plate renewal",a.plateRenewal)+dt("VIN",a.vin)+dt("Company",a.company)+dt("Location",a.location)+dt("Location code",a.locationCode)+
       dt("Transfer #",a.transferNumber)+dt("Finance",a.financeMethod)+dt("Asset #",a.assetNumber)+
       dt("From date",a.fromDate)+dt("Acquired",a.acquiredDate)+dt("Additional info",a.additionalInfo)+dt("Remarks",a.remarks)+
       '</div></td>';
@@ -1020,7 +1025,7 @@ async function emFirstSheetRows(file){
   for(const m of rels.matchAll(/<Relationship\s+[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"/g)) relMap[m[1]]=m[2];
   const sm=/<sheet\s+[^>]*r:id="([^"]+)"/.exec(wb) || /<sheet\s+[^>]*name="[^"]*"[^>]*r:id="([^"]+)"/.exec(wb);
   if(!sm) throw new Error("No sheet found in workbook");
-  let t=relMap[sm[1]]||""; if(t && !t.startsWith("xl/")) t="xl/"+t;
+  let t=(relMap[sm[1]]||"").replace(/^\/+/,""); if(t && !t.startsWith("xl/")) t="xl/"+t;
   return emSheetRows(await zip.get(t)||"", shared);
 }
 
@@ -1049,12 +1054,31 @@ function emCanonicalTrade(raw){ const s=(raw||"").trim(); if(!s) return ""; retu
 function emSplitBranch(bp){ const s=(bp||"").trim(); const i=s.indexOf(" - "); if(i>=0) return [s.slice(0,i).trim(), s.slice(i+3).trim()]; return s?[s,""]:["",""]; }
 function emSanitizeCode(code){ return String(code||"").replace(/[^A-Za-z0-9_-]+/g,"_") || "UNASSIGNED"; }
 function emNormHeader(s){ return String(s||"").replace(/\s+/g," ").trim(); }
-function buildInventory(rows, fileName){
+/* Port of build/plates.py: License Plate Report rows -> {unit:{plate,plateState,plateRenewal,vin}}.
+   A unit can be listed twice (expired plate + its replacement): the later renewal date wins. */
+const EM_NO_PLATE=new Set(["","N/A","NA","NONE","TBD","-"]);
+function emParsePlates(rows){
+  if(!rows.length) throw new Error("License Plate Report is empty");
+  const idx={}; rows[0].forEach((h,i)=>{ idx[emNormHeader(h).toLowerCase()]=i; });
+  for(const k of ["unit number","plate number"]) if(!(k in idx))
+    throw new Error("This doesn't look like a License Plate Report (no '"+(k==="unit number"?"Unit Number":"Plate Number")+"' header). Header found: "+rows[0].map(emNormHeader).filter(Boolean).slice(0,8).join(", "));
+  const cell=(r,n)=>{ const i=idx[n]; return i!==undefined&&r[i]!==undefined?String(r[i]).trim():""; };
+  const best={};
+  for(let r=1;r<rows.length;r++){
+    const row=rows[r], unit=cell(row,"unit number"), plate=cell(row,"plate number");
+    if(!unit || EM_NO_PLATE.has(plate.toUpperCase())) continue;
+    const renewal=emExcelSerialToISO(cell(row,"license renewal date"));
+    const old=best[unit];
+    if(!old || renewal>=old.plateRenewal) best[unit]={plate, plateState:cell(row,"state"), plateRenewal:renewal, vin:cell(row,"vin number")};
+  }
+  return best;
+}
+function buildInventory(rows, fileName, plates){
   if(!rows.length) throw new Error("Sheet is empty");
   const header=rows[0].map(emNormHeader);
   if(!header.includes("Unit Number") && !header.includes("Serial Number"))
     throw new Error("This doesn't look like an Equipment Master export (no 'Unit Number'/'Serial Number' header). Header found: "+header.filter(Boolean).slice(0,8).join(", "));
-  const sites={}; let count=0;
+  const sites={}; let count=0; const matched=new Set();
   for(let r=1;r<rows.length;r++){
     const arr=rows[r]; const rec={};
     header.forEach((h,i)=>{ const f=EM_HEADER_TO_FIELD[h]; if(f) rec[f]=arr[i]!==undefined?arr[i]:""; });
@@ -1072,6 +1096,8 @@ function buildInventory(rows, fileName){
       remarks:g("remarks"), company:g("company"), transferNumber:g("transferNumber"),
       financeMethod:g("financeMethod"), assetNumber:g("assetNumber"),
       fromDate:emExcelSerialToISO(rec.fromDate||""), acquiredDate:emExcelSerialToISO(rec.acquiredDate||"") };
+    const pl=plates&&Object.prototype.hasOwnProperty.call(plates,unit)?plates[unit]:null;
+    if(pl){ Object.assign(asset,pl); matched.add(unit); }
     const site=sites[code]||(sites[code]={name,assets:[]}); if(name && !site.name) site.name=name;
     site.assets.push(asset); count++;
   }
@@ -1081,11 +1107,14 @@ function buildInventory(rows, fileName){
   index.sort((a,b)=>(a.name||a.code).toLowerCase().localeCompare((b.name||b.code).toLowerCase()));
   const vm=/V\d+\.\d+/.exec(fileName||"");
   const meta={ builtAt:new Date().toISOString().slice(0,19)+"Z", sourceVersion:vm?vm[0]:"", assetCount:count, siteCount:index.length };
+  if(plates){ meta.plateCount=Object.keys(plates).length; meta.plateMatched=matched.size; }
   const siteData={}; codes.forEach(code=>siteData[code]=sites[code].assets);
   return { meta, index, siteData };
 }
 
 /* ---------- import UI ---------- */
+/* Parsed files waiting to be published (either may arrive first). */
+const PEND={ em:null, emName:"", plates:null };
 function renderEmPreview(){
   const inv=STATE.pendingInventory, el=$("#emPreview");
   if(!inv){ el.innerHTML=""; $("#emPublish").disabled=true; return; }
@@ -1093,6 +1122,10 @@ function renderEmPreview(){
     .map(s=>'<tr><td>'+esc(s.name)+'</td><td>'+esc(s.code)+'</td><td>'+s.count+'</td></tr>').join("");
   el.innerHTML='<div class="field"><label>Parsed '+inv.meta.assetCount+' assets across '+inv.index.length+' site(s)'+
     (inv.meta.sourceVersion?(' &middot; '+esc(inv.meta.sourceVersion)):'')+'</label></div>'+
+    (inv.meta.plateCount!=null
+      ? '<div class="field"><label>License plates: <strong>'+inv.meta.plateMatched+'</strong> of '+inv.meta.plateCount+' plate records matched to a unit in the master'+
+        (inv.meta.plateCount>inv.meta.plateMatched?(' &middot; '+(inv.meta.plateCount-inv.meta.plateMatched)+' not in the master (ignored)'):'')+'</label></div>'
+      : '<div class="field"><label>No License Plate Report chosen &mdash; assets will publish without plates.</label></div>')+
     '<div class="table-scroll"><table><thead><tr><th>Site</th><th>Code</th><th>Assets</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
   $("#emPublish").disabled = inv.meta.assetCount===0;
 }
@@ -1106,7 +1139,7 @@ async function publishInventory(){
     if(!r.ok){ toast("Publish failed: "+(d.error||("HTTP "+r.status))); $("#emPublish").disabled=false; return; }
     toast("Published "+inv.meta.assetCount+" assets — live in ~1–2 min");
     banner("info","Inventory published ("+inv.meta.assetCount+" assets, "+inv.index.length+" sites). GitHub Pages rebuilds in ~1–2 minutes; refresh then.");
-    STATE.pendingInventory=null; $("#emFile").value=""; renderEmPreview(); $("#importPanel").style.display="none";
+    STATE.pendingInventory=null; PEND.em=null; PEND.plates=null; $("#emFile").value=""; $("#lpFile").value=""; renderEmPreview(); $("#importPanel").style.display="none";
     const ar=await autoResolveOnPublish(inv);   // close reassign requests the new master now satisfies
     if(ar.resolved){ toast("Auto-resolved "+ar.resolved+" reassignment request"+(ar.resolved===1?"":"s")+" — the master now matches");
       if(STATE.site){ await loadOpenRequests(STATE.site); renderInventory(); } }   // refresh the pending-request overlay/badges
@@ -1179,7 +1212,7 @@ function csvCell(v){ const s=String(v==null?"":v); return /[",\n\r]/.test(s) ? (
 function exportCsv(){
   const v=viewAssets();
   if(!v.length){ toast("Nothing to export"); return; }
-  const cols=[["Unit","unit"],["Serial","serial"],["Description","description"],["Description 2","description2"],
+  const cols=[["Unit","unit"],["Serial","serial"],["Plate #","plate"],["Plate State","plateState"],["Plate Renewal","plateRenewal"],["VIN","vin"],["Description","description"],["Description 2","description2"],
     ["Mfg","mfg"],["Model Year","modelYear"],["Status","status"],["Trade","trade"],["Assigned","assignedEmployee"],
     ["Company","company"],["Location","location"],["Location Code","locationCode"],["Transfer #","transferNumber"],
     ["Finance","financeMethod"],["Asset #","assetNumber"],["From Date","fromDate"],["Acquired","acquiredDate"],
@@ -1208,6 +1241,7 @@ async function exportXlsx(){
     const filters=[tf&&("Trade: "+(tf===TRADE_NONE?"Unassigned":tf)), sf&&("Status: "+sf), q&&('Search: "'+q+'"')].filter(Boolean).join("  |  ")||"None (all assets)";
     const cols=[
       {header:"Unit #",key:"unit",width:14},{header:"Serial #",key:"serial",width:18},
+      {header:"Plate #",key:"plate",width:12},{header:"Plate State",key:"plateState",width:7},{header:"Plate Renewal",key:"plateRenewal",type:"date"},{header:"VIN",key:"vin",width:20},
       {header:"Description",key:"description",width:34},{header:"Description 2",key:"description2",width:26},
       {header:"Mfg",key:"mfg",width:16},{header:"Model Year",key:"modelYear",width:10},
       {header:"Status",key:"status",width:26},{header:"Trade",key:"trade",width:20},
@@ -1233,11 +1267,24 @@ async function exportXlsx(){
 function bind(){
   document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>switchTab(b.dataset.panel)));
   bindCopy();
-  $("#emCancel").addEventListener("click", ()=>{ $("#importPanel").style.display="none"; STATE.pendingInventory=null; $("#emFile").value=""; renderEmPreview(); });
+  $("#emCancel").addEventListener("click", ()=>{ $("#importPanel").style.display="none"; STATE.pendingInventory=null; $("#emFile").value=""; $("#lpFile").value=""; PEND.em=null; PEND.plates=null; renderEmPreview(); });
+  /* The master and the plate report can be chosen in either order; the preview is rebuilt from whatever is loaded. */
+  const rebuildPending=()=>{
+    if(!PEND.em){ STATE.pendingInventory=null; renderEmPreview(); return; }
+    STATE.pendingInventory=buildInventory(PEND.em, PEND.emName, PEND.plates); renderEmPreview();
+  };
   $("#emFile").addEventListener("change", async e=>{
     const f=e.target.files[0]; if(!f) return;
-    try{ toast("Reading file…"); const rows=await emFirstSheetRows(f); STATE.pendingInventory=buildInventory(rows, f.name); renderEmPreview(); toast("Parsed "+STATE.pendingInventory.meta.assetCount+" assets"); }
-    catch(err){ STATE.pendingInventory=null; renderEmPreview(); banner("err","Could not read file: "+err.message); }
+    try{ toast("Reading file…"); PEND.em=await emFirstSheetRows(f); PEND.emName=f.name; rebuildPending(); toast("Parsed "+STATE.pendingInventory.meta.assetCount+" assets"); }
+    catch(err){ PEND.em=null; STATE.pendingInventory=null; renderEmPreview(); banner("err","Could not read file: "+err.message); }
+  });
+  $("#lpFile").addEventListener("change", async e=>{
+    const f=e.target.files[0];
+    try{
+      /* kpi-core's reader copes with the JDE writer's layout (attribute order, rich inline strings) */
+      PEND.plates=f?emParsePlates(await KPI.firstSheetRows(f)):null; rebuildPending();
+      if(f) toast("Read "+Object.keys(PEND.plates).length+" license plates"+(STATE.pendingInventory?(" — "+STATE.pendingInventory.meta.plateMatched+" matched"):" — now choose the Equipment Master"));
+    }catch(err){ PEND.plates=null; e.target.value=""; try{ rebuildPending(); }catch(_){} banner("err","Could not read plate report: "+err.message); }
   });
   $("#emPublish").addEventListener("click", publishInventory);
   $("#siteSelect").addEventListener("change", async e=>{ STATE.page=1; await selectSite(e.target.value); syncUrl(); });

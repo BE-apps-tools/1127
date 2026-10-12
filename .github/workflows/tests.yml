@@ -86,3 +86,8 @@ jobs:
       # typed cells, escaping, sheet-name rules.
       - name: Excel export writer (xlsx-export.js)
         run: node worker/tests/xlsx_export.test.mjs
+
+      # The plate join lives in build/plates.py and inventory.html; this holds the
+      # browser half to the same fixture and expectations as the pytest run.
+      - name: License plate join parity (inventory.html vs build/plates.py)
+        run: node worker/tests/plates.test.mjs

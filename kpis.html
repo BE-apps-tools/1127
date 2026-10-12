@@ -945,7 +945,7 @@ function buildRows(){
     const annivDays = rn && rn.billedThroughDate ? daysUntil(rn.billedThroughDate) : null;
     return {
       asset:a, kpi:k, tr, rt, rn, hr, dm, st, hs, ut,
-      unit:String(a.unit||""), serial:String(a.serial||""),
+      unit:String(a.unit||""), serial:String(a.serial||""), plate:String(a.plate||""),
       description:String(a.description||""), description2:String(a.description2||""),
       status:String(a.status||""), trade:String(a.trade||""), assigned:assignedOf(a),
       eqClass: tr ? String(tr.eqClass||"") : "",
@@ -2663,7 +2663,7 @@ function scopeRowsExceptBilling(){
   if(tf===TRADE_NONE) v=v.filter(r=>!r.trade);
   else if(tf) v=v.filter(r=>r.trade===tf);
   if(sf) v=v.filter(r=>r.status===sf);
-  if(q) v=v.filter(r=>[r.unit,r.serial,r.description,r.description2,r.assigned,r.vendor,r.eqClass]
+  if(q) v=v.filter(r=>[r.unit,r.serial,r.plate,r.description,r.description2,r.assigned,r.vendor,r.eqClass]
     .some(x=>String(x||"").toLowerCase().includes(q)));
   return v;
 }
@@ -3202,7 +3202,7 @@ function scopeRows(){
   if(tf===TRADE_NONE) v=v.filter(r=>!r.trade);
   else if(tf) v=v.filter(r=>r.trade===tf);
   if(sf) v=v.filter(r=>r.status===sf);
-  if(q) v=v.filter(r=>[r.unit,r.serial,r.description,r.description2,r.assigned,r.vendor,r.eqClass].some(x=>String(x||"").toLowerCase().includes(q)));
+  if(q) v=v.filter(r=>[r.unit,r.serial,r.plate,r.description,r.description2,r.assigned,r.vendor,r.eqClass].some(x=>String(x||"").toLowerCase().includes(q)));
   return v;
 }
 /* What the scope filters are set to, in words, for the tile caption. */
@@ -3393,6 +3393,7 @@ function detUnit(r){
   const a=r.asset;
   const cells=[
     kv("Serial", r.serial),
+    kv("Plate #", r.plate?(r.plate+(a.plateState?" ("+a.plateState+")":"")):""),
     kv("Class", r.eqClass),
     kv("Mfg / Yr", [a.mfg,a.modelYear].filter(Boolean).join(" ")),
     kv("Trade", r.trade),
@@ -3530,7 +3531,7 @@ function csvCell(v){ const s=String(v==null?"":v); return /[",\n\r]/.test(s) ? (
    the Excel export (number/date formats); CSV writes the raw values. */
 function exportCols(){
   const on=activeKinds();
-  const cols=[["Unit","unit"],["Serial","serial"],["Description","description"],["Description 2","description2"],
+  const cols=[["Unit","unit"],["Serial","serial"],["Plate #","plate"],["Plate State",r=>r.asset?r.asset.plateState:""],["Description","description"],["Description 2","description2"],
     ["Status","status"],["Trade","trade"],["Billing type","billingType"],["Assigned","assigned"],["On site since","arrived","date"],["Days on site","daysOnSite","int"]];
   if(on.transfers) cols.push(["Equipment class","eqClass"],["Current status","curStatus"],
     ["Days in status","daysInState","int"],["Down days "+TREND_MONTHS+"mo","downDays","int"],["Breakdowns","downEvents","int"],

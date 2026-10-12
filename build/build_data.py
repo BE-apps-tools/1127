@@ -13,6 +13,7 @@ import zipfile
 from xml.etree import ElementTree as ET
 
 from .normalize import canonical_trade, excel_serial_to_iso, split_branch
+from .plates import newest_plate_source, read_plates
 
 M = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 R = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
@@ -56,10 +57,11 @@ def _sheet_target(z):
     rid = wb.find(M + "sheets").find(M + "sheet").get(R + "id")
     rels = ET.fromstring(z.read("xl/_rels/workbook.xml.rels"))
     tgt = {r.get("Id"): r.get("Target") for r in rels}[rid]
+    tgt = tgt.lstrip("/")      # some writers emit absolute targets ("/xl/worksheets/sheet1.xml")
     return tgt if tgt.startswith("xl/") else "xl/" + tgt
 
 
-def _rows(z, shared):
+def _rows(z, shared, ncols=NCOLS):
     tgt = _sheet_target(z)
     header = None
     with z.open(tgt) as f:
@@ -82,7 +84,7 @@ def _rows(z, shared):
                         if ty == "s":
                             val = shared[int(val)]
                 cells[ci] = val
-            arr = [cells.get(i, "") for i in range(NCOLS)]
+            arr = [cells.get(i, "") for i in range(ncols)]
             if header is None:
                 header = [_norm_header(x) for x in arr]
             else:
@@ -94,7 +96,13 @@ def _sanitize_code(code):
     return re.sub(r"[^A-Za-z0-9_-]+", "_", code) or "UNASSIGNED"
 
 
-def build(xlsx_path, out_dir):
+def build(xlsx_path, out_dir, plates_path="auto"):
+    """plates_path: a License Plate Report .xlsx to join on unit number; "auto"
+    (default) uses the newest 'License Plate*.xlsx' beside the Equipment Master, None skips it."""
+    if plates_path == "auto":
+        plates_path = newest_plate_source(os.path.dirname(os.path.abspath(xlsx_path)))
+    plates = read_plates(plates_path) if plates_path else {}
+    plates_matched = set()
     z = zipfile.ZipFile(xlsx_path)
     shared = _read_shared(z)
     sites = {}
@@ -134,6 +142,10 @@ def build(xlsx_path, out_dir):
             "fromDate": excel_serial_to_iso(rec.get("fromDate", "")),
             "acquiredDate": excel_serial_to_iso(rec.get("acquiredDate", "")),
         }
+        pl = plates.get(unit)
+        if pl:
+            asset.update(pl)
+            plates_matched.add(unit)
         site = sites.setdefault(code, {"name": name, "assets": []})
         if name and not site["name"]:
             site["name"] = name
@@ -162,6 +174,10 @@ def build(xlsx_path, out_dir):
         "assetCount": count,
         "siteCount": len(index),
     }
+    if plates_path:
+        meta["plateCount"] = len(plates)
+        meta["plateMatched"] = len(plates_matched)
+        meta["plateSource"] = os.path.basename(plates_path)
     with open(os.path.join(out_dir, "meta.json"), "w", encoding="utf-8") as f:
         json.dump(meta, f)
     return meta
