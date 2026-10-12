@@ -334,6 +334,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
               <div class="search"><input type="text" id="rq" aria-label="Search receiving" placeholder="Search Ref ID, Unique ID, MRR#, part, supplier, slip&hellip;"></div>
               <span class="fgrp"><span class="flbl">Status</span><select id="rStatus"><option value="">All statuses</option><option>Completed</option><option>Partially received</option><option>Open &mdash; nothing received</option><option>Missing &mdash; no EJDE receipt</option></select></span>
               <span class="fgrp"><span class="flbl">Trade</span><select id="rTrade"><option value="">All trades</option></select></span>
+              <button class="btn small" id="exportRecv" title="Download the receiving records currently shown (all filters applied) as a formatted Excel workbook">Export Excel</button>
             </div>
             <div id="recvSummary" class="ordsum"></div>
             <style>
@@ -364,6 +365,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
         </div>
         <button class="btn small secondary" id="filtersBtn" aria-expanded="false" aria-controls="filterbar">Filters</button>
         <button class="btn small secondary" id="purgeLegacy" style="display:none;"></button>
+        <button class="btn small" id="exportTrk" title="Download the trackers currently shown (all filters applied) as a formatted Excel workbook">Export Excel</button>
       </div>
       <div class="filterbar" id="filterbar">
         <span class="fgrp"><span class="flbl">Trade</span><select id="fTrade"><option value="">All trades</option></select></span>
@@ -390,6 +392,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
 
 <div class="toast" id="toast"></div>
 
+<script src="xlsx-export.js"></script>
 <script>
 "use strict";
 const WORKER_URL = "https://asset-portal.site-asset-manager.workers.dev";
@@ -1103,6 +1106,8 @@ function bind(){
   $("#pgPrev").addEventListener("click", ()=>{ if(STATE.page>1) gotoPage(STATE.page-1); });
   $("#pgNext").addEventListener("click", ()=>{ gotoPage(STATE.page+1); });
   $("#pgSel").addEventListener("change", e=>{ gotoPage(Number(e.target.value)||1); });
+  $("#exportTrk").addEventListener("click", exportTrackersXlsx);
+  $("#exportRecv").addEventListener("click", exportReceivingXlsx);
   $("#purgeLegacy").addEventListener("click", async ()=>{
     const legacy=STATE.trackers.filter(isLegacy); if(!legacy.length) return;
     if(!window.confirm("Delete "+legacy.length+" legacy (old-format) tracker"+(legacy.length===1?"":"s")+"? Each GitHub issue is closed as a record.")) return;
@@ -1341,13 +1346,83 @@ function recvRows(){
   }
   return rows;
 }
-function renderReceiving(){
+/* ---------- Excel export (what the filters currently show; see xlsx-export.js) ---------- */
+async function exportTrackersXlsx(){
+  const v=viewTrackers();
+  if(!v.length){ toast("Nothing to export"); return; }
+  if(!window.BACXlsx){ toast("Excel export unavailable — reload the page"); return; }
+  try{
+    const today=new Date().toISOString().slice(0,10), done=STATE.state==="closed";
+    const lines=[];
+    v.forEach(t=>((t.marker&&t.marker.lines)||[]).forEach(l=>{
+      const d=lineDelivered(l), p=linePickedUp(l);
+      lines.push({req:t.reqNumber,project:t.project||"",trade:t.trade,category:trackerCategory(t),by:trackerOriginator(t)||"",
+        line:l.line,part:l.part||"",desc:l.desc||"",uom:l.uom||"",required:l.requiredDate||"",expected:lineExpected(l),
+        delivered:d,pending:linePending(l),picked:p,status:lineStatus(d,p),
+        overdue:(!done&&lineOverdue(l))?"Overdue":((!done&&lineDueSoon(l))?"Due soon":"")});
+    }));
+    const trk=v.map(t=>{ const n=t.linesTotal||((t.marker&&t.marker.lines)||[]).length, on=trackerOnSite(t);
+      return {req:t.reqNumber,project:t.project||"",trade:t.trade,category:trackerCategory(t),by:trackerOriginator(t)||"",
+        lines:n,onSite:on,pct:n?100*on/n:null,overdue:(!done&&trackerOverdue(t))?"Overdue":""}; });
+    const f=[$("#q").value.trim()&&('Search: "'+$("#q").value.trim()+'"'),$("#fTrade").value&&("Trade: "+$("#fTrade").value),
+      $("#fCategory").value&&("Category: "+$("#fCategory").value),$("#fFrom").value&&("Required from "+$("#fFrom").value),$("#fTo").value&&("Required to "+$("#fTo").value)].filter(Boolean);
+    const label=done?"Completed":"Active";
+    await BACXlsx.download({
+      filename:"delivery_trackers_"+label.toLowerCase()+"_"+today+".xlsx",
+      title:"Delivery Trackers — "+label, subtitle:v.length+" requisitions  ·  "+lines.length.toLocaleString()+" lines  ·  Generated "+today+"  ·  Blattner Site Inventory Portal",
+      info:[["View",label+" trackers"],["Generated",today],["Filters applied",f.join("  |  ")||"None"],["Requisitions",v.length],["Lines",lines.length]],
+      overview:{title:"Overview",breakdowns:[
+        {title:"Requisitions by trade",labelHeader:"Trade",rows:BACXlsx.tally(trk,r=>r.trade)},
+        {title:"Lines by status",labelHeader:"Status",rows:BACXlsx.tally(lines,r=>r.status)},
+        ...(done?[]:[{title:"Lines by due state",labelHeader:"Due",rows:BACXlsx.tally(lines,r=>r.overdue||"On track")}])]},
+      sheets:[
+        {name:"Lines",freezeCols:1,rows:lines,columns:[
+          {header:"Req #",key:"req",width:14},{header:"Project",key:"project",width:28},{header:"Trade",key:"trade",width:16},{header:"Category",key:"category",width:18},
+          {header:"Line",key:"line",width:8},{header:"Part #",key:"part",width:18},{header:"Description",key:"desc",width:40},{header:"UoM",key:"uom",width:8},
+          {header:"Required",key:"required",type:"date"},{header:"Expected",key:"expected",type:"num"},{header:"Delivered",key:"delivered",type:"num"},
+          {header:"Pending",key:"pending",type:"num"},{header:"Picked up",key:"picked",type:"num"},{header:"Status",key:"status",width:16},{header:"Due",key:"overdue",width:11}]},
+        {name:"Requisitions",freezeCols:1,rows:trk,columns:[
+          {header:"Req #",key:"req",width:14},{header:"Project",key:"project",width:30},{header:"Trade",key:"trade",width:16},{header:"Category",key:"category",width:18},
+          {header:"Originator",key:"by",width:22},{header:"Lines",key:"lines",type:"int",width:9},{header:"On site",key:"onSite",type:"int",width:9},
+          {header:"% on site",key:"pct",type:"pct",width:10},{header:"Overdue",key:"overdue",width:11}]}]});
+    toast("Exported "+v.length+" requisition"+(v.length===1?"":"s")+" to Excel");
+  }catch(e){ toast("Excel export failed: "+(e&&e.message||e)); }
+}
+async function exportReceivingXlsx(){
+  const rv=recvView(), rows=rv.rows;
+  if(!rows.length){ toast("Nothing to export"); return; }
+  if(!window.BACXlsx){ toast("Excel export unavailable — reload the page"); return; }
+  try{
+    const today=new Date().toISOString().slice(0,10);
+    const f=[rv.q&&('Search: "'+rv.q+'"'),rv.sf&&("Status: "+rv.sf),rv.tf&&("Trade: "+rv.tf)].filter(Boolean);
+    await BACXlsx.download({
+      filename:"receiving_"+today+".xlsx",
+      title:"Receiving — MRR vs. tracker reconciliation", subtitle:rows.length.toLocaleString()+" records  ·  Generated "+today+"  ·  Blattner Site Inventory Portal",
+      info:[["Generated",today],["Filters applied",f.join("  |  ")||"None"],["Records",rows.length]],
+      overview:{title:"Overview",breakdowns:[
+        {title:"Records by status",labelHeader:"Status",rows:BACXlsx.tally(rows,r=>r.status)},
+        {title:"Records by trade",labelHeader:"Trade",rows:BACXlsx.tally(rows,r=>r.trade||"Unassigned")}]},
+      sheets:[{name:"Receiving",freezeCols:2,rows,columns:[
+        {header:"Ref ID",key:"refId",width:10},{header:"Unique ID",key:"uid",width:18},{header:"Description",key:"desc",width:40},
+        {header:"Req #",key:"req",width:14},{header:"Supplier",key:"supplier",width:28},{header:"Trade",key:"trade",width:16},
+        {header:"Qty Ord",key:"ordered",type:"num"},{header:"Qty Recv",key:"received",type:"num"},{header:"JDE Open",key:"jdeOpen",type:"num"},
+        {header:"Tracker Open",key:"trkOpen",type:"num"},{header:"Date",key:"date",type:"date"},{header:"MRR#",key:"mrr",width:14},
+        {header:"Packing Slip/BOL",key:"slip",width:22},{header:"Status",key:"status",width:28}]}]});
+    toast("Exported "+rows.length+" record"+(rows.length===1?"":"s")+" to Excel");
+  }catch(e){ toast("Excel export failed: "+(e&&e.message||e)); }
+}
+/* Receiving rows after the search/status/trade filters; counts are pre-status-filter (for the summary line). */
+function recvView(){
   const q=($("#rq").value||"").trim().toLowerCase(), sf=$("#rStatus").value, tf=$("#rTrade").value;
   let rows=recvRows();
   const counts={}; rows.forEach(r=>counts[r.status]=(counts[r.status]||0)+1);
   if(sf) rows=rows.filter(r=>r.status===sf);
   if(tf) rows=rows.filter(r=>r.trade===tf);
   if(q) rows=rows.filter(r=>[r.refId,r.uid,r.mrr,r.desc,r.supplier,r.slip,r.req].some(x=>String(x||"").toLowerCase().includes(q)));
+  return {rows,counts,q,sf,tf};
+}
+function renderReceiving(){
+  const rv=recvView(), rows=rv.rows, counts=rv.counts;
   const miss=counts["Missing — no EJDE receipt"]||0, part=counts["Partially received"]||0, done=counts["Completed"]||0, open0=counts["Open — nothing received"]||0;
   $("#recvSummary").innerHTML = rows.length+" shown &middot; <strong>"+miss+"</strong> missing &middot; "+part+" partial &middot; "+done+" completed"+(open0?(" &middot; "+open0+" open"):"");
   const num=v=>v===""||v==null?"":esc(v);

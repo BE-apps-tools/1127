@@ -81,3 +81,8 @@ jobs:
       # the relay must never accept a prompt or a tool list from the client.
       - name: KPI explainer tools and payload guard (worker + kpis.html)
         run: node --test worker/tests/ask_tools.test.mjs
+
+      # The shared Excel writer behind every "Export Excel" button: valid zip/CRCs,
+      # typed cells, escaping, sheet-name rules.
+      - name: Excel export writer (xlsx-export.js)
+        run: node worker/tests/xlsx_export.test.mjs

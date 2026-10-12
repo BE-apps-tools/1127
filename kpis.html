@@ -611,6 +611,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
           <div class="colpick-menu" id="colsMenu" style="display:none;"></div>
         </div>
         <button class="btn small secondary" id="exportCsv">Export CSV</button>
+        <button class="btn small" id="exportXlsx" title="Download the units currently shown (all filters applied) as a formatted Excel workbook">Export Excel</button>
       </div>
 
       <div class="drillbar" id="drillBar" role="status"></div>
@@ -645,6 +646,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
 <div class="toast" id="toast"></div>
 
 <script src="kpi-core.js"></script>
+<script src="xlsx-export.js"></script>
 <script>
 "use strict";
 
@@ -3524,42 +3526,77 @@ function fillFilters(){
 }
 /* ---------- CSV ---------- */
 function csvCell(v){ const s=String(v==null?"":v); return /[",\n\r]/.test(s) ? ('"'+s.replace(/"/g,'""')+'"') : s; }
+/* One column list for both exports: [header, key|fn, type]. The type only matters to
+   the Excel export (number/date formats); CSV writes the raw values. */
+function exportCols(){
+  const on=activeKinds();
+  const cols=[["Unit","unit"],["Serial","serial"],["Description","description"],["Description 2","description2"],
+    ["Status","status"],["Trade","trade"],["Billing type","billingType"],["Assigned","assigned"],["On site since","arrived","date"],["Days on site","daysOnSite","int"]];
+  if(on.transfers) cols.push(["Equipment class","eqClass"],["Current status","curStatus"],
+    ["Days in status","daysInState","int"],["Down days "+TREND_MONTHS+"mo","downDays","int"],["Breakdowns","downEvents","int"],
+    ["Availability %","availPct","pct"],["Avg repair days","mttrDays","num"],
+    ["Last remark",r=>r.st?r.st.lastRemark:""]);
+  if(on.rates) cols.push(["Monthly cost","monthlyCost","money"],["Yearly cost","yearlyCost","money"],
+    ["Hourly rate","hourlyRate","num"],["Maintenance per hour","maintPerHour","num"],
+    ["Rate group",r=>r.rt?r.rt.rateGroupDesc:""],
+    ["Rate ends",r=>r.rt?r.rt.rateEnd:"","date"]);
+  if(on.transfers && on.rates) cols.push(["Cost while down","downCost","money"]);
+  if(on.damage) cols.push(["Damage "+TREND_MONTHS+"mo","damageCost","money"],["Damage incidents","damageIncidents","int"],
+    ["Damage charge lines","damageLines","int"],["Last damage","damageLast","date"],
+    ["Damage % of yearly cost","damageShare","pct"]);
+  if(on.rental) cols.push(["Vendor","vendor"],["PO",r=>r.rn?r.rn.po:""],
+    ["Rental monthly","rentalMonthly","money"],["Billed through","annivDate","date"],["Days to renewal","annivDays","int"],
+    ["Contract days",r=>r.rn?r.rn.contractDays:"","int"],["On rent since",r=>r.rn?r.rn.acquiredDate:"","date"]);
+  if(on.utilization) cols.push(["Utilization %","utilAvg","pct"],["Latest week %","utilLast","pct"],
+    ["Weeks tracked","utilWeeks","int"],["Status on utilization report","utilReportStatus"]);
+  if(on.hours) cols.push(["Hours "+TREND_MONTHS+"mo","hoursTotal","num"],
+    ["Hours this month","hoursThisMonth","num"],["Days posting","hoursDays","int"],
+    ["Days posting %","utilPct","pct"],["Cost per hour worked","costPerHour","num"],
+    ["Hours posted to job",r=>r.hs?r.hs.job:""]);
+  return cols;
+}
 function exportCsv(){
   const v=viewRows();
   if(!v.length){ toast("Nothing to export"); return; }
-  const on=activeKinds();
-  const cols=[["Unit","unit"],["Serial","serial"],["Description","description"],["Description 2","description2"],
-    ["Status","status"],["Trade","trade"],["Billing type","billingType"],["Assigned","assigned"],["On site since","arrived"],["Days on site","daysOnSite"]];
-  if(on.transfers) cols.push(["Equipment class","eqClass"],["Current status","curStatus"],
-    ["Days in status","daysInState"],["Down days "+TREND_MONTHS+"mo","downDays"],["Breakdowns","downEvents"],
-    ["Availability %","availPct"],["Avg repair days","mttrDays"],
-    ["Last remark",r=>r.st?r.st.lastRemark:""]);
-  if(on.rates) cols.push(["Monthly cost","monthlyCost"],["Yearly cost","yearlyCost"],
-    ["Hourly rate","hourlyRate"],["Maintenance per hour","maintPerHour"],
-    ["Rate group",r=>r.rt?r.rt.rateGroupDesc:""],
-    ["Rate ends",r=>r.rt?r.rt.rateEnd:""]);
-  if(on.transfers && on.rates) cols.push(["Cost while down","downCost"]);
-  if(on.damage) cols.push(["Damage "+TREND_MONTHS+"mo","damageCost"],["Damage incidents","damageIncidents"],
-    ["Damage charge lines","damageLines"],["Last damage","damageLast"],
-    ["Damage % of yearly cost","damageShare"]);
-  if(on.rental) cols.push(["Vendor","vendor"],["PO",r=>r.rn?r.rn.po:""],
-    ["Rental monthly","rentalMonthly"],["Billed through","annivDate"],["Days to renewal","annivDays"],
-    ["Contract days",r=>r.rn?r.rn.contractDays:""],["On rent since",r=>r.rn?r.rn.acquiredDate:""]);
-  if(on.utilization) cols.push(["Utilization %","utilAvg"],["Latest week %","utilLast"],
-    ["Weeks tracked","utilWeeks"],["Status on utilization report","utilReportStatus"]);
-  if(on.hours) cols.push(["Hours "+TREND_MONTHS+"mo","hoursTotal"],
-    ["Hours this month","hoursThisMonth"],["Days posting","hoursDays"],
-    ["Days posting %","utilPct"],["Cost per hour worked","costPerHour"],
-    ["Hours posted to job",r=>r.hs?r.hs.job:""]);
+  const cols=exportCols();
   const get=(r,k)=>{ const val=typeof k==="function"?k(r):r[k]; return val==null?"":val; };
   const lines=[cols.map(c=>csvCell(c[0])).join(",")];
   v.forEach(r=>lines.push(cols.map(c=>csvCell(get(r,c[1]))).join(",")));
-  const blob=new Blob(["﻿"+lines.join("\r\n")],{type:"text/csv;charset=utf-8;"});
+  const blob=new Blob(["\ufeff"+lines.join("\r\n")],{type:"text/csv;charset=utf-8;"});
   const a=document.createElement("a");
   a.href=URL.createObjectURL(blob); a.download="asset_kpis_"+(STATE.site||"all")+"_"+TODAY+".csv";
   document.body.appendChild(a); a.click();
   setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },0);
   toast("Exported "+v.length+" unit"+(v.length===1?"":"s"));
+}
+/* Excel export of the rows (and columns) the KPI report currently covers: the same
+   scope filters, focus, drill-down and sort as the table, with the formats typed. */
+async function exportXlsx(){
+  const v=viewRows();
+  if(!v.length){ toast("Nothing to export"); return; }
+  if(!window.BACXlsx){ toast("Excel export unavailable — reload the page"); return; }
+  const btn=$("#exportXlsx"); if(btn) btn.disabled=true;
+  try{
+    const site=(STATE.siteIndex.find(x=>x.code===STATE.site)||{}).name||STATE.site||"All sites";
+    const parts=scopeParts(), fo=$("#fFocus"), focus=fo&&fo.value?fo.options[fo.selectedIndex].text:"";
+    if(focus) parts.push("Focus: "+focus);
+    const cols=exportCols().map(c=>({header:c[0],get:typeof c[1]==="function"?c[1]:(r=>r[c[1]]),type:c[2]||"text"}));
+    const kinds=(STATE.kpis.reports||[]).map(r=>r.label).filter(Boolean);
+    const tot=(k)=>v.reduce((n,r)=>n+(Number(r[k])||0),0);
+    await BACXlsx.download({
+      filename:"asset_kpis_"+(STATE.site||"all")+"_"+TODAY+".xlsx",
+      title:"Asset KPIs — "+site, subtitle:v.length.toLocaleString()+" units  ·  Generated "+TODAY+"  ·  Blattner Site Inventory Portal",
+      info:[["Site",site+(STATE.site?" ("+STATE.site+")":"")],["Generated",TODAY],
+            ["Filters applied",parts.join("  |  ")||"None (all units)"],["Units exported",v.length],
+            ["Reports joined",kinds.join(", ")],
+            ...(STATE.rows.some(r=>r.monthlyCost!=null)?[["Total monthly cost",Math.round(tot("monthlyCost")).toLocaleString("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0})]]:[])],
+      overview:{title:"Overview",breakdowns:[
+        {title:"Units by status",labelHeader:"Status",rows:BACXlsx.tally(v,r=>r.status)},
+        {title:"Units by trade",labelHeader:"Trade",rows:BACXlsx.tally(v,r=>r.trade||"Unassigned")}]},
+      sheets:[{name:"Asset KPIs",freezeCols:2,columns:cols,rows:v}]});
+    toast("Exported "+v.length+" unit"+(v.length===1?"":"s")+" to Excel");
+  }catch(e){ toast("Excel export failed: "+(e&&e.message||e)); }
+  finally{ if(btn) btn.disabled=false; }
 }
 
 /* ---------- hover-to-copy (shared button parked in the hovered cell) ---------- */
@@ -3738,6 +3775,7 @@ function bind(){
     if(STATE.drill===b.dataset.drill) clearDrill(); else applyDrill(b.dataset.drill);
   });
   $("#exportCsv").addEventListener("click", exportCsv);
+  $("#exportXlsx").addEventListener("click", exportXlsx);
   $("#pgSize").addEventListener("change", ()=>{ STATE.page=1; renderTable(); syncUrl(); });
   $("#pgFirst").addEventListener("click", ()=>gotoPage(1));
   $("#pgPrev").addEventListener("click", ()=>gotoPage(STATE.page-1));

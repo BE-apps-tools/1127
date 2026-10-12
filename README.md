@@ -34,6 +34,7 @@ change requests — which become auto-reconciling GitHub Issues.
 |------|---------|
 | `index.html` | The portal SPA |
 | `kpis.html` | Asset KPIs (unit KPIs by jobsite) — read-only view |
+| `xlsx-export.js` | Dependency-free Excel writer behind every **Export Excel** button (Equipment Tracking, Asset KPIs, Delivery trackers, Receiving): exports exactly what the filters show, as a branded workbook with an Overview sheet, frozen header, filters, typed columns |
 | `kpi-core.js` | Browser KPI import engine (spec, coercion, xlsx, extract, merge) shared by `admin.html` and `kpis.html` |
 | `admin.html` | Admin tools, including the **KPI builder** (drop the reports, preview, publish) |
 | `guide.html` | Interactive in-app guide (Admin + End-user tracks) |
