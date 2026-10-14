@@ -266,7 +266,16 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
   .trends{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px;margin-bottom:22px;}
   .chartcard{background:var(--white);border:1px solid var(--light-gray);border-radius:var(--r);
     box-shadow:var(--shadow);padding:16px 18px 12px;min-width:0;}
+  .trends{align-items:start;}
   .chartcard h3{font-size:12px;letter-spacing:0.05em;}
+  .chartcard h3.cc-h{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;}
+  .chartcard h3.cc-h:focus-visible{outline:2px solid var(--energy-blue);outline-offset:3px;border-radius:2px;}
+  .cc-chev{flex:none;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid var(--energy-blue);transition:transform .15s;}
+  .chartcard.collapsed .cc-chev{transform:rotate(-90deg);}
+  .chartcard.collapsed{padding-bottom:14px;}
+  .chartcard.collapsed .cc-body{display:none;}
+  .ask.collapsed > :not(.ask-head){display:none !important;}
+  .ask.collapsed .ask-head{border-bottom:none;}
   .chartcard .cap{font-size:11px;color:var(--medium-gray);margin:4px 0 10px;}
   .chartcard .plot{position:relative;}
   svg.chart.plot-svg{display:block;width:100%;height:auto;overflow:visible;}
@@ -554,6 +563,7 @@ function nsDel(k){try{localStorage.removeItem(window.__ns+k);}catch(e){}}
           <span class="ask-k">Explain</span>
           <span class="ask-t">Pick a question. Answers are worked out from the reports on this page.</span>
           <button class="btn small secondary" id="askClear" type="button" style="display:none;">Clear</button>
+          <button class="btn small secondary" id="askToggle" type="button" aria-expanded="true" aria-controls="askQs" title="Show or hide the explainer">Hide</button>
         </div>
         <div class="ask-log" id="askLog" role="log" aria-live="polite"></div>
         <div class="ask-qs" id="askQs"></div>
@@ -2852,6 +2862,21 @@ function dataTable(head, rows){
     rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c)+'</td>').join("")+'</tr>').join("")+
     '</tbody></table></div></details>';
 }
+/* Collapsed trend cards, remembered per viewer. The cards are rebuilt on every filter
+   change, so the state lives here rather than on the DOM. */
+let CC_COLLAPSED=(()=>{ try{ return new Set(JSON.parse(nsGet("kpi_cc_collapsed")||"[]")); }catch(e){ return new Set(); } })();
+function ccOpen(title){
+  const c=CC_COLLAPSED.has(title);
+  return '<div class="chartcard'+(c?' collapsed':'')+'" data-cc="'+esc(title)+'">'+
+    '<h3 class="cc-h" role="button" tabindex="0" aria-expanded="'+(!c)+'" title="Show or hide this chart"><span class="cc-chev" aria-hidden="true"></span>'+esc(title)+'</h3>';
+}
+function toggleChartCard(h){
+  const card=h.closest(".chartcard"); if(!card) return;
+  const c=card.classList.toggle("collapsed"), key=card.dataset.cc;
+  h.setAttribute("aria-expanded",String(!c));
+  if(c) CC_COLLAPSED.add(key); else CC_COLLAPSED.delete(key);
+  nsSet("kpi_cc_collapsed",JSON.stringify([...CC_COLLAPSED]));
+}
 function renderTrends(){
   const box=$("#trends"), on=activeKinds(), R=scopeRows();
   if(!R.length){ box.innerHTML=""; return; }
@@ -2871,12 +2896,12 @@ function renderTrends(){
     });
     const rows=months.map(m=>[fmtMonth(m), fmtNum(agg[m].DN||0), fmtNum(agg[m].DS||0),
       fmtNum((agg[m].DN||0)+(agg[m].DS||0)), String(unitsPer[m].size)]);
-    cards += '<div class="chartcard"><h3>Downtime by month</h3>'+
+    cards += ccOpen("Downtime by month")+'<div class="cc-body">'+
       '<div class="cap">Days units spent down, from the transfer status history. The newest month is to date. Hover a month for the unit count.</div>'+
       '<div class="plot" data-chart="down">'+downtimeChart(months, agg)+'<div class="ctip" id="tipDown"></div></div>'+
       '<div class="legend"><span><i style="background:'+SERIES.DN.c+'"></i>'+esc(SERIES.DN.label)+'</span>'+
       '<span><i style="background:'+SERIES.DS.c+'"></i>'+esc(SERIES.DS.label)+'</span></div>'+
-      dataTable(["Month","Down on site","In shop","Total days","Units down"], rows)+'</div>';
+      dataTable(["Month","Down on site","In shop","Total days","Units down"], rows)+'</div></div>';
     window.__downAgg={agg, unitsPer, months};
   }
 
@@ -2893,10 +2918,10 @@ function renderTrends(){
       }));
     });
     const rows=months.map((m,i)=>[fmtMonth(m), fmtMoney(series[i]), fmtMoney(series[i]*12)]);
-    cards += '<div class="chartcard"><h3>Monthly charge-out run-rate</h3>'+
+    cards += ccOpen("Monthly charge-out run-rate")+'<div class="cc-body">'+
       '<div class="cap">Equipment Rates × units on site, by arrival month. Counts only units still on site today, so earlier months exclude units that have left.</div>'+
       '<div class="plot" data-chart="spend">'+spendChart(months, series)+'<div class="ctip" id="tipSpend"></div></div>'+
-      dataTable(["Month","Monthly run-rate","Annualized"], rows)+'</div>';
+      dataTable(["Month","Monthly run-rate","Annualized"], rows)+'</div></div>';
     window.__spendSeries={series, months};
   }
   if(on.damage){
@@ -2909,10 +2934,10 @@ function renderTrends(){
     });
     const series=months.map(m=>agg[m]);
     const rows=months.map((m,i)=>[fmtMonth(m), fmtMoney(series[i]), String(unitsPer[m].size)]);
-    cards += '<div class="chartcard"><h3>Damage expense by month</h3>'+
+    cards += ccOpen("Damage expense by month")+'<div class="cc-body">'+
       '<div class="cap">Charges posted per month, from the damage ledger. The newest month is to date. Hover for the number of units.</div>'+
       '<div class="plot" data-chart="damage">'+moneyChart(months, series, "#EC9522")+'<div class="ctip"></div></div>'+
-      dataTable(["Month","Damage charged","Units"], rows)+'</div>';
+      dataTable(["Month","Damage charged","Units"], rows)+'</div></div>';
     window.__damageAgg={agg, unitsPer, months};
   }
 
@@ -2928,10 +2953,10 @@ function renderTrends(){
     });
     const series=months.map(m=>agg[m]);
     const rows=months.map((m,i)=>[fmtMonth(m), fmtNum(series[i],1), String(unitsPer[m].size)]);
-    cards += '<div class="chartcard"><h3>Hours posted by month</h3>'+
+    cards += ccOpen("Hours posted by month")+'<div class="cc-body">'+
       '<div class="cap">Hours charged to the job per month, from the equipment hours export. The newest month is to date. Hover for the number of units.</div>'+
       '<div class="plot" data-chart="hours">'+moneyChart(months, series, "#2DA2DB")+'<div class="ctip"></div></div>'+
-      dataTable(["Month","Hours posted","Units posting"], rows)+'</div>';
+      dataTable(["Month","Hours posted","Units posting"], rows)+'</div></div>';
     window.__hoursAgg={agg, unitsPer, months};
   }
   box.innerHTML=cards;
@@ -3775,6 +3800,11 @@ function bind(){
     // Clicking the tile you are already in goes back, so it toggles.
     if(STATE.drill===b.dataset.drill) clearDrill(); else applyDrill(b.dataset.drill);
   });
+  $("#trends").addEventListener("click",e=>{ const h=e.target.closest(".cc-h"); if(h) toggleChartCard(h); });
+  $("#trends").addEventListener("keydown",e=>{ if((e.key==="Enter"||e.key===" ")&&e.target.classList.contains("cc-h")){ e.preventDefault(); toggleChartCard(e.target); } });
+  const askToggle=$("#askToggle"), setAsk=c=>{ $("#askPanel").classList.toggle("collapsed",c); askToggle.textContent=c?"Show":"Hide"; askToggle.setAttribute("aria-expanded",String(!c)); };
+  setAsk(nsGet("kpi_ask_collapsed")==="1");
+  askToggle.addEventListener("click",()=>{ const c=!$("#askPanel").classList.contains("collapsed"); setAsk(c); nsSet("kpi_ask_collapsed",c?"1":"0"); });
   $("#exportCsv").addEventListener("click", exportCsv);
   $("#exportXlsx").addEventListener("click", exportXlsx);
   $("#pgSize").addEventListener("change", ()=>{ STATE.page=1; renderTable(); syncUrl(); });
