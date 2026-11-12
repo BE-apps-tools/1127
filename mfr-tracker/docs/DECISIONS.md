@@ -10,3 +10,7 @@
 - **`AGENTS.md`** was produced by the scaffold and is kept as generated.
 - **Branch and pushing.** CLAUDE.md says do not push; the owner's session instruction overrides it: push to branch `claude/permission-mode-accept-edits-2gn2aq` after every task, never the default branch. "Repo root" means `mfr-tracker/` inside the existing repository; no `git init` was run.
 - **Typecheck script.** `npm run typecheck` is `next typegen && tsc --noEmit`, because the scaffolded layout uses the generated global `LayoutProps` type, which does not exist on a clean clone until route types are generated.
+
+## Task 2
+
+- **Table count.** The plan says `0001_init.sql` creates 11 tables; the file defines 12 (`app_users, parts, part_aliases, people, crews, crew_parts, scan_batches, scan_pages, requisitions, requisition_lines, audit_log, app_settings`) and 2 views. The migration test asserts 12 (the SQL is the authority; it must not be edited).
