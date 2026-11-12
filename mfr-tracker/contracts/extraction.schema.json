@@ -1,0 +1,205 @@
+{
+  "$comment": "ExtractionResult: what the AI returns for ONE scanned page. Logical schema. If the structured-output API rejects a keyword, adapt the syntax only (for example type arrays to anyOf) and keep every field name, type and meaning.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "is_requisition_form",
+    "form",
+    "lines"
+  ],
+  "properties": {
+    "is_requisition_form": {
+      "type": "boolean",
+      "description": "false when the page is not a Material Field Requisition (blank page, other document)."
+    },
+    "form": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "crew_code",
+        "crew_printed_text",
+        "requester",
+        "pb_location_raw",
+        "request_date_raw",
+        "date_required_default_raw",
+        "approval_signature_present",
+        "notes",
+        "confidence",
+        "flags"
+      ],
+      "properties": {
+        "crew_code": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "One of the crew codes given in the prompt, or null when it cannot be determined."
+        },
+        "crew_printed_text": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Printed text after 'Foreman/Responsible Crew:' exactly as printed."
+        },
+        "requester": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Handwritten or stamped foreman name that stands (not struck through). null when missing or scribbled out."
+        },
+        "pb_location_raw": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "PB Locations field exactly as written, for example 'PB 55', '103', 'FOR LDYs'."
+        },
+        "request_date_raw": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Date field exactly as written, for example '9-8', '10/7/26'."
+        },
+        "date_required_default_raw": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The first 'Date Required by' value written anywhere in that column, exactly as written, even when it sits on a row with no quantity. null when the column is empty."
+        },
+        "approval_signature_present": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Margin notes and anything unusual about the page."
+        },
+        "confidence": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "flags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "pb_uncertain",
+              "pb_text",
+              "date_uncertain",
+              "requester_missing",
+              "requester_uncertain",
+              "crew_inferred",
+              "columns_swapped"
+            ]
+          }
+        }
+      }
+    },
+    "lines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "line_no",
+          "part_number_raw",
+          "description_raw",
+          "is_write_in",
+          "qty_raw",
+          "qty_each",
+          "date_required_raw",
+          "sis_initialed",
+          "confidence",
+          "flags",
+          "note"
+        ],
+        "properties": {
+          "line_no": {
+            "type": "integer",
+            "description": "1-based order of the filled rows, top to bottom."
+          },
+          "part_number_raw": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Part # exactly as printed or handwritten on that row."
+          },
+          "description_raw": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Description exactly as printed or handwritten on that row."
+          },
+          "is_write_in": {
+            "type": "boolean",
+            "description": "true when the part number on the row is handwritten rather than pre-printed."
+          },
+          "qty_raw": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Qty Needed exactly as written, including unit words: '596 bolts', '1 Pallet/3840', \"100's\"."
+          },
+          "qty_each": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Count of individual items when unambiguous, else null. For 'N Pallets/M' or 'N Boxes/M' use M."
+          },
+          "date_required_raw": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Date Required by exactly as written on that row, or null when blank."
+          },
+          "sis_initialed": {
+            "type": "boolean",
+            "description": "true when the SIS/IA column carries initials for this row, including a single initial with a line or arrow drawn down through this row."
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "flags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "struck_through",
+                "write_in",
+                "part_label_mismatch",
+                "part_unresolved"
+              ]
+            }
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why confidence is not high, including the alternative reading: 'Reads 7,926; could be 7,924.'"
+          }
+        }
+      }
+    }
+  }
+}
