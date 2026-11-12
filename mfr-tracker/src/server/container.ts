@@ -2,12 +2,14 @@ import path from 'node:path';
 import { getConfig } from './config';
 import type { Db } from './db/types';
 import type { Storage } from './storage/types';
+import type { AiExtractor } from './ai/types';
 
 const MIGRATIONS_DIR = path.join(process.cwd(), 'db', 'migrations');
 
 interface Globals {
   __mfrDb?: Promise<Db>;
   __mfrStorage?: Storage;
+  __mfrAi?: AiExtractor;
 }
 const g = globalThis as unknown as Globals;
 
@@ -52,4 +54,21 @@ export async function getStorage(): Promise<Storage> {
     }
   }
   return g.__mfrStorage;
+}
+
+/** AI adapter chosen by AI_MODE: anthropic, mock or off. */
+export async function getAi(): Promise<AiExtractor> {
+  if (!g.__mfrAi) {
+    const cfg = getConfig();
+    if (cfg.aiMode === 'anthropic') {
+      if (!cfg.anthropicApiKey) throw new Error('AI_MODE is anthropic but ANTHROPIC_API_KEY is not set.');
+      const { createAnthropicExtractor } = await import('./ai/anthropic');
+      g.__mfrAi = createAnthropicExtractor(cfg.anthropicApiKey, cfg.anthropicModel);
+    } else if (cfg.aiMode === 'mock') {
+      g.__mfrAi = (await import('./ai/mock')).createMockExtractor();
+    } else {
+      g.__mfrAi = (await import('./ai/off')).createOffExtractor();
+    }
+  }
+  return g.__mfrAi;
 }

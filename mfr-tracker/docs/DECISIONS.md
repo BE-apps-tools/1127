@@ -28,3 +28,14 @@
 - **Forced password change on the API.** `requireApiUser` refuses requests from a user whose `must_change_password` is true, except the change-password route, matching the page redirect in `requirePageUser`.
 - **Unknown or inactive email** still runs one bcrypt comparison so response time does not reveal which emails exist.
 - **Login page** is a server component with `dynamic = 'force-dynamic'` so the build never touches a database.
+
+## Task 6
+
+- **No `ANTHROPIC_API_KEY` in this environment.** The Anthropic adapter is built and type-checked but was never called against the live API. `npm run ai:check` printed "skipped" and `docs/AI_CHECK.md` was not created. Everything else runs on the mock or with AI off. Per the fallback table, `npm run ai:check` is to be run by the owner once a key is set.
+- **Schema syntax for structured output.** The documented limits allow `anyOf` and do not mention `$comment` or type arrays. `toStructuredSchema` in `src/server/ai/anthropic.ts` rewrites `"type": ["string","null"]` into `anyOf` and drops `$comment`. Field names, types and meanings are unchanged, and a unit test checks this. The JSON-in-text retry path is also built.
+- **`ai:check` reads the whole-page image only.** The detail crop is made on a browser canvas (contract 10), which a script cannot do. The report says so.
+- **`findDuplicates` and `DuplicateRef` exist from Task 6.** `getDraft` needs them, so `src/server/services/requisitions.ts` starts with just those; Task 7 adds the rest.
+- **`getDraft` requires status `needs_review`.** Other statuses give a 409-class error.
+- **Rotating a page.** `replacePageImage` adds the rotation to `rotation_applied` modulo 360, clears the old reading, and sets the page back to `uploaded`. It refuses pages that are posted, duplicate, rejected or being read.
+- **Detail crop removal.** If a replacement carries no detail image, the stored detail is removed so a stale crop is never read with a new full image.
+- **`nextPageToVerify`** returns the next page after the given one in batch and page order, or null at the end of the queue (no wrap-around).
