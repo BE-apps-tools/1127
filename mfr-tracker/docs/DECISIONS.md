@@ -58,3 +58,11 @@
 - **New crews** get a code derived from the name (`Night Shift` becomes `NIGHT_SHIFT`, with `_2`, `_3` on a clash) and an empty checks list; the per-crew consistency checks of the seeded crews are not editable in the UI (not in the plan).
 - **`parts` list** hides inactive (merged) parts unless `includeInactive` is passed.
 - **Next route files** may not export extra names, so the zod bodies in route files are not exported.
+
+## Task 9
+
+- **System fonts.** The scaffold loaded Geist through `next/font/google`, which downloads fonts at build time. Removed for contract section 2 (system fonts, no CDN assets). The scaffold's dark-mode colours were removed too; the design specifies one neutral gray theme.
+- **`src/lib/format.ts`** holds `fmtDate` (MM/DD/YYYY), `fmtNum` (thousands separators) and `todayIso`. It is not in the contract layout; it has no I/O and no dependencies.
+- **Inbox count** in the top bar is the number of pages waiting for review (the "To verify" tab).
+- **Menus** (Admin, user) use native `<details>`, so they work without client JavaScript. Sign out is the only client code in the top bar.
+- **Tabs** are links with the active tab in the URL (`?tab=`), for the same reason.

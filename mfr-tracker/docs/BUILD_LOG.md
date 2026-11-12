@@ -7,3 +7,4 @@
 - Task 5: storage, lookups, seed. Result: pass. Tests: 13 files, 85 passing (15 new). `npm run seed` printed pages 148, requisitions 140, lines 424; a second run printed already seeded. Commit bf90805
 - Task 6: scans and ai. Result: pass. Tests: 16 files, 99 passing (14 new). Typecheck and lint pass. ai:check skipped, no ANTHROPIC_API_KEY (see DECISIONS.md). Commit bfc7b4a
 - Task 7: requisitions. Result: pass. Tests: 17 files, 108 passing (9 new). Typecheck and lint pass. Commit 78d91ce
+- Task 8: tracker, matrix, export, master data. Result: pass. Tests: 22 files, 143 passing (35 new). Typecheck, lint and production build pass. Live check on a production server: CSV, XLSX and matrix downloads 200, unauthenticated request 401. Commit ccb481e
