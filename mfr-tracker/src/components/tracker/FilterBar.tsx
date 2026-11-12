@@ -4,12 +4,14 @@ import { CONTROL } from '@/components/ui/Input';
 import type { Lookups } from '@/domain/normalize';
 import type { TrackerFilters } from '@/server/services/tracker';
 
-function Labeled({ label, children }: { label: string; children: React.ReactNode }) {
+function Labeled({ label, htmlFor, children }: { label: string; htmlFor: string; children: React.ReactNode }) {
   return (
-    <label className="flex flex-col gap-0.5 text-xs font-medium text-stone-700">
-      {label}
+    <div className="flex flex-col gap-0.5">
+      <label htmlFor={htmlFor} className="text-xs font-medium text-stone-700">
+        {label}
+      </label>
       {children}
-    </label>
+    </div>
   );
 }
 
@@ -18,14 +20,14 @@ export function FilterBar({ filters, lookups }: { filters: TrackerFilters; looku
   const requesters = lookups.people.filter((p) => p.isRequester);
   return (
     <form method="get" action="/tracker" className="flex flex-wrap items-end gap-2 rounded border border-stone-300 bg-white p-2" aria-label="Tracker filters">
-      <Labeled label="From">
-        <input type="date" name="from" defaultValue={filters.from ?? ''} className={`${CONTROL} w-36`} />
+      <Labeled htmlFor="f-from" label="From">
+        <input type="date" id="f-from" name="from" defaultValue={filters.from ?? ''} className={`${CONTROL} w-36`} />
       </Labeled>
-      <Labeled label="To">
-        <input type="date" name="to" defaultValue={filters.to ?? ''} className={`${CONTROL} w-36`} />
+      <Labeled htmlFor="f-to" label="To">
+        <input type="date" id="f-to" name="to" defaultValue={filters.to ?? ''} className={`${CONTROL} w-36`} />
       </Labeled>
-      <Labeled label="Crew">
-        <select name="crew" defaultValue={filters.crew?.[0] ?? ''} className={`${CONTROL} w-40`}>
+      <Labeled htmlFor="f-crew" label="Crew">
+        <select id="f-crew" name="crew" defaultValue={filters.crew?.[0] ?? ''} className={`${CONTROL} w-40`}>
           <option value="">All crews</option>
           {lookups.crews.map((c) => (
             <option key={c.id} value={c.code}>
@@ -34,8 +36,8 @@ export function FilterBar({ filters, lookups }: { filters: TrackerFilters; looku
           ))}
         </select>
       </Labeled>
-      <Labeled label="Requester">
-        <select name="requester" defaultValue={filters.requesterId ?? ''} className={`${CONTROL} w-40`}>
+      <Labeled htmlFor="f-requester" label="Requester">
+        <select id="f-requester" name="requester" defaultValue={filters.requesterId ?? ''} className={`${CONTROL} w-40`}>
           <option value="">Anyone</option>
           {requesters.map((p) => (
             <option key={p.id} value={p.id}>
@@ -44,11 +46,11 @@ export function FilterBar({ filters, lookups }: { filters: TrackerFilters; looku
           ))}
         </select>
       </Labeled>
-      <Labeled label="PB (55, 81-90 or text)">
-        <input name="pb" defaultValue={filters.pb ?? ''} className={`${CONTROL} w-32`} />
+      <Labeled htmlFor="f-pb" label="PB (55, 81-90 or text)">
+        <input id="f-pb" name="pb" defaultValue={filters.pb ?? ''} className={`${CONTROL} w-32`} />
       </Labeled>
-      <Labeled label="Part">
-        <select name="part" defaultValue={filters.partId?.[0] ?? ''} className={`${CONTROL} w-44`}>
+      <Labeled htmlFor="f-part" label="Part">
+        <select id="f-part" name="part" defaultValue={filters.partId?.[0] ?? ''} className={`${CONTROL} w-44`}>
           <option value="">All parts</option>
           {lookups.parts
             .filter((p) => p.isActive)
@@ -59,30 +61,30 @@ export function FilterBar({ filters, lookups }: { filters: TrackerFilters; looku
             ))}
         </select>
       </Labeled>
-      <Labeled label="Issue status">
-        <select name="issue" defaultValue={filters.issue ?? ''} className={`${CONTROL} w-28`}>
+      <Labeled htmlFor="f-issue" label="Issue status">
+        <select id="f-issue" name="issue" defaultValue={filters.issue ?? ''} className={`${CONTROL} w-28`}>
           <option value="">Any</option>
           <option value="issued">Issued</option>
           <option value="pending">Pending</option>
         </select>
       </Labeled>
-      <Labeled label="Verified">
-        <select name="verified" defaultValue={filters.verified === undefined ? '' : filters.verified ? 'yes' : 'no'} className={`${CONTROL} w-24`}>
+      <Labeled htmlFor="f-verified" label="Verified">
+        <select id="f-verified" name="verified" defaultValue={filters.verified === undefined ? '' : filters.verified ? 'yes' : 'no'} className={`${CONTROL} w-24`}>
           <option value="">Any</option>
           <option value="yes">Yes</option>
           <option value="no">No</option>
         </select>
       </Labeled>
-      <Labeled label="Source">
-        <select name="source" defaultValue={filters.source ?? ''} className={`${CONTROL} w-28`}>
+      <Labeled htmlFor="f-source" label="Source">
+        <select id="f-source" name="source" defaultValue={filters.source ?? ''} className={`${CONTROL} w-28`}>
           <option value="">Any</option>
           <option value="seed">Backlog</option>
           <option value="scan">Scan</option>
           <option value="manual">By hand</option>
         </select>
       </Labeled>
-      <Labeled label="Search">
-        <input type="search" name="q" defaultValue={filters.q ?? ''} placeholder="Req #, part, note" className={`${CONTROL} w-44`} />
+      <Labeled htmlFor="f-q" label="Search">
+        <input type="search" id="f-q" name="q" defaultValue={filters.q ?? ''} placeholder="Req #, part, note" className={`${CONTROL} w-44`} />
       </Labeled>
       <div className="flex items-center gap-3 pb-1.5">
         <label className="flex items-center gap-1 text-xs">
@@ -98,8 +100,8 @@ export function FilterBar({ filters, lookups }: { filters: TrackerFilters; looku
           Include void
         </label>
       </div>
-      <Labeled label="Sort">
-        <select name="sort" defaultValue={filters.sort ?? 'date_desc'} className={`${CONTROL} w-32`}>
+      <Labeled htmlFor="f-sort" label="Sort">
+        <select id="f-sort" name="sort" defaultValue={filters.sort ?? 'date_desc'} className={`${CONTROL} w-32`}>
           <option value="date_desc">Newest first</option>
           <option value="date_asc">Oldest first</option>
           <option value="pb">PB</option>

@@ -106,3 +106,10 @@
 - **Merge dialog** names both parts and the number of lines that will move, and states that the retired number remains as an alias, before the Merge button is enabled.
 - **Parts list** shows merged (inactive) parts only when "Show merged parts" is ticked.
 - **Crews** keep their stored consistency checks; the admin screen edits name, default requester, active flag and the ordered part list only.
+
+## Task 14
+
+- **Chromium.** `npx playwright install chromium` was not run: this sandbox has one preinstalled Chromium at `/opt/pw-browsers/chromium`, and the installed Playwright (1.65) would otherwise look for a build that is not present. `playwright.config.ts` uses that executable (with `--no-sandbox`) when it exists, or the path in `PW_CHROMIUM_PATH`, and falls back to Playwright's own browser otherwise.
+- **Seed before server.** Playwright starts the web server before it runs `globalSetup`, and the server opens the embedded database on first use, so a seed in `globalSetup` could race it. `tests/e2e/global-setup.ts` is therefore also a runnable script, and the web server command is `tsx tests/e2e/global-setup.ts && npm run build && npm run start -- -p <port>`. The port is 3100, or `E2E_PORT`.
+- **Accessibility fix found by the test.** The tracker filter bar wrapped each control inside its `<label>`, so a select's accessible name included all its option text. Labels now use `for`/`id`.
+- **Selectors.** A link named "Verify" also matched the "To verify" tab, so the test uses an exact name; the matrix assertion targets the PB 37 / 25233-00 cell.
