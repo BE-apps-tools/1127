@@ -98,3 +98,11 @@
 - **Select all** on the tracker selects only the pending lines on the current page that have an each-count (the ones that can be marked issued).
 - **Matrix repeat badge** shows the real count (`x2`, `x3`). 12 cells show `x2` and one shows a higher number; together they are the 13 repeat cells.
 - **Void requisitions** are only shown on the tracker when "Include void" is ticked, and then with strike-through text.
+
+## Task 13
+
+- **Flaky timeouts under load.** Two seeded-database tests failed once in a full run that started right after a production build, then passed on re-run. Vitest's 5 second default is too tight when several test files seed an embedded Postgres in parallel, so `vitest.config.ts` now sets `testTimeout: 30000` and `hookTimeout: 60000`. Each file already has its own database; no state is shared.
+- **Users screen.** "Reset password" asks for confirmation, then shows the generated temporary password once in a dialog. Creating a user does the same. Both rely on `must_change_password`, so the person must pick a new password at first sign-in.
+- **Merge dialog** names both parts and the number of lines that will move, and states that the retired number remains as an alias, before the Merge button is enabled.
+- **Parts list** shows merged (inactive) parts only when "Show merged parts" is ticked.
+- **Crews** keep their stored consistency checks; the admin screen edits name, default requester, active flag and the ordered part list only.
