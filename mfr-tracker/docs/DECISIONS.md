@@ -66,3 +66,13 @@
 - **Inbox count** in the top bar is the number of pages waiting for review (the "To verify" tab).
 - **Menus** (Admin, user) use native `<details>`, so they work without client JavaScript. Sign out is the only client code in the top bar.
 - **Tabs** are links with the active tab in the URL (`?tab=`), for the same reason.
+
+## Task 10
+
+- **Test order for `pipeline.ts`.** The queue runner and its test file were written in one step, so the test was not seen failing first. The code is small and the six tests exercise every case in the plan; the services and domain code of Tasks 2 to 8 followed test-first.
+- **Batches per upload.** Each PDF becomes one batch (page numbers are its pages). All image files in one selection become one batch. The API limit is 300 pages per batch, and the UI says so before anything is sent.
+- **`src/components/scan/api.ts`** (browser calls to the scan routes) is not in the contract layout. It is shared by the upload zone and the Rotate button of Task 11.
+- **`prepareScan` and `buildPageImages`** live in `canvas.ts` with the other canvas helpers so the verify screen can rebuild images with the same rules.
+- **Thumbnails.** The contract defines no thumbnail variant, so each card shows the stored 1600 px image scaled by CSS and lazy-loaded. Cards per tab are capped at 50 with "Load more".
+- **Retry.** A page whose upload succeeded but whose read failed retries only the read. A page whose upload failed is rendered and uploaded again.
+- **Rotation is not re-checked after upload.** "Check rotation" shows in the progress list only, per contract section 7.

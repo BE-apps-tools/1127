@@ -8,3 +8,4 @@
 - Task 6: scans and ai. Result: pass. Tests: 16 files, 99 passing (14 new). Typecheck and lint pass. ai:check skipped, no ANTHROPIC_API_KEY (see DECISIONS.md). Commit bfc7b4a
 - Task 7: requisitions. Result: pass. Tests: 17 files, 108 passing (9 new). Typecheck and lint pass. Commit 78d91ce
 - Task 8: tracker, matrix, export, master data. Result: pass. Tests: 22 files, 143 passing (35 new). Typecheck, lint and production build pass. Live check on a production server: CSV, XLSX and matrix downloads 200, unauthenticated request 401. Commit ccb481e
+- Task 9: shell and dashboard. Result: pass. Tests: unchanged, 22 files, 143 passing. Typecheck, lint and build pass. Live check (production server, seeded data, signed in): / returned 200 with 140, 58, 38, 13, 5 and MFR-000140; no cookie redirects to /login. Commit 7ac52ad
