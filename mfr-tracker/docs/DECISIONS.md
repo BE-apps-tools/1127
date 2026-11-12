@@ -89,3 +89,12 @@
 - **Rotate** rebuilds both images in the browser, uploads them, and reads the page again. Anything typed on the form before rotating is replaced by the new reading.
 - **Cache busting.** Page images are cached for an hour by the API, so the image pane adds a version query after a rotation.
 - **Void requisitions** open read-only (the whole form is disabled).
+
+## Task 12
+
+- **Crew filter is single-choice in the bar.** The service and the URL accept several `crew` values; the bar offers one. Links with repeated `crew` parameters still work and are shown as the first one in the select.
+- **Part filter is single-choice in the bar** for the same reason; the matrix cell links use one part.
+- **Row click** opens the requisition, but clicks on the link, a checkbox or a button do not.
+- **Select all** on the tracker selects only the pending lines on the current page that have an each-count (the ones that can be marked issued).
+- **Matrix repeat badge** shows the real count (`x2`, `x3`). 12 cells show `x2` and one shows a higher number; together they are the 13 repeat cells.
+- **Void requisitions** are only shown on the tracker when "Include void" is ticked, and then with strike-through text.
