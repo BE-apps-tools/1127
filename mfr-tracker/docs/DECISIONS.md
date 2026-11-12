@@ -47,3 +47,14 @@
 - **Initialed lines at posting** leave `issued_on` empty. `issued_on` is set only by "Mark issued".
 - **Posting from a scan page** is claimed with a conditional update on `status = 'needs_review'`, inside the same transaction as the insert, so two people cannot post one page twice.
 - **Mark issued** on a void requisition skips its lines.
+
+## Task 8
+
+- **Seed stats vs contract cell count.** `seed/seed_stats.json` says 408 matrix cells (numeric PBs only, as the reference importer counts); contract section 9 says 409 including the text location "FOR LDYs". The matrix test asserts 409.
+- **Export `Crew` column** shows the crew's printed name (for example `STAGE & PREP`), not its code. The tracker filter still uses the code. Issue status is exported as stored (`issued` or `pending`).
+- **CSV** ends with a final CRLF, so 425 data and header lines are followed by an empty last element when split.
+- **Matrix export** (`/api/matrix/export`) is a single sheet `Matrix` with a crew row above the part numbers, row totals and a totals row. The contract fixes only the file name.
+- **Users API.** `POST /api/users` generates a temporary password when none is sent and returns it once as `temporaryPassword`. `PUT /api/users/[id]` accepts `password` (set this exact temporary password) or `resetPassword: true` (generate one, returned once). Both force a password change at next sign-in.
+- **New crews** get a code derived from the name (`Night Shift` becomes `NIGHT_SHIFT`, with `_2`, `_3` on a clash) and an empty checks list; the per-crew consistency checks of the seeded crews are not editable in the UI (not in the plan).
+- **`parts` list** hides inactive (merged) parts unless `includeInactive` is passed.
+- **Next route files** may not export extra names, so the zod bodies in route files are not exported.
