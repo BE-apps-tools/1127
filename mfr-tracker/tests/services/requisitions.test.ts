@@ -7,6 +7,7 @@ import { addPage, createBatch, extractPage } from '@/server/services/scans';
 import {
   getRequisition,
   markLinesIssued,
+  nextUnverified,
   saveRequisition,
   updateRequisition,
   verifyRequisition,
@@ -230,6 +231,21 @@ describe('requisitions service', () => {
     const detail = await getRequisition(db, r.id);
     expect(detail!.status).toBe('void');
     expect(detail!.voidReason).toBe('scanned twice');
+  });
+
+  it('nextUnverified walks the unverified requisitions by number', async () => {
+    const db = await seededDb();
+    const k = await ids(db);
+    expect(await nextUnverified(db)).not.toBeNull();
+    const [first] = await db.query<{ id: number; req_number: string }>(`select id, req_number from requisitions order by id limit 1`);
+    expect(first.req_number).toBe('MFR-000001');
+    expect(await nextUnverified(db)).toBe(first.id);
+    await verifyRequisition(db, first.id, k.userId);
+    const second = await nextUnverified(db);
+    expect(second).toBe(first.id + 1);
+    expect(await nextUnverified(db, first.id)).toBe(first.id + 1);
+    const [last] = await db.query<{ id: number }>(`select max(id)::integer as id from requisitions`);
+    expect(await nextUnverified(db, last.id)).toBeNull();
   });
 
   it('the database rejects a line that breaks the issue rule', async () => {

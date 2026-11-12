@@ -278,6 +278,19 @@ export async function nextPageToVerify(db: Db, afterPageId?: number): Promise<nu
   return rows[0]?.id ?? null;
 }
 
+/** Position of a page in the to-verify queue (1-based) and the queue length. Position is 0 when the page is not in the queue. */
+export async function getQueuePosition(db: Db, pageId: number): Promise<{ position: number; total: number }> {
+  const [r] = await db.query<{ position: number; total: number }>(
+    `select
+       (select count(*) from scan_pages q, scan_pages me
+         where me.id = $1 and q.status = 'needs_review' and me.status = 'needs_review'
+           and (q.batch_id, q.page_number) <= (me.batch_id, me.page_number))::integer as position,
+       (select count(*) from scan_pages where status = 'needs_review')::integer as total`,
+    [pageId],
+  );
+  return r;
+}
+
 export async function getPageImage(
   db: Db,
   storage: Storage,

@@ -9,3 +9,4 @@
 - Task 7: requisitions. Result: pass. Tests: 17 files, 108 passing (9 new). Typecheck and lint pass. Commit 78d91ce
 - Task 8: tracker, matrix, export, master data. Result: pass. Tests: 22 files, 143 passing (35 new). Typecheck, lint and production build pass. Live check on a production server: CSV, XLSX and matrix downloads 200, unauthenticated request 401. Commit ccb481e
 - Task 9: shell and dashboard. Result: pass. Tests: unchanged, 22 files, 143 passing. Typecheck, lint and build pass. Live check (production server, seeded data, signed in): / returned 200 with 140, 58, 38, 13, 5 and MFR-000140; no cookie redirects to /login. Commit 7ac52ad
+- Task 10: inbox and scan pipeline. Result: pass. Tests: 23 files, 149 passing (6 new). Typecheck, lint and build pass. Browser upload is exercised in Task 14. Commit 5495a34

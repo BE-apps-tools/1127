@@ -12,6 +12,7 @@ import {
   extractPage,
   getDraft,
   getPageImage,
+  getQueuePosition,
   listPages,
   markPageDuplicate,
   nextPageToVerify,
@@ -167,6 +168,23 @@ describe('scans service', () => {
     expect(counts.needs_review).toBeGreaterThanOrEqual(3);
     expect(counts.posted).toBe(140);
     expect(counts.duplicate).toBeGreaterThanOrEqual(8);
+  });
+
+  it('getQueuePosition numbers the to-verify queue', async () => {
+    const db2 = await seededDb(memoryStorage());
+    const st = memoryStorage();
+    const lk = await getLookups(db2);
+    const [{ id: uid }] = await db2.query<{ id: number }>(`select id from app_users limit 1`);
+    const b = await createBatch(db2, { filename: 'q.pdf', pageCount: 2, userId: uid });
+    const ids: number[] = [];
+    for (const n of [1, 2]) {
+      const p = await addPage(db2, st, { batchId: b.id, pageNumber: n, full: bytes(n), detail: null, ...meta(`q-${n}`) });
+      await extractPage(db2, st, createMockExtractor(), p.id, lk);
+      ids.push(p.id);
+    }
+    expect(await getQueuePosition(db2, ids[0])).toEqual({ position: 1, total: 2 });
+    expect(await getQueuePosition(db2, ids[1])).toEqual({ position: 2, total: 2 });
+    expect(await getQueuePosition(db2, 1)).toEqual({ position: 0, total: 2 });
   });
 
   it('getPageImage returns stored bytes for full and detail, null for a missing detail', async () => {

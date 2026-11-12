@@ -76,3 +76,16 @@
 - **Thumbnails.** The contract defines no thumbnail variant, so each card shows the stored 1600 px image scaled by CSS and lazy-loaded. Cards per tab are capped at 50 with "Load more".
 - **Retry.** A page whose upload succeeded but whose read failed retries only the read. A page whose upload failed is rendered and uploaded again.
 - **Rotation is not re-checked after upload.** "Check rotation" shows in the progress list only, per contract section 7.
+
+## Task 11
+
+- **`setAsWritten` and `setPart` take the lookups as a fourth argument.** The plan lists `(state, lineIndex, text)`, but the parser needs each part's pack sizes and the part resolver needs the part and alias lists, so they cannot be pure without them. The form-state tests pass `lookups` explicitly.
+- **Clearing "Each" hands control back to the parser.** The plan says the parser stops refilling Each once the user has typed in it. An empty Each counts as "not typed", so deleting the hand-typed value lets "As written" fill it again.
+- **Requisitions loaded from the database** start with Each marked as hand-set, so opening one never silently recalculates stored quantities; editing "As written" there still works because typing in it only refills when Each was empty or auto-filled.
+- **Changing the crew** replaces the part rows only after confirmation when quantities are typed. When no crew was chosen yet (the AI could not tell) the lines already on the form are kept and only the crew is set.
+- **Type-only import from `server/`.** `form-state.ts` imports the `RequisitionDetail` type from the requisitions service with `import type`; it is erased at build time, so no server code reaches the browser.
+- **Added service helpers:** `getQueuePosition` (for "Page 3 of 14 to verify") in `scans.ts` and `nextUnverified` in `requisitions.ts`, with tests.
+- **Skip and next page** wrap to the first remaining page when the current page is the last in the queue, so a skipped page is not lost; the queue is empty only when no other page is waiting.
+- **Rotate** rebuilds both images in the browser, uploads them, and reads the page again. Anything typed on the form before rotating is replaced by the new reading.
+- **Cache busting.** Page images are cached for an hour by the API, so the image pane adds a version query after a rotation.
+- **Void requisitions** open read-only (the whole form is disabled).

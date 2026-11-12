@@ -330,3 +330,12 @@ export async function markLinesIssued(
     return { updated: done.length, skipped: unique.length - done.length };
   });
 }
+
+/** The next posted, unverified requisition after the given id, or null. Without an id, the first one. */
+export async function nextUnverified(db: Db, afterId?: number): Promise<number | null> {
+  const rows = await db.query<{ id: number }>(
+    `select id from requisitions where status = 'posted' and verified_at is null and ($1::integer is null or id > $1) order by id limit 1`,
+    [afterId ?? null],
+  );
+  return rows[0]?.id ?? null;
+}
