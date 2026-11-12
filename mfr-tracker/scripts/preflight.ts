@@ -33,8 +33,13 @@ async function main() {
   const { getDb, getStorage } = await import('../src/server/container');
   try {
     const db = await getDb();
-    const [r] = await db.query<{ n: number }>(`select count(*)::integer as n from schema_migrations`);
-    console.log(`  database round trip ok (${r.n} migration${r.n === 1 ? '' : 's'} recorded)`);
+    const [has] = await db.query<{ ok: boolean }>(`select to_regclass('public.schema_migrations') is not null as ok`);
+    if (has.ok) {
+      const [r] = await db.query<{ n: number }>(`select count(*)::integer as n from schema_migrations`);
+      console.log(`  database round trip ok (${r.n} migration${r.n === 1 ? '' : 's'} recorded)`);
+    } else {
+      console.log('  database round trip ok (no migrations applied yet; run npm run db:migrate)');
+    }
   } catch (err) {
     failed = true;
     console.log(`  database FAILED: ${err instanceof Error ? err.message : 'unknown error'}`);

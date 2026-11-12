@@ -113,3 +113,10 @@
 - **Seed before server.** Playwright starts the web server before it runs `globalSetup`, and the server opens the embedded database on first use, so a seed in `globalSetup` could race it. `tests/e2e/global-setup.ts` is therefore also a runnable script, and the web server command is `tsx tests/e2e/global-setup.ts && npm run build && npm run start -- -p <port>`. The port is 3100, or `E2E_PORT`.
 - **Accessibility fix found by the test.** The tracker filter bar wrapped each control inside its `<label>`, so a select's accessible name included all its option text. Labels now use `for`/`id`.
 - **Selectors.** A link named "Verify" also matched the "To verify" tab, so the test uses an exact name; the matrix assertion targets the PB 37 / 25233-00 cell.
+
+## Task 15
+
+- **Go-live order.** The contract lists "preflight, migrate, ensure bucket, seed". Preflight's storage check needs the bucket, and its database check now also copes with a database that has no migrations yet. `go-live` therefore creates the bucket first (idempotent), then runs preflight, migrate and seed.
+- **`cloudVarsMissing`** lives in `src/server/config.ts` so it can be unit-tested; `go-live` prints only the names of missing variables, never values. A `SESSION_SECRET` under 32 characters counts as missing.
+- **Cloud check done against local PostgreSQL 16, not Supabase.** No cloud credentials exist here, so `npm run preflight` reports local mode and the cloud step of the plan ("run `npm run go-live`") was skipped. A real PostgreSQL 16 server on the build machine was used instead: the Db conformance test ran against it through `TEST_DATABASE_URL`, and `db:migrate`, `seed`, `preflight`, the production server and an Excel export all worked with `DATABASE_URL` set. The throwaway database and role were local to this machine; no connection string is written in any document.
+- **Seed password change.** `npm run go-live` seeds without `SEED_SKIP_PASSWORD_CHANGE`, so the admin must choose a new password at first sign-in.

@@ -50,3 +50,14 @@ export function getConfig(env: Env = process.env): Config {
     dataDir: blank(env.DATA_DIR) ?? '.data',
   };
 }
+
+const CLOUD_VARS = ['DATABASE_URL', 'SUPABASE_URL', 'SUPABASE_SECRET_KEY', 'SESSION_SECRET', 'ADMIN_EMAIL', 'ADMIN_NAME', 'ADMIN_PASSWORD'] as const;
+
+/** Names of the variables `npm run go-live` needs that are missing. A SESSION_SECRET under 32 characters counts as missing. */
+export function cloudVarsMissing(env: Env = process.env): string[] {
+  return CLOUD_VARS.filter((name) => {
+    const v = blank(env[name]);
+    if (!v) return true;
+    return name === 'SESSION_SECRET' && v.length < 32;
+  }).map((name) => (name === 'SESSION_SECRET' ? 'SESSION_SECRET (at least 32 characters)' : name));
+}

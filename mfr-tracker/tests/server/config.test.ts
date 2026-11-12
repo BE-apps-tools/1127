@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getConfig } from '@/server/config';
+import { cloudVarsMissing, getConfig } from '@/server/config';
 
 describe('getConfig', () => {
   it('no environment gives local adapters', () => {
@@ -32,5 +32,32 @@ describe('getConfig', () => {
     expect(getConfig({ AI_MODE: 'mock', ANTHROPIC_API_KEY: 'k' }).aiMode).toBe('mock');
     expect(getConfig({ AI_MODE: 'off', ANTHROPIC_API_KEY: 'k' }).aiMode).toBe('off');
     expect(getConfig({ AI_MODE: 'anthropic' }).aiMode).toBe('anthropic');
+  });
+});
+
+describe('cloudVarsMissing', () => {
+  const full = {
+    DATABASE_URL: 'postgres://x',
+    SUPABASE_URL: 'https://a.supabase.co',
+    SUPABASE_SECRET_KEY: 'k',
+    SESSION_SECRET: 'a'.repeat(40),
+    ADMIN_EMAIL: 'a@b.c',
+    ADMIN_NAME: 'Admin',
+    ADMIN_PASSWORD: 'long-enough-password',
+  };
+
+  it('names every missing variable', () => {
+    expect(cloudVarsMissing({})).toEqual([
+      'DATABASE_URL', 'SUPABASE_URL', 'SUPABASE_SECRET_KEY', 'SESSION_SECRET (at least 32 characters)', 'ADMIN_EMAIL', 'ADMIN_NAME', 'ADMIN_PASSWORD',
+    ]);
+  });
+
+  it('is empty when all are present', () => {
+    expect(cloudVarsMissing(full)).toEqual([]);
+  });
+
+  it('treats a short session secret as missing and blanks as missing', () => {
+    expect(cloudVarsMissing({ ...full, SESSION_SECRET: 'short' })).toEqual(['SESSION_SECRET (at least 32 characters)']);
+    expect(cloudVarsMissing({ ...full, ADMIN_NAME: '  ' })).toEqual(['ADMIN_NAME']);
   });
 });
