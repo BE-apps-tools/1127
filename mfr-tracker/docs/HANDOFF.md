@@ -23,6 +23,13 @@ See `docs/BUILD_LOG.md` for the line per task and the final verification entry f
 - The database layer was also run against a real PostgreSQL 16 server on the build machine: the shared conformance test passed there, and `db:migrate`, `seed`, `preflight` and the running app (sign-in, dashboard, tracker, Excel export) worked through the `pg` driver. This is not Supabase itself.
 - One browser smoke test (Playwright, Chromium): sign in, dashboard numbers, tracker filter, matrix cell, upload and verify a scan, mark it a duplicate, post a new requisition, search it, download the CSV.
 
+Final results from a fresh clone of the branch (`npm install`, then `npm run verify`): typecheck clean, lint clean,
+**24 test files, 164 tests passing**, production build succeeded, exit code 0. `npm run e2e`: **1 passed**. In that
+clone with no environment file, `npm run seed` printed `pages 148, requisitions 140, lines 424`, and the running app
+showed 140 backlog requisitions, 58 pending lines, 38 flagged reads, 13 repeat cells, and for the MIBS crew 108 lines,
+468,104 requested and 399,698 issued. A member account was forced to change its temporary password, could not open
+the admin pages (403 screen) and got 403 from the admin, void and master-data routes.
+
 ## What was skipped, changed or could not be checked
 
 Everything below is also in `docs/DECISIONS.md` with the reasoning.
@@ -32,6 +39,13 @@ Everything below is also in `docs/DECISIONS.md` with the reasoning.
 - **Where the project lives.** The kit arrived inside a zip in a separate repository, so it was placed in `mfr-tracker/` inside this session's repository and committed and pushed there to the session branch after every task, as instructed. Nothing outside `mfr-tracker/` was changed.
 - **Plan wording that did not match the files:** the schema has 12 tables (the plan says 11); the matrix has 409 cells including the text location (the seed stats file counts 408 numeric ones); `setAsWritten` and `setPart` take the lookups as an extra argument; `inferRequestDate` also anchors on today so a late-December date for early January rolls forward.
 - **Not built, by design (DESIGN section 4):** on-hand inventory, ERP integration, foreman or mobile entry, multiple sites, email, approvals, signature recognition, partial issues, offline use.
+
+## Local mode runs one process at a time
+
+The embedded database (PGlite) belongs to one process. While `npm run dev` or `npm start` is running, do not run
+`npm run seed` or `npm run user:create`: the running app does not see what the script wrote (a user created that way
+could not sign in until the app was restarted) and two writers on one folder risk damaging it. Stop the app first, or
+create users in Admin, Users instead. The shared Postgres of the cloud setup does not have this limit.
 
 ## Where the admin login is (local mode)
 
@@ -53,11 +67,11 @@ sign-in asks for a new password. Create the rest of the team in Admin, Users.
 
 ## Definition of done (contract section 13)
 
-Ticked at the end of Task 16.
+Checked at the end of Task 16. The e2e item passed; the live AI and Supabase are the two things this list cannot cover (see above).
 
-- [ ] `npm run verify` passes from a clean clone after `npm install`.
-- [ ] All section 9 checks are covered by tests and pass.
-- [ ] `npm run e2e` passes, or DECISIONS.md records why it could not run.
-- [ ] In local mode with no environment file: `npm install && npm run seed && npm run dev` gives a working app with 140 requisitions.
-- [ ] `docs/HANDOFF.md`, `docs/GO_LIVE.md`, `docs/BUILD_LOG.md` and `README.md` are written.
-- [ ] No file under section 1 has changed. No secret is in the repo. `.env.local` and `.data/` are git-ignored.
+- [x] `npm run verify` passes from a clean clone after `npm install`.
+- [x] All section 9 checks are covered by tests and pass.
+- [x] `npm run e2e` passes, or DECISIONS.md records why it could not run.
+- [x] In local mode with no environment file: `npm install && npm run seed && npm run dev` gives a working app with 140 requisitions.
+- [x] `docs/HANDOFF.md`, `docs/GO_LIVE.md`, `docs/BUILD_LOG.md` and `README.md` are written.
+- [x] No file under section 1 has changed. No secret is in the repo. `.env.local` and `.data/` are git-ignored.

@@ -120,3 +120,10 @@
 - **`cloudVarsMissing`** lives in `src/server/config.ts` so it can be unit-tested; `go-live` prints only the names of missing variables, never values. A `SESSION_SECRET` under 32 characters counts as missing.
 - **Cloud check done against local PostgreSQL 16, not Supabase.** No cloud credentials exist here, so `npm run preflight` reports local mode and the cloud step of the plan ("run `npm run go-live`") was skipped. A real PostgreSQL 16 server on the build machine was used instead: the Db conformance test ran against it through `TEST_DATABASE_URL`, and `db:migrate`, `seed`, `preflight`, the production server and an Excel export all worked with `DATABASE_URL` set. The throwaway database and role were local to this machine; no connection string is written in any document.
 - **Seed password change.** `npm run go-live` seeds without `SEED_SKIP_PASSWORD_CHANGE`, so the admin must choose a new password at first sign-in.
+
+## Task 16
+
+- **Fresh clone.** The clone was made from the committed branch with `git clone` of the local repository, so it contains exactly what was pushed. Its `npm install` left one difference, `"hasInstallScript": true` in `package-lock.json` (from the `postinstall` copy step); the lock file was regenerated and committed.
+- **Embedded database and scripts.** While checking local mode, a user created with `npm run user:create` during a running `npm run dev` could not sign in until the app was restarted, because the app and the script each held their own embedded database. This is how PGlite works, not an app bug; it is documented in README and HANDOFF (stop the app first, or use Admin, Users). No code change.
+- **Secret scan** looked for key-shaped strings (`sb_secret_`, `sk-ant-`, JWTs), connection strings with a password, the throwaway local test password, the generated session secret and the generated admin password in all tracked files. None found. `.env.example` only contains the placeholder `sb_secret_...`, which is part of the provided kit.
+- **Protected files** are unchanged since the kit commit, and nothing outside `mfr-tracker/` changed (both diffs are empty).

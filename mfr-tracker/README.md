@@ -34,6 +34,11 @@ reading is switched off: uploaded pages open on the verify screen with an empty 
 | `npm run ai:check` | Compare the live model's readings with the transcription on six pages (needs an API key) |
 | `npm run go-live` | Cloud setup: bucket, preflight, migrate, seed (needs the cloud variables) |
 
+## Local mode runs one process at a time
+
+The embedded database belongs to one process. Stop `npm run dev` or `npm start` before running `npm run seed` or
+`npm run user:create`, or create users in Admin, Users while the app is running.
+
 ## Configuration
 
 With no `.env.local` the app runs in local mode. Copy `.env.example` to `.env.local` to change that. The database,
