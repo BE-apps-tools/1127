@@ -1,11 +1,13 @@
 import path from 'node:path';
 import { getConfig } from './config';
 import type { Db } from './db/types';
+import type { Storage } from './storage/types';
 
 const MIGRATIONS_DIR = path.join(process.cwd(), 'db', 'migrations');
 
 interface Globals {
   __mfrDb?: Promise<Db>;
+  __mfrStorage?: Storage;
 }
 const g = globalThis as unknown as Globals;
 
@@ -35,4 +37,19 @@ export function getDb(): Promise<Db> {
     });
   }
   return g.__mfrDb;
+}
+
+/** One storage adapter per process: Supabase when both variables are set, otherwise disk under DATA_DIR. */
+export async function getStorage(): Promise<Storage> {
+  if (!g.__mfrStorage) {
+    const cfg = getConfig();
+    if (cfg.storage === 'supabase') {
+      const { createSupabaseStorage } = await import('./storage/supabase');
+      g.__mfrStorage = createSupabaseStorage(cfg.supabaseUrl as string, cfg.supabaseSecretKey as string, cfg.storageBucket);
+    } else {
+      const { createLocalStorage } = await import('./storage/local');
+      g.__mfrStorage = createLocalStorage(path.join(cfg.dataDir, 'storage'));
+    }
+  }
+  return g.__mfrStorage;
 }
