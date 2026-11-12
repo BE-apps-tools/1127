@@ -39,3 +39,11 @@
 - **Rotating a page.** `replacePageImage` adds the rotation to `rotation_applied` modulo 360, clears the old reading, and sets the page back to `uploaded`. It refuses pages that are posted, duplicate, rejected or being read.
 - **Detail crop removal.** If a replacement carries no detail image, the stored detail is removed so a stale crop is never read with a new full image.
 - **`nextPageToVerify`** returns the next page after the given one in batch and page order, or null at the end of the queue (no wrap-around).
+
+## Task 7
+
+- **`DuplicateRef` and `findDuplicates`** moved into the full `requisitions.ts` (they began as a stub in Task 6). No change in behaviour.
+- **Audit detail for edits.** `requisition.update` stores `{ before, after }` as a compact snapshot (crew, requester, PB, date, flags and, per line, part, quantity text, each-count, initials, issued quantity), not every column.
+- **Initialed lines at posting** leave `issued_on` empty. `issued_on` is set only by "Mark issued".
+- **Posting from a scan page** is claimed with a conditional update on `status = 'needs_review'`, inside the same transaction as the insert, so two people cannot post one page twice.
+- **Mark issued** on a void requisition skips its lines.
