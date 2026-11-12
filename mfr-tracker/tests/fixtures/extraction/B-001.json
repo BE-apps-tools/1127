@@ -1,0 +1,43 @@
+{
+  "is_requisition_form": true,
+  "form": {
+    "crew_code": "STAGE_PREP",
+    "crew_printed_text": "STAGE & PREP",
+    "requester": "Erick Hernandez",
+    "pb_location_raw": "103",
+    "request_date_raw": "11-2-26",
+    "date_required_default_raw": "11-3-26",
+    "approval_signature_present": true,
+    "notes": "Printed name JACOB JOHNSON is struck through; Erick Hernandez written beside it.",
+    "confidence": "high",
+    "flags": []
+  },
+  "lines": [
+    {
+      "line_no": 1,
+      "part_number_raw": "25056-001",
+      "description_raw": "CENTER STRUCTURE TO BRACKET HARDWARE",
+      "is_write_in": false,
+      "qty_raw": "596 bolts",
+      "qty_each": 596,
+      "date_required_raw": "11-3-26",
+      "sis_initialed": true,
+      "confidence": "high",
+      "flags": [],
+      "note": null
+    },
+    {
+      "line_no": 2,
+      "part_number_raw": "20-0070-07",
+      "description_raw": "CAB SUPPORT",
+      "is_write_in": false,
+      "qty_raw": "149 brackets",
+      "qty_each": 149,
+      "date_required_raw": "11-3-26",
+      "sis_initialed": true,
+      "confidence": "high",
+      "flags": [],
+      "note": null
+    }
+  ]
+}
